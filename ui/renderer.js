@@ -123,18 +123,20 @@
   function renderStatus(engine, view) {
     var snap = engine.snapshot();
     var text = '', cls = '';
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    var S18 = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
     if (engine.isOver()) {
       var r = snap.result;
-      if (snap.winner === 'red') { text = '🏆 红方胜利！'; cls = 'status-win'; }
-      else if (snap.winner === 'black') { text = '🏆 黑方胜利！'; cls = 'status-win'; }
-      else { text = '🤝 和棋'; cls = 'status-draw'; }
+      if (snap.winner === 'red') { text = T('status_win_red'); cls = 'status-win'; }
+      else if (snap.winner === 'black') { text = T('status_win_black'); cls = 'status-win'; }
+      else { text = T('status_draw'); cls = 'status-draw'; }
     } else {
-      text = '当前回合：' + (snap.turn === 'red' ? '🔴 红方' : '⚫ 黑方');
+      text = S18('status_turn', { side: (snap.turn === 'red' ? T('status_side_red') : T('status_side_black')) });
       cls = snap.turn === 'red' ? 'status-red-turn' : 'status-black-turn';
-      if (engine.inCheck(snap.turn)) { text += ' ⚠️ 将军！'; cls = 'status-check'; }
+      if (engine.inCheck(snap.turn)) { text += ' ' + T('status_check'); cls = 'status-check'; }
     }
     if (view.aiThinking) {
-      text = '🤖 ' + view.aiThinking + '（' + (view.aiThinkingSide === 'black' ? '黑方' : '红方') + '）思考中…';   // v1.7.4: 加方别
+      text = S18('status_thinking', { model: view.aiThinking, side: (view.aiThinkingSide === 'black' ? T('status_side_black') : T('status_side_red')) });   // v1.7.4: 加方别
       cls = 'status-thinking-' + (view.aiThinkingSide === 'black' ? 'black' : 'red');
     }
     document.getElementById('status-text').textContent = text;
@@ -158,7 +160,7 @@
                  : r.result === 'perpetual' ? '长将判负 · 一方连续将军不变招 (v2.0 规则闭环)'
                  : r.result === 'repetition' ? '三次重复判和 · 同一局面反复出现, 双方不变招 (v2.2 规则闭环)'
                  : r.result === 'natural' ? '自然限着判和 · 双方 60 回合无吃子 (v3.8 规则闭环)' : '';
-      document.getElementById('eo-title').textContent = r.winner === 'red' ? '🏆 红方胜利' : r.winner === 'black' ? '🏆 黑方胜利' : '和棋';
+      document.getElementById('eo-title').textContent = r.winner === 'red' ? (XQ.I18N ? XQ.I18N.t('status_win_red') : '🏆 红方胜利') : r.winner === 'black' ? (XQ.I18N ? XQ.I18N.t('status_win_black') : '🏆 黑方胜利') : (XQ.I18N ? XQ.I18N.t('status_draw') : '和棋');
       document.getElementById('eo-sub').textContent = reason;
       overlay.classList.add('show');
     } else {

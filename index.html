@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">   <!-- v1.8: 深色主题加载期免白闪 -->
 <meta name="description" content="LLM-chess — 中国象棋 AI 观战平台: 双 LLM 对弈, 实时思考流/决策卡/回放系统">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>">
-<title>🦞 LLM-chess v1.0 · AI 对战直播平台</title>
+<title data-i18n="app_title">🦞 LLM-chess v1.0 · AI 对战直播平台</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--board-h:504px}
@@ -247,16 +247,16 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 </style>
 </head>
 <body>
-<h1>🦞 LLM-chess v1.0 · AI 对战直播平台</h1>
-<div class="subtitle">AI 对战直播平台 · 战略决策流 · 棋风对垒 · 棋谱存档 · OpenAI协议(密钥服务端)</div>
+<h1 data-i18n="app_title">🦞 LLM-chess v1.0 · AI 对战直播平台</h1>
+<div class="subtitle" data-i18n="app_subtitle">AI 对战直播平台 · 战略决策流 · 棋风对垒 · 棋谱存档 · OpenAI协议(密钥服务端)</div>
 
 <div id="arena">
   <div id="think-red" class="think-panel think-red idle">
-      <div class="think-head"><span class="think-dot">🔴</span><span id="think-red-name">红方</span><span class="think-stat" id="think-red-stat"></span></div>
+      <div class="think-head"><span class="think-dot">🔴</span><span id="think-red-name" data-i18n="side_red">红方</span><span class="think-stat" id="think-red-stat"></span></div>
       <div class="think-info" id="think-red-info"></div>
-<div class="think-captured" id="think-red-captured" title="红方吃掉的子力"></div>
-<div class="think-spark" id="think-red-spark" title="红方自评走势 (本方视角)"></div>
-      <div class="think-body" id="think-red-body">等待对局开始…</div>
+<div class="think-captured" id="think-red-captured" data-i18n-title="think_captured_title" title="红方吃掉的子力"></div>
+<div class="think-spark" id="think-red-spark" data-i18n-title="think_spark_title" title="红方自评走势 (本方视角)"></div>
+      <div class="think-body" id="think-red-body" data-i18n="status_idle">等待对局开始…</div>
   </div>
 
   <div id="board-wrap">
@@ -304,8 +304,8 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
         <option value="claude-opus-4-1"></option>
         <option value="claude-3-5-haiku-latest"></option>
       </datalist>
-      <button id="snd-toggle" title="音效开关">🔊</button>
-    <button id="gear-toggle" title="对战设置">⚙</button>
+      <button id="snd-toggle" data-i18n-title="footer_sound_title" title="音效开关">🔊</button>
+    <button id="gear-toggle" data-i18n-title="nav_settings" title="对战设置">⚙</button>
     <div id="board"><div id="last-move-badge"></div>
         <svg id="board-lines" viewBox="0 0 432 480" preserveAspectRatio="xMidYMid meet"></svg>
         <div id="col-labels"><span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span><span>i</span></div>
@@ -314,41 +314,41 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 
     <div id="settings-overlay">
         <div class="set-card">
-            <h3>🤖 对战设置 (v1.0)</h3>
+            <h3 data-i18n="settings_title">🤖 对战设置 (v1.0)</h3>
             <div class="set-cols">
                 <div class="set-col set-col-red">
-                    <div class="col-title">🔴 红方</div>
-                    <label class="set-check"><input type="checkbox" id="ai-red-enabled"> 启用非人类棋手</label>
-                    <div class="set-row"><label>对手类型</label>
-                        <select id="ai-red-type"><option value="human">人类</option><option value="random">随机AI</option><option value="llm">LLM</option></select>
+                    <div class="col-title" data-i18n="side_red">🔴 红方</div>
+                    <label class="set-check"><input type="checkbox" id="ai-red-enabled"> <span data-i18n="enabled">启用非人类棋手</span></label>
+                    <div class="set-row"><label data-i18n="type">对手类型</label>
+                        <select id="ai-red-type"><option value="human" data-i18n="type_human">人类</option><option value="random" data-i18n="type_random">随机AI</option><option value="llm" data-i18n="type_llm">LLM</option></select>
                     </div>
-                    <div class="set-row llm-only"><label>服务商 (密钥在服务端 config/keys.json)</label>
+                    <div class="set-row llm-only"><label data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
                         <select id="ai-red-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
                     </div>
-                    <div class="set-row llm-only"><label>模型名称</label>
-                        <input type="text" id="ai-red-model" list="model-datalist" placeholder="选或填模型名">
+                    <div class="set-row llm-only"><label data-i18n="model">模型名称</label>
+                        <input type="text" id="ai-red-model" list="model-datalist" data-i18n="model_placeholder" placeholder="选或填模型名">
                     </div>
-                    <div class="set-row llm-only"><label>AI 棋风 (注入提示词)</label>
-                        <select id="ai-red-style"><option value="aggressive">⚔️ 攻击型</option><option value="balanced" selected>⚖️ 均衡型</option><option value="defensive">🛡️ 防守型</option></select>
+                    <div class="set-row llm-only"><label data-i18n="style">AI 棋风 (注入提示词)</label>
+                        <select id="ai-red-style"><option value="aggressive" data-i18n="style_aggressive">⚔️ 攻击型</option><option value="balanced" selected data-i18n="style_balanced">⚖️ 均衡型</option><option value="defensive" data-i18n="style_defensive">🛡️ 防守型</option></select>
                     </div>
-                    <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-red-quick"> 快答模式 (关闭深度思考, 直出决策+原因)</label></div>
+                    <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-red-quick"> <span data-i18n="quick_mode">快答模式 (关闭深度思考, 直出决策+原因)</span></label></div>
                 </div>
                 <div class="set-col set-col-black">
-                    <div class="col-title">⚫ 黑方</div>
-                    <label class="set-check"><input type="checkbox" id="ai-black-enabled"> 启用非人类棋手</label>
-                    <div class="set-row"><label>对手类型</label>
-                        <select id="ai-black-type"><option value="human">人类</option><option value="random">随机AI</option><option value="llm">LLM</option></select>
+                    <div class="col-title" data-i18n="side_black">⚫ 黑方</div>
+                    <label class="set-check"><input type="checkbox" id="ai-black-enabled"> <span data-i18n="enabled">启用非人类棋手</span></label>
+                    <div class="set-row"><label data-i18n="type">对手类型</label>
+                        <select id="ai-black-type"><option value="human" data-i18n="type_human">人类</option><option value="random" data-i18n="type_random">随机AI</option><option value="llm" data-i18n="type_llm">LLM</option></select>
                     </div>
-                    <div class="set-row llm-only"><label>服务商 (密钥在服务端 config/keys.json)</label>
+                    <div class="set-row llm-only"><label data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
                         <select id="ai-black-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
                     </div>
-                    <div class="set-row llm-only"><label>模型名称</label>
-                        <input type="text" id="ai-black-model" list="model-datalist" placeholder="选或填模型名">
+                    <div class="set-row llm-only"><label data-i18n="model">模型名称</label>
+                        <input type="text" id="ai-black-model" list="model-datalist" data-i18n="model_placeholder" placeholder="选或填模型名">
                     </div>
-                    <div class="set-row llm-only"><label>AI 棋风 (注入提示词)</label>
-                        <select id="ai-black-style"><option value="aggressive">⚔️ 攻击型</option><option value="balanced" selected>⚖️ 均衡型</option><option value="defensive">🛡️ 防守型</option></select>
+                    <div class="set-row llm-only"><label data-i18n="style">AI 棋风 (注入提示词)</label>
+                        <select id="ai-black-style"><option value="aggressive" data-i18n="style_aggressive">⚔️ 攻击型</option><option value="balanced" selected data-i18n="style_balanced">⚖️ 均衡型</option><option value="defensive" data-i18n="style_defensive">🛡️ 防守型</option></select>
                     </div>
-                    <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-black-quick"> 快答模式 (关闭深度思考, 直出决策+原因)</label></div>
+                    <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-black-quick"> <span data-i18n="quick_mode">快答模式 (关闭深度思考, 直出决策+原因)</span></label></div>
                 </div>
             </div>
             <div id="server-warn" style="display:none;margin:2px 0 12px;padding:8px 10px;border-radius:6px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.35);font-size:11px;color:#f0b8b0;">
@@ -356,8 +356,9 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
             </div>
             <div class="set-note">密钥仅保存在服务端 config/keys.json，前端永不接触。双方可各配不同类型/服务商。</div>
             <div class="set-foot">
-                <button class="btn" onclick="document.getElementById('settings-overlay').classList.remove('show')">取消</button>
-                <button class="btn" onclick="XQApp.saveAISettings()">保存并开局</button>
+                <div class="set-row" style="margin-bottom:8px"><label data-i18n="language_label">语言</label><select id="ui-lang"><option value="zh">中文</option><option value="en">English</option></select></div>
+                <button class="btn" onclick="document.getElementById('settings-overlay').classList.remove('show')"><span data-i18n="btn_close">取消</span></button>
+                <button class="btn" onclick="XQApp.saveAISettings()"><span data-i18n="btn_save_settings">保存并开局</span></button>
             </div>
         </div>
     </div>
@@ -374,11 +375,11 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
   </div><!-- /board-wrap -->
 
   <div id="think-black" class="think-panel think-black idle">
-      <div class="think-head"><span class="think-dot">⚫</span><span id="think-black-name">黑方</span><span class="think-stat" id="think-black-stat"></span></div>
+      <div class="think-head"><span class="think-dot">⚫</span><span id="think-black-name" data-i18n="side_black">黑方</span><span class="think-stat" id="think-black-stat"></span></div>
       <div class="think-info" id="think-black-info"></div>
-<div class="think-captured" id="think-black-captured" title="黑方吃掉的子力"></div>
-<div class="think-spark" id="think-black-spark" title="黑方自评走势 (本方视角)"></div>
-      <div class="think-body" id="think-black-body">等待对局开始…</div>
+<div class="think-captured" id="think-black-captured" data-i18n-title="think_captured_title" title="黑方吃掉的子力"></div>
+<div class="think-spark" id="think-black-spark" data-i18n-title="think_spark_title" title="黑方自评走势 (本方视角)"></div>
+      <div class="think-body" id="think-black-body" data-i18n="status_idle">等待对局开始…</div>
   </div>
 </div><!-- /arena -->
 
@@ -387,10 +388,10 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
     <span id="status-info"></span>
 </div>
 <div id="ai-banner"></div>
-<div id="btn-row"><button class="btn" id="btn-restart">🔄 重新开始</button><button class="btn" id="btn-replay-watch" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" title="全屏观战 (F 键)">⛶ 全屏</button></div>
+<div id="btn-row"><button class="btn" id="btn-restart" data-i18n="btn_reset">🔄 重新开始</button><button class="btn" id="btn-replay-watch" data-i18n-title="nav_replay" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" data-i18n-title="btn_fullscreen" title="全屏观战 (F 键)">⛶ 全屏</button></div>
 <div id="archive-row">
-    <button class="btn" id="btn-save" title="导出棋谱JSON">💾 存棋谱</button>
-    <button class="btn" id="btn-load" title="导入棋谱JSON并重放">📂 载入棋谱</button>
+    <button class="btn" id="btn-save" data-i18n-title="btn_save" title="导出棋谱JSON">💾 存棋谱</button>
+    <button class="btn" id="btn-load" data-i18n-title="btn_load" title="导入棋谱JSON并重放">📂 载入棋谱</button>
 </div>
 <div id="move-log"></div>
 
@@ -411,6 +412,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 <script src="benchmark/elo.js"></script>
 <script src="benchmark/match.js"></script>
 <script src="ui/renderer.js"></script>
+<script src="ui/i18n.js"></script>
 <script src="ui/app.js"></script>
 </body>
 </html>

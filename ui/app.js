@@ -786,6 +786,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   document.addEventListener('DOMContentLoaded', function () {
     XQ.UI.drawBoard(document.getElementById('board-lines'));
     initSoundToggle();
+    // v3.9c 语言切换 (ui-lang 下拉: zh/en, localStorage xq_lang 持久化, 切换即刷新全部 data-i18n)
+    var langSel = document.getElementById('ui-lang');
+    if (langSel && XQ.I18N) {
+      langSel.value = XQ.I18N.getLang();
+      langSel.addEventListener('change', function () { XQ.I18N.setLang(langSel.value, true); });
+    }
     // v1.7 思考面板折叠 (点 head 切换)
     ['think-red', 'think-black'].forEach(function (id) {
       var root = document.getElementById(id);
