@@ -1,5 +1,9 @@
 # 🦞 LLM-chess v1.0 · AI Battle & Spectating Platform
 
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-7%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
+
+![LLM-chess v1.0 battle & spectating UI](docs/ui.png)
+
 Chinese Chess (Xiangqi) + LLM battle platform. v1.5 decision-card live spectating; v1.6 replay system (re-watch games without calling the LLM); v1.7 HUD dashboard (captured tray / Chinese notation / evaluation sparkline / endgame summary); v2 cyber dark-gold theme. The core engine is standalone-usable for search algorithms (alpha-beta / MCTS) and agent research.
 
 > 📖 [中文文档 (Chinese docs)](README.zh-CN.md) · Detailed per-round dev log: [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md)
@@ -9,7 +13,7 @@ Chinese Chess (Xiangqi) + LLM battle platform. v1.5 decision-card live spectatin
 ```bash
 git clone https://github.com/yydsdbc/LLM-Chess.git
 cd LLM-Chess
-npm start            # or double-click 启动.cmd — needs Node.js 18+
+npm start            # or double-click Start.cmd — needs Node.js 18+
 ```
 
 Your browser opens http://localhost:8788 automatically.
@@ -17,7 +21,7 @@ Your browser opens http://localhost:8788 automatically.
 - **Zero-config trial**: gear icon → side selector → pick **Random AI** → play. No API key needed.
 - **Plug in an LLM**: edit `config/keys.json`, put your `apiKey` under any provider (a blank template is auto-generated on first run; format reference: `config/keys.example.json`) → restart once. 16 providers supported.
 - **One-key tests**: `npm test` (perft gold-standard engine suite + prompt/evaluation/replay/notation guards)
-- **Stop**: double-click 停止.cmd or `npm stop`
+- **Stop**: double-click Stop.cmd or `npm stop`
 
 ## Security & Configuration
 
@@ -32,7 +36,7 @@ Your browser opens http://localhost:8788 automatically.
 LLM-chess/
 ├── index.html          # page shell (loads scripts only)
 ├── server.js           # local server: static hosting + /api/chat key relay
-├── 启动.cmd / 停止.cmd  # one-click background start/stop (port 8788)
+├── Start.cmd / Stop.cmd  # one-click background start/stop (port 8788)
 ├── OPTIMIZATION_LOG.md # per-round optimization log (human + auto agent)
 ├── config/
 │   └── keys.json       # provider API keys (server-side only; auto-generated template on first run)
@@ -127,7 +131,7 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 
 | Mode | How | Notes |
 |------|-----|-------|
-| Quick start/stop | double-click `启动.cmd` / `停止.cmd` | = `node server.js` in background (port 8788) |
+| Quick start/stop | double-click `Start.cmd` / `Stop.cmd` | = `node server.js` in background (port 8788) |
 | Offline (human vs random) | open `index.html` directly | zero dependencies, no server |
 | LLM battle | `node server.js` → http://localhost:8788 | fill `config/keys.json` first |
 
@@ -143,9 +147,9 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 |---------|----------|
 | `npm test` | runs the full suite below |
 | `node test/run_tests.js` | engine, 49 checks (perft gold standard, repetition, perpetual-check tracking, moveTag, threefold draw, hanging guard, natural-rule draw) |
-| `node test/test_evaluation.js` | evaluation knowledge, 81 checks (phases / dynamic values / advisors / aged pawns / bare cannon / palace horse / central pawn / gate control / pawn-in-palace / bottom cannon) |
+| `node test/test_evaluation.js` | evaluation knowledge, 88 checks (phases / dynamic values / advisors / aged pawns / bare cannon / palace horse / central pawn / gate control / pawn-in-palace / bottom cannon / side+corner horse) |
 | `node test/test_llm_convo.js` | LLM agent, 149 checks (prompts / retries / fallback valve / opening guard / warnings / full-width rescue / confidence / attempts / external abort) |
-| `node test/replay_smoke.js` | replay, 45 checks (data/control layers, speeds, seek, tolerance, parseEval direction, imported records) |
+| `node test/replay_smoke.js` | replay, 53 checks (data/control layers, speeds, seek, tolerance, parseEval direction, imported records, capture-jump) |
 | `node test/_clean_reason_check.js` | reasoning-stream cleaner, 10 checks |
 | `node test/cn_notation_check.js` | Chinese notation, 25 checks (classic anchors / file-disambiguation 前中后 / legacy-key sentinel) |
 | `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files |
@@ -193,13 +197,21 @@ Move object: `{ from:{x,y}, to:{x,y}, piece:{color,type,id}, captured }`
 - **401 / "未配置 apiKey"**: fill `apiKey` under your provider in `config/keys.json` (hot-reloaded per request). Missing models / insufficient balance fail fast without burning retries.
 - **REASONING_REQUIRED / UNKNOWN_FIELD**: GLM-family upstreams force thinking — the agent strips the `thinking` field and retries automatically.
 - **503/504, one move taking 70–300s**: provider queue waves; the agent uses a 120s timeout + retries + backoff. tokenrhythm occasionally has DNS hiccups — just retry.
-- **Hot reload scope**: changes under ai/ ui/ replay/ and index.html apply on browser refresh; keys.json hot-reloads; **only server.js changes need a restart** (停止.cmd → 启动.cmd).
+- **Hot reload scope**: changes under ai/ ui/ replay/ and index.html apply on browser refresh; keys.json hot-reloads; **only server.js changes need a restart** (Stop.cmd → Start.cmd).
 - **Headless game ends with MATCH INCOMPLETE**: expected exit code when moves < limit or meta rate < 100% (fallback moves carry no meta) — not a crash. Check logs/blunders_*.txt.
 - **Move spinner keeps spinning**: open browser console and server.log, look for `[LLM 红/黑] attempt N failed` lines.
 
 ## Security Model
 
 API keys exist only in server-side `config/keys.json` (never commit it — it is git-ignored). The frontend calls the same-origin `/api/chat` relay with `{provider, model, messages}` only; keys never leave the server. Token usage recorded via the relayed `usage` field into the game record.
+
+## v3.9.2 (latest round, 2026-08-31)
+
+- **Analyze-blunders: 长将检测** — analyze_blunders 检测器新增 `长将` issue 类型 (连续将军 ≥4 手警告 / =6 长将判负); 此前 analyzer 走 ruleEnforce:false 不重判规则, 旧棋谱的连将拉锯默认不报, 现与 E12 引擎守门同源统计。
+- **Replay: 跳到下一手吃子 / 上一手吃子 (键盘 `C` / `Shift+C`, 按钮 `⏪吃` / `吃子⏩`)** — 长局 (几十手) 跳过拉扯段快速看子力交换点; controller 新增 `stepNextCapture` / `stepPrevCapture` (边界: 末尾/起点; 零吃子平跳); 走法表/帮助模态同步。
+- **Evaluation: 槽心马/挂角马知识 (v3.9.2)** — 检测己方马已逼近对方九宫侧翼位 (x∈{1,2,6,7} + 对方宫城行 ±1), 双向点名 (攻方「可跴将抽车取势, 护住马眼勿轻兑」/ 守方「勿随手送马, 可驱赶/走跴」); 与窝心马 v2.5 (x=4 宫心) 互斥; 初始局零噪音。
+- **PGN 导出加中文记谱 (v3.9.2)** — rpExportPGN 每手 comment 追加 `{cn: 炮八平五}` (与原 summary 并列), 中文用户直接看走子, 国际 PGN 解析器忽略额外字段。
+- 5 项总计; test 149 / 88 / 49 / 53 / 10 / 25 / check_ui EXIT 0; 完整清单见 [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md) 11 轮。
 
 ## License
 

@@ -263,6 +263,39 @@ function stubEngine(cells, ply) {
     ok(!/沉底炮/.test(PE.summarize(XQ.Engine.create(), 'red').text), '初始局 → 不提沉底炮 (零噪音)');
   }
 
+  // v3.9.2 槽心马/挂角马: 己方马逼近对方九宫侧翼位 (x=1/2/6/7 + 对方宫城行), 攻方优势 + 守方风险点名; 初始局零噪音
+  {
+    const cH = cellsFrom(XQ.Engine.create());
+    cH[1][1] = XQ.Piece.create('red', 'knight');   // 红马 b9 (y=1, x=1) — 黑宫侧翼位
+    cH[0][1] = null;                                // 原黑马 b10 清空
+    const sH = PE.summarize(stubEngine(cH, 24), 'red');
+    ok(/槽心\/挂角/.test(sH.advantages.join(';')), '红马槽心位 → 红方优势点名 槽心马/挂角马 (v3.9.2)');
+    const sH2 = PE.summarize(stubEngine(cH, 24), 'black');
+    ok(/槽心\/挂角/.test(sH2.risks.join(';')), '对方槽心位马 → 黑方风险点名 (v3.9.2)');
+    const cH2 = cellsFrom(XQ.Engine.create());
+    cH2[8][7] = XQ.Piece.create('black', 'knight');   // 黑马 h2 (y=8, x=7) — 红宫侧翼位 (攻击红)
+    cH2[9][7] = null;                                  // 原黑马 h1 清空
+    const sH3 = PE.summarize(stubEngine(cH2, 24), 'black');
+    ok(/槽心\/挂角/.test(sH3.advantages.join(';')), '黑马挂角位 → 黑方优势点名 (v3.9.2, 与v3.7 挂角位同为对方九宫侧翼)');
+    const sH4 = PE.summarize(stubEngine(cH2, 24), 'red');
+    ok(/槽心\/挂角/.test(sH4.risks.join(';')), '红方视角看到对方挂角马 → 风险点名 (v3.9.2)');
+    ok(!/槽心\/挂角/.test(PE.summarize(XQ.Engine.create(), 'red').text), '初始局 → 不提槽心/挂角马 (零噪音)');
+    // 同列多匹: 只报首个, 避免重复点 (检仅不是同源函数)
+    const cH3 = cellsFrom(XQ.Engine.create());
+    cH3[1][1] = XQ.Piece.create('red', 'knight');
+    cH3[2][1] = XQ.Piece.create('red', 'knight');
+    cH3[0][1] = null;
+    const atk = PE.attackHorse({ cells: cH3 }, 'red');
+    ok(atk.length === 1, '同列双马只报首个 (v3.9.2, 避免多匹重复点)');
+    // x=4 宫心位依旧是窝心马 (不与槽心/挂角马重叠)
+    const cH4 = cellsFrom(XQ.Engine.create());
+    cH4[1][4] = XQ.Piece.create('red', 'knight');   // 红马 e9 (宫心)
+    cH4[0][4] = null;                                // 原红帅位不动, 测试场景另設
+    // 注意 cH4 上原 e10 是黑将, 不动为会出冲突. 这里只查 attackHorse 不覆盖窝心逻辑
+    const atk2 = PE.attackHorse({ cells: cH4 }, 'red');
+    ok(atk2.length === 0, 'x=4 宫心位不被槽心马检测 (与 v2.5 窝心马互斥, v3.9.2)');
+  }
+
   console.log('== llm_agent prompt 注入 ==');
   {
     // 确认 systemPrompt 含评价原则(压缩行内联), user 含阶段摘要

@@ -238,6 +238,25 @@
     return out;
   }
 
+  // ── v3.9.2 槽心马/挂角马检测: 己方马已逼近对方宫城区 (x=1/2/6/7, y=对方宫城行 ±1), 可成「卧槽/挂角」杀势前奏 — 经典攻王位 (与窝心马 v2.5 x=4 宫心位互斥, 与沉底炮/将门/空头炮零重叠; 初始局马在己方半场不触发; 仅提醒不评分)
+  //   槽心马 (wòcāo mǎ, litter-horse): 马位于 x∈{1,7}, 紧贴对方宫城侧翼, 可借象田跳入九宫 (老式叫法含 x∈{2,6}; 合并入挂角马)
+  //   挂角马 (guàjiǎo mǎ, cornered-horse): 马位于 x∈{2,6}, y=对方宫城次行, 可从角位挂将
+  function attackHorse(snap, color) {
+    var opp = color === 'red' ? 'black' : 'red';
+    var yT = color === 'red' ? 1 : 8;   // 对方宫城次行: 攻击黑用 y=1 (黑宫 0-2), 攻击红用 y=8 (红宫 7-9)
+    var yTop = color === 'red' ? 2 : 7;   // 对方宫城顶行 (包含底线次行)
+    var out = [];
+    var xs = [1, 2, 6, 7];   // 四个侧翼位, 排除 x=3/5 仕相步
+    for (var i = 0; i < xs.length; i++) {
+      // 检查 y∈[yT..yTop] 范围 (黑方宫城行 0-2, 攻击位 1-2 含底线; 红方宫城行 7-9, 攻击位 7-8)
+      for (var y = Math.min(yT, yTop); y <= Math.max(yT, yTop); y++) {
+        var p = snap.cells[y][xs[i]];
+        if (p && p.color === color && p.type === 'knight') { out.push(sq(xs[i], y)); break; }   // 同一列只报告首个, 避免多匹重复点
+      }
+    }
+    return out;
+  }
+
   // ── 综合评价 (数值仅供摘要归一, 不直接发给 LLM) ──
   // v2.3 性能: snapshot 与双方合法着法只算一次, 全管线复用 — 此前一次评价共 4 次 generateLegalMoves + 6 次 snapshot (重复全盘扫描)
   function evaluate(engine, side) {
@@ -260,6 +279,7 @@
     var aimM = centralAim(snap, side), aimT = centralAim(snap, opp);   // v2.5b 中炮矄中卒 (仅提醒不评分)
     var pfM = palaceFiles(snap, side), pfT = palaceFiles(snap, opp);   // v3.7 将门/肋道控制 (仅点名不评分)
     var bcM = bottomCannon(snap, side), bcT = bottomCannon(snap, opp);   // v3.9 沉底炮 (仅提醒不评分)
+    var atkM = attackHorse(snap, side), atkT = attackHorse(snap, opp);   // v3.9.2 槽心马/挂角马 (仅提醒不评分)
     var taskCannon = ownCannonCentered(snap, side), taskHome = homeKnights(snap, side);   // v3.2 开局任务进度
     var taskHomeRooks = 0;   // v3.3 出车任务: 己方车在原位计数
     var rhH = side === 'red' ? [[0, 9], [8, 9]] : [[0, 0], [8, 0]];
@@ -286,6 +306,7 @@
       centralAimMine: aimM, centralAimTheirs: aimT,   // v2.5b 中炮矄中卒
       palaceFileMine: pfM, palaceFileTheirs: pfT,   // v3.7 将门/肋道控制
       bottomCannonMine: bcM, bottomCannonTheirs: bcT,   // v3.9 沉底炮
+      attackHorseMine: atkM, attackHorseTheirs: atkT,   // v3.9.2 槽心马/挂角马
       taskCannon: taskCannon, taskHomeKnights: taskHome,   // v3.2 开局任务进度
       taskHomeRooks: taskHomeRooks,   // v3.3 出车任务
       palaceUnderAttack: palaceM,
@@ -336,6 +357,8 @@
     if (e.palaceFileTheirs.length) risk.push('对方' + e.palaceFileTheirs.join('、') + '压你方将门, 九宫侧翼吃紧, 先驱赶或封堵');   // v3.7
     if (e.bottomCannonMine.length) adv.push('己方沉底炮(' + e.bottomCannonMine.join('、') + ')压对方底线, 勿轻易撤回, 可配合车/马谋底线杀势');   // v3.9 沉底炮 (零噪音)
     if (e.bottomCannonTheirs.length) risk.push('对方沉底炮(' + e.bottomCannonTheirs.join('、') + ')压你方底线, 警惕底线闷杀, 可兑走或驱赶');   // v3.9
+    if (e.attackHorseMine.length) adv.push('己方马(' + e.attackHorseMine.join('、') + ')逼近对方九宫, 己成槽心/挂角位, 可跴将/抽车取势, 护住马眼勿轻兑');   // v3.9.2 槽心马/挂角马 (零噪音, 与窝心马 v2.5 x=4 宫心互斥)
+    if (e.attackHorseTheirs.length) risk.push('对方马(' + e.attackHorseTheirs.join('、') + ')逼近你方九宫, 可走槽心/挂角位, 勿随手送马, 可驱赶/走跴或预兑');   // v3.9.2
     if (e.phase === 'opening') {   // v3.2 开局任务提醒 (中残局零噪音)
       if (!e.taskCannon) adv.push('开局任务: 尽快架中炮 (炮二/八平五)');
       if (e.taskHomeKnights >= 1) adv.push('开局任务: 尽快上正马 (两匹都出)');   // v3.2: 还有马在原位就提醒 (含已上一匹的情况)
@@ -366,5 +389,5 @@
     };
   }
 
-  XQ.PositionEvaluator = { evaluate: evaluate, summarize: summarize };
+  XQ.PositionEvaluator = { evaluate: evaluate, summarize: summarize, attackHorse: attackHorse };
 })(typeof window !== 'undefined' ? window : globalThis);

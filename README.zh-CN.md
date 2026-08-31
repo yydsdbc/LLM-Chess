@@ -10,14 +10,14 @@
 ```bash
 git clone <本仓库>
 cd LLM-chess
-双击 启动.cmd        # 或: npm start (需 Node.js 18+)
+双击 Start.cmd        # 或: npm start (需 Node.js 18+)
 ```
 启动后浏览器自动打开 http://localhost:8788。
 
 - **零配置试玩**: 齿轮设置 → 执方选「随机AI」→ 开战 — 无需任何 API Key
 - **接入 LLM**: 编辑 `config/keys.json` 填入任意服务商 apiKey (首次运行自动生成空白模板, 16 家服务商格式参考 `config/keys.example.json`) → 重启即生效
 - **一键测试**: `npm test` (引擎 perft 金标准 + 提示词/评价/回放/记谱 全套守护)
-- **停止**: 双击 停止.cmd 或 `npm stop`
+- **停止**: 双击 Stop.cmd 或 `npm stop`
 
 ## 安全与配置
 
@@ -32,7 +32,7 @@ cd LLM-chess
 LLM-chess/
 ├── index.html          # 页面壳 (仅加载脚本, 无逻辑)
 ├── server.js           # 本地服务器: 静态托管 + /api/chat 密钥中继
-├── 启动.cmd / 停止.cmd  # 一键后台启停 (端口 8788)
+├── Start.cmd / Stop.cmd  # 一键后台启停 (端口 8788)
 ├── OPTIMIZATION_LOG.md # 优化日志 (人工 + 自动优化代理逐轮追加, 防重复)
 ├── config/
 │   └── keys.json       # 各服务商 API Key (服务端持有, 首次运行自动生成模板)
@@ -111,9 +111,9 @@ LLM-chess/
 
 ## 快速上手 (三步)
 
-1. **解压后双击 `启动.cmd`** — 自动后台启动服务并打开浏览器 (需已安装 Node.js 18+；未安装会给出下载地址)
+1. **解压后双击 `Start.cmd`** — 自动后台启动服务并打开浏览器 (需已安装 Node.js 18+；未安装会给出下载地址)
 2. **首次使用**: 编辑 `config/keys.json`, 在你用的服务商下填入 `apiKey` (模板已含 tokenrhythm 在内的全部服务商)，保存后重启一次
-3. **开棋**: 棋盘左上角 ⚙ 选双方模型/棋风 → 开始对局；`停止.cmd` 一键停止
+3. **开棋**: 棋盘左上角 ⚙ 选双方模型/棋风 → 开始对局；`Stop.cmd` 一键停止
 
 > 默认端口 8788 (启动时可用参数覆盖)；服务默认仅本机可访问，局域网访问设环境变量 `LLMCHESS_HOST=0.0.0.0` 后重启。
 
@@ -142,7 +142,7 @@ LLM-chess/
 
 | 模式 | 方法 | 说明 |
 |------|------|------|
-| 快捷启停 | 双击 `启动.cmd` / `停止.cmd` | 等价 node server.js 后台运行 (默认 8788) |
+| 快捷启停 | 双击 `Start.cmd` / `Stop.cmd` | 等价 node server.js 后台运行 (默认 8788) |
 | 单机 (人类/随机AI) | 双击 `index.html` 或任意静态服务器 | 零依赖 |
 | 人机/AI对战 (LLM) | `node server.js` → http://localhost:8788 | 密钥在 `config/keys.json` 填好后重启 |
 
@@ -209,7 +209,7 @@ Move 对象: `{ from:{x,y}, to:{x,y}, piece:{color,type,id}, captured }`
 - **接口 401 / “未配置 apiKey”**：`config/keys.json` 对应服务商填 `apiKey` 即可（该文件每请求重读，无需重启）；模型名不存在/余额不足会立即失败不烧重试。
 - **REASONING_REQUIRED / UNKNOWN_FIELD**：glm 系上游强制思考，agent 会自动摘除 thinking 字段重试；勾选“快答模式”时非 GLM 上游才真正关闭思考。
 - **503/504、一手 70~300s**：provider 侧排队波，agent 已设 120s 超时+重试+降温；tokenrhythm 偶发 DNS 故障 (ENOTFOUND)，稍后重试即可。
-- **热更新范围**：ai/ ui/ replay/ index.html 改动浏览器 F5 即生效；keys.json 每请求重读；**只有改 server.js 才需要重启**（`停止.cmd` → `启动.cmd`）。
+- **热更新范围**：ai/ ui/ replay/ index.html 改动浏览器 F5 即生效；keys.json 每请求重读；**只有改 server.js 才需要重启**（`Stop.cmd` → `Start.cmd`）。
 - **无头对局报 MATCH INCOMPLETE**：这是“手数未满或 meta 率 <100%”的预期退出码（兑底着法无 meta），非崩溃；看 logs/blunders_*.txt 瞎走报告定位。
 - **落子一直转圈**：先看浏览器控制台与 server.log 中 `[LLM 红/黑] attempt N 失败重试` 的原因行（v1.5.7 诊断日志），再对照上表。
 

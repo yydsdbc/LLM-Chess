@@ -209,6 +209,14 @@ for (let i = 0; i < moves.length; i++) {
     if (!ot.pawnAdvanced) missing.push('未挺兵开马脚');
     if (missing.length) issues.push({ ply: rec.n, side, type: '开局任务', detail: '八步内三任务未完成: ' + missing.join('、') });
   }
+  // ── v3.9.2 长将检测: 分析器 ruleEnforce:false 不重判, 旧棋谱的连续将军 (≥4 警告 / =6 长将判负)
+  //     engine.checkStreak 取本手走完后"对方"被将军的连续计数 (本手执子方, 跑完 toPly 后对方被将 = 己方连续将军+1)
+  const streak = engine.checkStreak(mover) || 0;
+  if (streak === 4) {
+    issues.push({ ply: rec.n, side, type: '长将', detail: `${cn[mover][movedPiece]} 连续将军已 4 手 (≥4 警告), 离长将判负仅差 2 手, 须立即变招` });
+  } else if (streak === 6) {
+    issues.push({ ply: rec.n, side, type: '长将', detail: `${cn[mover][movedPiece]} 连续将军达 6 手 — 长将判负触发 (引擎规则闭环, 仅在 ruleEnforce 开时终局)` });
+  }
 }
 return issues;
 }
@@ -227,7 +235,7 @@ const capN = record.moves.filter(m => m.captured).length;
 let report = `=== 瞎走检测: ${record.id} (${record.moves.length}手, 吃子${capN}) ===\n`;
 report += issues.length ? issues.map(x => `#${String(x.ply).padStart(2, '0')} [${x.side === 'red' ? '红' : '黑'}][${x.type}] ${x.detail}`).join('\n') : '(未检出明显瞎走)';
 var cntPrefix = (p2) => issues.filter(x => x.type.indexOf(p2) === 0).length;   // v3.3 修复: 送吃大子/亏换大子/送兵 此前未计入总计 (type 精确匹配漏掉子类型)
-report += `\n\n总计: 送吃${cntPrefix('送吃') + cntPrefix('送兵')} 亏换${cntPrefix('亏换')} 漏吃${issues.filter(x => x.type === '漏吃').length} 对方免费吃${issues.filter(x => x.type === '对方免费吃').length} 拉锯${issues.filter(x => x.type === '拉锯').length} 错失必杀${issues.filter(x => x.type === '错失必杀').length} 窝心马${issues.filter(x => x.type === '窝心马').length} 开局任务${issues.filter(x => x.type === '开局任务').length}`;
+report += `\n\n总计: 送吃${cntPrefix('送吃') + cntPrefix('送兵')} 亏换${cntPrefix('亏换')} 漏吃${issues.filter(x => x.type === '漏吃').length} 对方免费吃${issues.filter(x => x.type === '对方免费吃').length} 拉锯${issues.filter(x => x.type === '拉锯').length} 错失必杀${issues.filter(x => x.type === '错失必杀').length} 窝心马${issues.filter(x => x.type === '窝心马').length} 开局任务${issues.filter(x => x.type === '开局任务').length} 长将${cntPrefix('长将')}`;
 console.log(report);
 if (OUT) fs.writeFileSync(path.join(ROOT, OUT), report, 'utf8');
 }
@@ -253,7 +261,10 @@ function runSelfTest() {
   sok(g.filter(x => x.type === '开局任务').length === 0, '好开局 (中炮+双正马+挺兵) 不报开局任务 (v3.7)');
   const b = detect({ moves: mk(badMoves) });
   sok(b.filter(x => x.type === '开局任务').length === 2, '坏开局 (只动车炮) 红黑各报一次开局任务 (v3.7)');
-  console.log(spass === 2 && sfail === 0 ? '\nselftest 全部通过 ✓' : '\nselftest 失败 ' + sfail + ' 项');
+  // v3.9.2 长将检测: 好/坏开局均无连将, 计数器为 0 (只验证总计行格式带长将字段, 不构造真连将局面需 boardFromText, 实战检测由 E12 引擎守)
+  sok(g.filter(x => x.type === '长将').length === 0, '好开局不报长将 (零噪音)');
+  sok(b.filter(x => x.type === '长将').length === 0, '坏开局不报长将 (零噪音, 未达 ≥4 阈值)');
+  console.log(spass === 4 && sfail === 0 ? '\nselftest 全部通过 ✓' : '\nselftest 失败 ' + sfail + ' 项');
   process.exit(sfail ? 1 : 0);
 }
 if (SELF) runSelfTest();

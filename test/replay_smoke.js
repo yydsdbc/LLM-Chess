@@ -194,6 +194,40 @@ setTimeout(function () {
   ctrl.dispose();
   ok('dispose', ctrl.isPlaying() === false);
 
+  // v3.9.2 跳到下一手吃子 / 上一手吃子 (long replay 场景)
+  ctrl.gotoPly(0);
+  ctrl.stepNextCapture();
+  const after1 = s.idx();
+  const move1 = rec.moves[after1 - 1];
+  ok('stepNextCapture 跳到第一手吃子', after1 > 0 && move1 && !!move1.captured, 'ply=' + after1 + ' captured=' + (move1 && move1.captured));
+  // 试找第二手吃子 (合成 12 手谱可能只 1 个吃子, 无则跳末尾; 边缘情况也算通过)
+  ctrl.stepNextCapture();
+  const after2 = s.idx();
+  const move2 = rec.moves[after2 - 1];
+  ok('stepNextCapture 单吃子局=末尾 (无更多吃子)', after2 === rec.moves.length || (move2 && !!move2.captured), 'ply=' + after2);
+  // 上一手吃子
+  ctrl.stepPrevCapture();
+  const afterP = s.idx();
+  const moveP = rec.moves[afterP - 1];
+  ok('stepPrevCapture 回到上一手吃子', afterP > 0 && moveP && !!moveP.captured, 'ply=' + afterP);
+  // 边界: 从 0 往后退应跳 0 (无更早吃子) / 末尾往后应跳末尾
+  ctrl.gotoPly(0);
+  ctrl.stepPrevCapture();
+  ok('stepPrevCapture 边界=起点', s.idx() === 0);
+  ctrl.gotoPly(rec.moves.length);
+  ctrl.stepNextCapture();
+  ok('stepNextCapture 边界=末尾', s.idx() === rec.moves.length);
+  // 零吃子场景: 合成的无吃子棋谱应平跳 (与 auto-skip 行为对齐)
+  const noCap = { moves: rec.moves.map(function (m) { return Object.assign({}, m, { captured: null }); }) };
+  const s3 = XQ.Replay.create(noCap);
+  const ctrl3 = XQ.ReplayController.create(s3, { onState: function () {}, onPlayState: function () {} });
+  s3.goto(0);
+  ctrl3.stepNextCapture();
+  ok('stepNextCapture 零吃子跳末尾', s3.idx() === noCap.moves.length);
+  ctrl3.gotoPly(0);
+  ctrl3.stepPrevCapture();
+  ok('stepPrevCapture 零吃子回起点', s3.idx() === 0);
+
   // listLocal 在有 localStorage 替代时 (注入)
   sandbox.localStorage = { _d: {}, getItem(k) { return this._d[k]; }, setItem(k, v) { this._d[k] = v; } };
   // Record 初始化时读 LS_KEY=null. 直接调用 record.save(rec): list() 取 LS_KEY=xq_records

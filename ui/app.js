@@ -860,6 +860,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           rpCtrl.gotoPly(curIdx + (ev.key === ']' ? 5 : -5));   // v3.9a: ±5 手键盘跳转 (v1.6.2 跳转按钮的键盘版; gotoPly 内建 clamp)
           ev.preventDefault(); return;
         }
+        if (ev.key === 'c' || ev.key === 'C') {
+          if (rpCtrl) { if (ev.shiftKey) rpCtrl.stepPrevCapture(); else rpCtrl.stepNextCapture(); }
+          ev.preventDefault(); return;
+        }   // v3.9.2: 下一手吃子 (C) / 上一手吃子 (Shift+C) — 长局跳过拉扯段快速看子力交换点
         if (ev.key === '?' || ev.key === '/') { rpShowHelp(); ev.preventDefault(); return; }
       }
       var k = (ev.key || '').toLowerCase();
@@ -944,6 +948,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '        <button class="btn" id="rp-back10" title="后退10手" style="font-size:11px">⏪-10</button>'
       + '        <button class="btn" id="rp-skip5" title="快进5手" style="font-size:11px">+5⏩</button>'
       + '        <button class="btn" id="rp-skip10" title="快进10手" style="font-size:11px">+10⏩</button>'
+      + '        <button class="btn" id="rp-prev-cap" title="上一手吃子 (Shift+C)" style="font-size:11px">⏪吃</button>'
+      + '        <button class="btn" id="rp-next-cap" title="下一手吃子 (C)" style="font-size:11px">吃子⏩</button>'
       + '      </div>'
       + '      <div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:8px;flex-wrap:wrap">'
       + '        <span style="color:#c4a56e;font-size:12px">倍速</span>'
@@ -998,6 +1004,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       btnSkip10: ov.querySelector('#rp-skip10'),
       btnBack5: ov.querySelector('#rp-back5'),
       btnBack10: ov.querySelector('#rp-back10'),
+      btnPrevCap: ov.querySelector('#rp-prev-cap'),
+      btnNextCap: ov.querySelector('#rp-next-cap'),
       btnNextRecord: ov.querySelector('#rp-next-record'),
       btnImport: ov.querySelector('#rp-import'),
       btnExportPGN: ov.querySelector('#rp-export-pgn'),
@@ -1018,6 +1026,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     rpEl.btnSkip10.onclick = function () { rpCtrl && rpCtrl.gotoPly(rpSession.idx() + 10); };
     rpEl.btnBack5.onclick = function () { rpCtrl && rpCtrl.gotoPly(rpSession.idx() - 5); };
     rpEl.btnBack10.onclick = function () { rpCtrl && rpCtrl.gotoPly(rpSession.idx() - 10); };
+    rpEl.btnPrevCap.onclick = function () { rpCtrl && rpCtrl.stepPrevCapture(); };
+    rpEl.btnNextCap.onclick = function () { rpCtrl && rpCtrl.stepNextCapture(); };
     rpEl.btnNextRecord.onclick = rpGotoNextRecord;
     rpEl.btnExportPGN.onclick = rpExportPGN;
     rpEl.btnHelp.onclick = rpShowHelp;
@@ -1302,7 +1312,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var body = '';
     for (var i = 0; i < rec.moves.length; i++) {
       var m = rec.moves[i];
-      body += (i % 2 === 0 ? Math.floor(i / 2) + 1 + '. ' : '') + m.from + '-' + m.to + (m.summary ? ' {' + m.summary + '}' : '') + ' ';
+      /* v3.9.2 PGN 加中文记谱: 同一手追加 {cn: 炮八平五} (与 {summary} 并列) — 中文观战者可一眼看走子, 国际象棋 PGN 应用忽略额外 {} 字段 */
+      var cnN = (m.side && m.piece && m.from && m.to && typeof cnNotation === 'function') ? cnNotation(m.side, m.piece, m.from, m.to) : '';
+      var cmts = [];
+      if (cnN) cmts.push('cn:' + cnN);
+      if (m.summary) cmts.push(m.summary);
+      body += (i % 2 === 0 ? Math.floor(i / 2) + 1 + '. ' : '') + m.from + '-' + m.to + (cmts.length ? ' {' + cmts.join(' | ') + '}' : '') + ' ';
     }
     /* v1.6.4 PGN 修复: 原黑方手前插 '*' (终局标记) 会被解析器当对局结束截断; 改标准 "1. 红手 黑手 2. ..." 格式, 末尾追加结果标记 (v3.8: 结果记号统一由 pgnRes 计算, 和棋局 1/2-1/2) */
     lines.push((body.trim() + ' ' + pgnRes).trim());
@@ -1327,6 +1342,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '<tr><td><kbd>F</kbd></td><td>回放全屏切换 (全屏时 Esc 先退全屏)</td></tr>'
       + '<tr><td><kbd>1</kbd>~<kbd>7</kbd></td><td>倍速: 0.25x / 0.5x / 1x / 2x / 5x / 10x / 20x</td></tr>'
       + '<tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>后退 / 前进 5 手 (v3.9a)</td></tr>'
+      + '<tr><td><kbd>C</kbd> / <kbd>Shift+C</kbd></td><td>下一手吃子 / 上一手吃子 (v3.9.2)</td></tr>'
       + '<tr><td>滚轮</td><td>棋盘上 步进 (180ms 节流)</td></tr>'
       + '<tr><td><kbd>?</kbd> / <kbd>/</kbd></td><td>显示本帮助 (再次按下或点击遮罩关闭)</td></tr>'
       + '<tr><td><kbd>Esc</kbd></td><td>退出回放</td></tr>'

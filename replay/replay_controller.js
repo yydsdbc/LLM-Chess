@@ -72,11 +72,43 @@
     function setLoop(v) { loop = !!v; }
     function isLooping() { return loop; }
 
+    /* v3.9.2 跳到下一手吃子 / 上一手吃子: 从当前 idx+1 起向后扫, 找首个 .captured 非空手;
+       没吃子 (整局零吃子) 时跳末尾/起点。手动导航语义: 同样 pause + emit。 */
+    function findCaptureIdx(fromIdx, dir) {
+      var moves = session.record.moves || [];
+      var n = moves.length;
+      var i = dir > 0 ? fromIdx + 1 : fromIdx - 1;
+      var end = dir > 0 ? n : -1;
+      var step = dir > 0 ? 1 : -1;
+      while (i !== end && i >= 0 && i <= n) {
+        if (moves[i] && moves[i].captured) return i + 1;   // 跳到该手之后 (ply=i+1)
+        i += step;
+      }
+      return -1;
+    }
+    function stepNextCapture() {
+      pause();
+      var cur = session.idx();
+      var n = session.total();
+      var target = findCaptureIdx(cur, 1);
+      if (target < 0 || target > n) target = n;   // 找不到后续吃子时跳末尾 (与 next 按钮语义对齐: 不烧重复, 给个目的地)
+      if (target === cur + 1) { session.next(); emit(); return; }
+      if (target !== cur) { session.goto(target); emit(); }
+    }
+    function stepPrevCapture() {
+      pause();
+      var cur = session.idx();
+      var target = findCaptureIdx(cur, -1);
+      if (target < 0) target = 0;   // 找不到先前吃子时跳开头
+      if (target !== cur) { session.goto(target); emit(); }
+    }
+
     function dispose() { pause(); }
 
     return {
       play: play, pause: pause, toggle: toggle,
       stepNext: stepNext, stepPrev: stepPrev,
+      stepNextCapture: stepNextCapture, stepPrevCapture: stepPrevCapture,   // v3.9.2: 跳到下一手/上一手吃子
       gotoPly: gotoPly, toStart: toStart, toEnd: toEnd,
       setSpeed: setSpeed,
       setLoop: setLoop,
