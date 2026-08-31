@@ -1,0 +1,306 @@
+#!/usr/bin/env node
+/**
+ * LLM-chess v1.0 本地服务器
+ *  - 静态托管前端 (http://localhost:8788)
+ *  - /api/chat: OpenAI 协议中继。API Key 只保存在服务端 config/keys.json, 前端永不见密钥。
+ *  - /api/providers: 返回已配置的服务商列表 (不含 Key)
+ *
+ * 用法: node server.js [端口]     (默认 8788)
+ * 首次运行会自动生成 config/keys.json 模板, 打开填入各服务商的 Key 即可。
+ */
+'use strict';
+const http = require('http');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
+
+const PORT = parseInt(process.argv[2] || process.env.PORT || '8788', 10);
+const ROOT = __dirname;
+const KEYS_PATH = path.join(ROOT, 'config', 'keys.json');
+
+/* ── 密钥配置加载 ── */
+function loadKeys() {
+  try {
+    return JSON.parse(fs.readFileSync(KEYS_PATH, 'utf8'));
+  } catch (e) {
+    const template = {
+      _说明: '在此填入各服务商 apiKey 后重启 server.js。此文件不要提交到任何仓库。',
+      providers: {
+        moonshot: { name: 'Moonshot Kimi', baseUrl: 'https://api.moonshot.cn/v1', apiKey: '' },
+        deepseek: { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', apiKey: '' },
+        zhipu:    { name: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', apiKey: '' },
+        openai:   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', apiKey: '' },
+        minimax:  { name: 'MiniMax', baseUrl: 'https://api.minimaxi.com/v1', apiKey: '' },
+        tokenrhythm: { name: 'TokenRhythm', baseUrl: 'https://tokenrhythm.studio/v1', chatPath: '/chat/completions', apiKey: '', models: ['glm-5.3-flash', 'deepseek-v4-flash-0731', 'deepseek-v4-pro-0813'] },
+        qwen: { name: '阿里通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', apiKey: '', models: ['qwen-max', 'qwen-plus', 'qwen-turbo', 'qwen3-max'] },
+        volcengine: { name: '字节豆包(火山方舟)', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', apiKey: '', models: ['doubao-1.5-pro-32k', 'doubao-pro-32k'] },
+        hunyuan: { name: '腾讯混元', baseUrl: 'https://api.hunyuan.cloud.tencent.com/v1', apiKey: '', models: ['hunyuan-turbo', 'hunyuan-pro', 'hunyuan-standard'] },
+        spark: { name: '讯飞星火', baseUrl: 'https://spark-api-open.xf-yun.com/v1', apiKey: '', models: ['generalv3.5', 'max-32k', '4.0Ultra'] },
+        yi: { name: '零一万物', baseUrl: 'https://api.lingyiwanwu.com/v1', apiKey: '', models: ['yi-large', 'yi-medium', 'yi-spark'] },
+        baichuan: { name: '百川智能', baseUrl: 'https://api.baichuan-ai.com/v1', apiKey: '', models: ['Baichuan4', 'Baichuan3-Turbo'] },
+        step: { name: '阶跃星辰', baseUrl: 'https://api.stepfun.com/v1', apiKey: '', models: ['step-2-16k', 'step-1v-8k'] },
+        siliconflow: { name: '硅基流动', baseUrl: 'https://api.siliconflow.cn/v1', apiKey: '', models: ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen2.5-72B-Instruct'] },
+        anthropic: { name: 'Anthropic Claude', baseUrl: 'https://api.anthropic.com', protocol: 'anthropic', apiKey: '', models: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-3-5-haiku-latest'] },
+        custom: { name: '自定义(OpenAI兼容)', baseUrl: 'https://填入你的OpenAI兼容网关/v1', apiKey: '', _说明: '任意 OpenAI 兼容接口; models 留空则前端模型框可自由输入; 可加 headers 字段自定义请求头' }
+      }
+    };
+    fs.mkdirSync(path.dirname(KEYS_PATH), { recursive: true });
+    fs.writeFileSync(KEYS_PATH, JSON.stringify(template, null, 2));
+    console.log('⚠ 已生成密钥模板: ' + KEYS_PATH + ' — 请填入 apiKey 后重启');
+    return template;
+  }
+}
+
+/* ── 静态文件 ── */
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
+  '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8'
+};
+function serveStatic(req, res, urlPath) {
+  let p = decodeURIComponent(urlPath.split('?')[0]);
+  if (p === '/' || p === '') p = '/index.html';
+  const full = path.normalize(path.join(ROOT, p));
+  if (!full.startsWith(ROOT)) { res.writeHead(403); return res.end('forbidden'); }
+  fs.readFile(full, (err, buf) => {
+    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('404 Not Found'); }
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+    res.end(buf);
+  });
+}
+
+/* ── 上游转发 ── */
+function relay(providerCfg, payload, res) {
+  const base = (providerCfg.baseUrl || '').replace(/\/+$/, '');
+  const path = providerCfg.chatPath || '/chat/completions';
+  const url = new URL(base + path);
+  const mod = url.protocol === 'https:' ? https : http;
+  const wantStream = !!payload.stream;
+  const body = JSON.stringify({
+    model: payload.model,
+    messages: payload.messages,
+    temperature: typeof payload.temperature === 'number' ? payload.temperature : 0.3,
+    max_tokens: payload.max_tokens || 2048,
+    // thinking 开关仅 GLM 系 (bigmodel/tokenrhythm) 透传; 其他家 (deepseek/moonshot/openai/minimax) 不识别该字段,
+    // 防严格校验的上游报未知字段 400 — deepseek-chat 本就不思考, deepseek-reasoner 恒思考, 无需开关
+    thinking: /bigmodel\.cn|tokenrhythm/i.test(base) ? payload.thinking : undefined,
+    stream: wantStream,
+    stream_options: wantStream ? { include_usage: true } : undefined
+  });
+  const upReq = mod.request({
+    hostname: url.hostname,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    path: url.pathname + url.search,
+    method: 'POST',
+    timeout: 180000,   // v1.5.9: 65s→180s — socket 空闲超时, provider 排队波 70~300s 时 65s 会杀掉排队中请求 → 502 → agent 重试更久; 需 > agent 的 120s
+    headers: Object.assign({
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + providerCfg.apiKey,
+      'Content-Length': Buffer.byteLength(body)
+    }, providerCfg.headers || {}),   // v3.5: 每服务商可自定义请求头 (部分网关需额外鉴权头)
+  }, upRes => {
+    if (!wantStream) {
+      const out = [];
+      upRes.on('data', c => out.push(c));
+      upRes.on('end', () => {
+        res.writeHead(upRes.statusCode || 502, {
+          'Content-Type': upRes.headers['content-type'] || 'application/json',
+          'Access-Control-Allow-Origin': req_origin_safe()
+        });
+        res.end(Buffer.concat(out));
+      });
+    } else {
+      // SSE 透传: 状态码+头照抄上游, chunks 直通浏览器
+      res.writeHead(upRes.statusCode || 502, {
+        'Content-Type': upRes.headers['content-type'] || 'text/event-stream',
+        'Cache-Control': 'no-store',
+        'Access-Control-Allow-Origin': req_origin_safe()
+      });
+      upRes.on('data', c => res.write(c));
+      upRes.on('end', () => res.end());
+      upRes.on('error', () => res.end());
+    }
+  });
+  upReq.on('timeout', () => upReq.destroy(new Error('upstream timeout(180s)')));
+  res.on('close', () => { try { upReq.destroy(new Error('client closed')); } catch (e2) {} });   // v3.4: 浏览器断开即销毁上游请求 (免浪费 token)
+  upReq.on('error', e => {
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+    }
+    res.end(JSON.stringify({ error: 'relay upstream error: ' + e.message }));
+  });
+  upReq.write(body);
+  upReq.end();
+}
+/* ── v3.5 Anthropic Claude 协议转换中继 ──
+ * Anthropic /v1/messages 与 OpenAI 协议不同: system 独立字段 / messages 交替 / x-api-key 鉴权 / SSE 事件格式不同。
+ * 这里做双向转换: 入站 OpenAI 风格 payload → Anthropic; 出站 Anthropic 响应 → 合成 OpenAI 风格 SSE 帧 (llm_agent 无需改动)。
+ * 等待上游期间每 15s 发 SSE 注释心跳 (: ping), 防 llm_agent 的 streamIdleMs 60s 看门狗误杀长思考。
+ */
+function relayAnthropic(providerCfg, payload, res) {
+  const base = (providerCfg.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '');
+  const url = new URL(base + (providerCfg.chatPath || '/v1/messages'));
+  const mod = url.protocol === 'https:' ? https : http;
+  const msgsIn = Array.isArray(payload.messages) ? payload.messages : [];
+  let system = '';
+  const rest = [];
+  for (const m of msgsIn) {
+    const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+    if (m.role === 'system') { system += (system ? '\n' : '') + c; continue; }
+    rest.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: c });
+  }
+  const merged = [];
+  for (const m of rest) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === m.role) last.content += '\n' + m.content;   // Anthropic 要求 user/assistant 交替, 同角色合并
+    else merged.push({ role: m.role, content: m.content });
+  }
+  if (!merged.length || merged[0].role !== 'user') merged.unshift({ role: 'user', content: '(开局)' });
+  const body = JSON.stringify({
+    model: payload.model,
+    max_tokens: payload.max_tokens || 2048,
+    temperature: typeof payload.temperature === 'number' ? payload.temperature : 0.3,
+    system: system || undefined,
+    messages: merged,
+    stream: false   // 上游固定非流式, 中继侧合成 SSE (省去 Anthropic 事件流转换)
+  });
+  const upReq = mod.request({
+    hostname: url.hostname,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    path: url.pathname + url.search,
+    method: 'POST',
+    timeout: 180000,
+    headers: Object.assign({
+      'Content-Type': 'application/json',
+      'x-api-key': providerCfg.apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Length': Buffer.byteLength(body)
+    }, providerCfg.headers || {})
+  }, upRes => {
+    const out = [];
+    upRes.on('data', c => out.push(c));
+    upRes.on('end', () => {
+      let text = '', usage = null, httpErr = null;
+      try {
+        const jr = JSON.parse(Buffer.concat(out).toString('utf8'));
+        if (jr.type === 'error' || jr.error) httpErr = (jr.error && jr.error.message) || 'anthropic error';
+        else {
+          text = (jr.content || []).filter(b2 => b2.type === 'text').map(b2 => b2.text).join('');
+          const u2 = jr.usage || {};
+          usage = { prompt_tokens: u2.input_tokens || 0, completion_tokens: u2.output_tokens || 0, total_tokens: (u2.input_tokens || 0) + (u2.output_tokens || 0) };
+        }
+      } catch (eP) { httpErr = 'anthropic 响应解析失败'; }
+      if (httpErr) {
+        res.writeHead(upRes.statusCode || 502, { 'Content-Type': 'application/json; charset=utf-8' });
+        return res.end(JSON.stringify({ error: httpErr }));
+      }
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': req_origin_safe() });
+      const frame = o2 => res.write('data: ' + JSON.stringify(o2) + '\n\n');
+      frame({ choices: [{ delta: { content: text }, finish_reason: 'stop' }], usage });
+      frame({ choices: [], usage });
+      res.write('data: [DONE]\n\n');
+      res.end();
+    });
+  });
+  const beat = setInterval(() => { try { res.write(': ping\n\n'); } catch (eB) {} }, 15000);   // v3.5: SSE 心跳防 streamIdle 误杀
+  upReq.on('timeout', () => upReq.destroy(new Error('anthropic timeout(180s)')));
+  upReq.on('error', e3 => { clearInterval(beat); if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: 'relay upstream error: ' + e3.message })); });
+  res.on('close', () => { clearInterval(beat); try { upReq.destroy(new Error('client closed')); } catch (e4) {} });
+  upReq.write(body);
+  upReq.end();
+}
+// 同源部署无需 CORS; 保守起见带个头 (file:// 调试也友好)
+function req_origin_safe() { return '*'; }
+
+function readBody(req) {
+  return new Promise(resolve => {
+    const chunks = [];
+    let size = 0, done = false;
+    const finish = v => { if (!done) { done = true; resolve(v); } };
+    req.on('data', c => {
+      size += c.length;
+      if (size > 2 * 1024 * 1024) { finish(''); try { req.destroy(); } catch (e) {} return; }   // v3.4: 请求体上限 2MB (防异常大包 OOM)
+      chunks.push(c);
+    });
+    req.on('end', () => finish(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', () => finish(''));   // v3.4: 客户端异常中断不再挂起
+    req.on('aborted', () => finish(''));   // v3.4: 同上
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  const u = req.url || '/';
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    });
+    return res.end();
+  }
+
+  /* ── API ── */
+  if (u === '/api/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok: true, relay: true, version: '3.6' }));
+  }
+
+  if (u === '/api/providers') {
+    const keys = loadKeys();
+    const list = Object.keys(keys.providers || {}).map(id => ({
+      id, name: keys.providers[id].name, baseUrl: keys.providers[id].baseUrl,
+      hasKey: !!keys.providers[id].apiKey,
+      models: keys.providers[id].models || []
+    }));
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ providers: list }));
+  }
+
+  if (u === '/api/chat' && req.method === 'POST') {
+    const body = await readBody(req);
+    if (!body) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: '请求体为空或超过 2MB 上限' }));
+    }
+    let payload;
+    try { payload = JSON.parse(body); } catch (e) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'bad json' }));
+    }
+    const keys = loadKeys();
+    const cfg = (keys.providers || {})[payload.provider];
+    if (!cfg) {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({ error: '未知服务商: ' + payload.provider }));
+    }
+    if (!cfg.apiKey) {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({ error: '服务商 ' + payload.provider + ' 未配置 apiKey — 请编辑 config/keys.json 后重启' }));
+    }
+    if (!payload.model || !payload.messages) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: '缺少 model/messages' }));
+    }
+    if ((cfg.protocol || '') === 'anthropic') return relayAnthropic(cfg, payload, res);   // v3.5: Claude 走协议转换
+    return relay(cfg, payload, res);
+  }
+
+  /* ── 静态 ── */
+  serveStatic(req, res, u);
+});
+
+const HOST = process.env.LLMCHESS_HOST || '127.0.0.1';   // v3.4: 默认仅本机可访问 (API Key 安全); 局域网访问设 LLMCHESS_HOST=0.0.0.0
+server.listen(PORT, HOST, () => {
+  loadKeys();
+  console.log('');
+  console.log('🦞 LLM-chess v1.0 服务器已启动 (' + HOST + ':' + PORT + ')');
+  console.log('   棋盘     : http://localhost:' + PORT + '/');
+  if (HOST === '127.0.0.1') console.log('   访问范围 : 仅本机 (局域网访问设环境变量 LLMCHESS_HOST=0.0.0.0 后重启)');
+  console.log('   密钥配置 : config/keys.json (填好后无需改前端)');
+  console.log('   零配置   : 无 Key 也能玩 — 对战设置执方选「随机AI」');
+  console.log('   中继接口 : POST /api/chat  {provider, model, messages}');
+  console.log('   按 Ctrl+C 停止');
+  console.log('');
+});

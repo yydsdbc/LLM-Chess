@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">   <!-- v1.8: 深色主题加载期免白闪 -->
+<meta name="description" content="LLM-chess — 中国象棋 AI 观战平台: 双 LLM 对弈, 实时思考流/决策卡/回放系统">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>">
+<title>🦞 LLM-chess 象棋引擎 v1.0</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--board-h:504px}
+body{font-family:"Microsoft YaHei","PingFang SC",sans-serif;text-align:center;background:linear-gradient(135deg,#1a0f08 0%,#2c1810 50%,#1a0f08 100%);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0,0,.5);letter-spacing:2px}
+.subtitle{color:#c4a56e;font-size:12px;margin-bottom:12px;letter-spacing:1px}
+#board-container{position:relative;display:inline-block;padding:10px 10px 18px 26px;background:linear-gradient(135deg,#6b4f1a,#a08040,#6b4f1a);border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.1)}   /* v1.5.10: 左/下加宽容纳行列坐标 */
+#board{display:grid;grid-template-columns:repeat(9,48px);grid-template-rows:repeat(10,48px);width:432px;height:480px;position:relative;background:#dcc88a;border:2px solid #5a3a18;box-sizing:content-box}
+#board-lines{position:absolute;top:0;left:0;width:432px;height:480px;pointer-events:none;z-index:1}
+#col-labels{position:absolute;top:calc(100% + 3px);left:0;width:432px;display:grid;grid-template-columns:repeat(9,48px);z-index:4;pointer-events:none}
+#col-labels span{text-align:center;font-size:11px;font-weight:bold;color:rgba(255,240,200,.62);line-height:12px}
+#row-labels{position:absolute;right:calc(100% + 3px);top:0;height:480px;width:18px;display:grid;grid-template-rows:repeat(10,48px);z-index:4;pointer-events:none}
+#row-labels span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;color:rgba(255,240,200,.62)}
+.cell{width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;position:relative;z-index:3;user-select:none;transition:background .15s}
+.cell:hover{background:rgba(139,105,20,.15)}
+.piece{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:bold;font-family:"KaiTi","STKaiti","SimKai",serif;background:radial-gradient(circle at 35% 35%,#fffdf5,#e8d098);border:2px solid #7a5c1e;box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 1px 3px rgba(255,255,255,.6),inset 0 -1px 2px rgba(0,0,0,.1);transition:transform .12s ease-out,box-shadow .12s ease-out;cursor:pointer;line-height:1}
+.piece::before{content:"";position:absolute;top:2px;left:2px;right:2px;bottom:2px;border-radius:50%;border:1.5px solid rgba(122,92,30,.3);pointer-events:none}
+.piece.red{color:#c0392b;border-color:#8b4513;background:radial-gradient(circle at 35% 35%,#fff5ee,#f0c898)}
+.piece.black{color:#1a1a1a;border-color:#2c1810;background:radial-gradient(circle at 35% 35%,#fafafa,#ddd0a8)}
+.piece:hover{transform:scale(1.08);box-shadow:0 3px 10px rgba(0,0,0,.5),inset 0 1px 3px rgba(255,255,255,.6)}
+@keyframes piece-place{0%{transform:scale(.9)}50%{transform:scale(1.12)}70%{transform:scale(.98)}100%{transform:scale(1)}}
+.piece.just-placed{animation:piece-place .25s cubic-bezier(.22,1,.36,1)}
+.cell.selected{background:rgba(52,152,219,.3) !important}
+.cell.selected .piece{box-shadow:0 0 0 2px #3498db,0 0 10px rgba(52,152,219,.4)}
+.cell.legal-target::after{content:"";position:absolute;width:10px;height:10px;border-radius:50%;background:rgba(46,204,113,.5);pointer-events:none}
+.cell.legal-capture::after{content:"";position:absolute;width:40px;height:40px;border-radius:50%;border:2.5px solid rgba(231,76,60,.55);pointer-events:none}
+.cell.illegal-target::after{content:"";position:absolute;width:26px;height:26px;border-radius:50%;background-color:rgba(220,53,69,.14);background-image:linear-gradient(45deg,transparent 43%,rgba(220,53,69,.88) 43%,rgba(220,53,69,.88) 57%,transparent 57%),linear-gradient(-45deg,transparent 43%,rgba(220,53,69,.88) 43%,rgba(220,53,69,.88) 57%,transparent 57%);pointer-events:none}
+.cell.last-move{background:rgba(241,196,15,.2) !important}
+.cell.last-start{background:rgba(241,196,15,.12) !important}
+.cell.in-check{background:rgba(231,76,60,.35) !important;animation:pulse-check .6s ease-in-out infinite}
+.cell.in-check .piece{box-shadow:0 0 0 2px #e74c3c,0 0 12px rgba(231,76,60,.5) !important}
+#status-bar{margin-top:12px;padding:8px 24px;border-radius:8px;font-size:15px;font-weight:bold;letter-spacing:1px;min-width:240px;text-align:center;display:flex;justify-content:space-between;align-items:center}
+.status-red-turn{background:rgba(192,57,43,.15);color:#e74c3c;border:1px solid rgba(192,57,43,.35)}
+.status-black-turn{background:rgba(218,224,234,.9);color:#15181d;border:1px solid rgba(100,120,140,.55)}
+.status-check{background:rgba(231,76,60,.25);color:#e74c3c;border:1px solid rgba(231,76,60,.5);animation:pulse-check .6s ease-in-out infinite}
+.status-thinking-red,.status-thinking-black{background:rgba(255,220,120,0.12);color:#FFE8A3;border:1px solid rgba(212,175,55,0.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+
+.status-win{background:linear-gradient(135deg,rgba(46,204,113,.25),rgba(39,174,96,.2));color:#2ecc71;border:1px solid rgba(46,204,113,.5);font-size:18px;animation:celebrate .5s ease-out}
+.status-draw{background:rgba(149,165,166,.2);color:#bdc3c7;border:1px solid rgba(149,165,166,.4);font-size:18px}
+#status-info{font-size:12px;opacity:.8}
+@keyframes pulse-check{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.05);opacity:.85}}
+@keyframes celebrate{0%{transform:scale(.85);opacity:0}50%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+#ai-banner{margin-top:8px;padding:5px 14px;border-radius:6px;font-size:12px;letter-spacing:.5px;min-height:0;min-width:110px;max-width:420px;display:none;align-items:center;justify-content:center;gap:6px}
+#ai-banner.busy{display:flex;background:rgba(52,152,219,.15);color:#7fb8e8;border:1px solid rgba(52,152,219,.35);animation:pulse-check 1.2s ease-in-out infinite}
+#ai-banner.warn{display:flex;background:rgba(231,76,60,.15);color:#f08578;border:1px solid rgba(231,76,60,.4)}
+#btn-row{margin-top:6px;display:flex;gap:10px;justify-content:center;opacity:0;transition:opacity .3s;pointer-events:none}
+#btn-row.visible{opacity:1;pointer-events:auto}
+.btn{padding:6px 16px;border:none;border-radius:5px;font-size:12px;font-weight:bold;cursor:pointer;letter-spacing:1px;transition:all .2s;color:#f0d9a0;background:rgba(240,217,160,.08);border:1px solid rgba(240,217,160,.2)}
+.btn:hover{background:rgba(240,217,160,.18);border-color:rgba(240,217,160,.4)}
+.btn:active{transform:scale(.96)}
+#archive-row{margin-top:6px;display:flex;gap:8px}
+#move-log{margin-top:8px;max-width:432px;max-height:80px;overflow-y:auto;padding:4px 10px;background:rgba(0,0,0,.2);border-radius:5px;font-size:10px;color:#a09070;text-align:left;font-family:"Courier New",monospace;line-height:1.5;scrollbar-width:thin}
+.log-entry{white-space:nowrap;padding:0 4px;cursor:pointer;border-radius:3px;transition:background .15s}
+.log-entry:hover{background:rgba(240,217,160,.12)}
+.log-entry.active{background:rgba(240,217,160,.22);border-left:2px solid #f1c40f}
+.log-entry .log-num{color:#6b5530}.log-entry .log-red{color:#c0392b}.log-entry .log-black{color:#8fa3b8}
+.log-entry .log-secs{color:#5f7a8a;font-size:9px}
+#snd-toggle,#gear-toggle{position:absolute;top:-14px;width:36px;height:36px;border-radius:50%;border:1.5px solid #a08040;background:#2c1810;color:#f0d9a0;font-size:15px;cursor:pointer;z-index:60;box-shadow:0 2px 8px rgba(0,0,0,.5);transition:transform .15s;display:flex;align-items:center;justify-content:center}
+#snd-toggle{right:-14px}#gear-toggle{left:-14px}
+#snd-toggle:hover,#gear-toggle:hover{transform:scale(1.1)}
+#gear-toggle.on{border-color:#3498db;box-shadow:0 0 10px rgba(52,152,219,.5)}
+#end-overlay{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:50;opacity:0;pointer-events:none;transition:opacity .35s}
+#end-overlay.show{opacity:1;pointer-events:auto}
+.eo-card{background:linear-gradient(135deg,#2c1810,#4a2f1a);border:2px solid #a08040;border-radius:12px;padding:28px 44px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.7);animation:celebrate .5s ease-out}
+.eo-title{font-size:30px;font-weight:bold;color:#ffd700;text-shadow:0 2px 8px rgba(255,215,0,.4);margin-bottom:8px;letter-spacing:3px}
+.eo-sub{font-size:14px;color:#e8d098;margin-bottom:18px;letter-spacing:1px}
+.eo-btn{padding:9px 28px;font-size:14px}
+#settings-overlay{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);z-index:70;opacity:0;pointer-events:none;transition:opacity .25s}
+#settings-overlay.show{opacity:1;pointer-events:auto}
+.set-card{background:linear-gradient(135deg,#241408,#3a2513);border:1.5px solid #a08040;border-radius:12px;padding:20px 22px 16px;width:540px;max-width:94%;box-shadow:0 10px 40px rgba(0,0,0,.7);text-align:left}
+.set-card h3{margin:0 0 14px;font-size:15px;color:#f0d9a0;letter-spacing:1px;text-align:center}
+.set-cols{display:flex;gap:14px;margin-bottom:8px}
+.set-col{flex:1;min-width:0;padding:10px 12px 12px;border-radius:8px;border:1px solid rgba(240,217,160,.15)}
+.set-col-red{background:rgba(192,57,43,.08)}
+.set-col-black{background:rgba(30,45,60,.25)}
+.col-title{font-size:13px;font-weight:bold;letter-spacing:2px;margin-bottom:8px;text-align:center}
+.set-col-red .col-title{color:#f08578}.set-col-black .col-title{color:#9fc5e8}
+.set-row{margin-bottom:10px}
+.set-row label{display:block;font-size:11px;color:#c4a56e;margin-bottom:4px;letter-spacing:.5px}
+.set-row input[type=text],.set-row input[type=password],.set-row select{width:100%;padding:7px 9px;font-size:12px;color:#f0e6c8;background:rgba(0,0,0,.35);border:1px solid rgba(240,217,160,.25);border-radius:5px;outline:none;box-sizing:border-box}
+.set-row input:focus,.set-row select:focus{border-color:#3498db}
+.set-check{display:flex;align-items:center;gap:7px;font-size:13px;color:#f0d9a0;margin-bottom:10px;cursor:pointer}
+.set-check input{width:15px;height:15px;accent-color:#3498db;cursor:pointer}
+.set-note{font-size:10px;color:#8a7550;line-height:1.5;margin:2px 0 12px}
+.set-foot{display:flex;justify-content:flex-end;gap:8px}
+@media(max-width:600px){.set-cols{flex-direction:column}}
+
+/* ── 竞技场: 左红思考 | 棋盘 | 右黑思考 ── */
+#arena{display:flex;align-items:stretch;justify-content:center;gap:10px;width:100%;max-width:960px;margin:0 auto}
+#board-wrap{flex:0 0 auto}
+.think-panel{width:200px;min-width:170px;display:flex;flex-direction:column;border-radius:10px;overflow:hidden;position:relative;max-height:var(--board-h);
+  background:rgba(0,0,0,.25);border:1px solid rgba(240,217,160,.12);text-align:left}
+.think-panel.think-red{background:linear-gradient(180deg,rgba(60,20,16,.5),rgba(30,10,8,.6));border-color:rgba(240,133,120,.25)}
+.think-panel.think-black{background:linear-gradient(180deg,rgba(12,24,38,.5),rgba(6,12,20,.6));border-color:rgba(159,197,232,.25)}
+.think-head{display:flex;align-items:center;gap:6px;padding:7px 9px 5px;font-size:11.5px;font-weight:bold;color:#f0d9a0;
+  border-bottom:1px solid rgba(240,217,160,.12);white-space:nowrap}
+.think-head .think-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.think-head .think-stat{flex:0 0 auto;margin-left:6px;font-weight:normal;opacity:.6;font-size:10px;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.think-body{flex:1;min-height:0;font-family:Consolas,Monaco,monospace;font-size:12.5px;line-height:1.45;padding:7px 10px 9px;
+  color:#e0e0e0;white-space:pre-wrap;word-break:break-word;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
+.think-red .think-body{color:#f0c4b8}
+.think-black .think-body{color:#b8d4f0}
+.think-body.on::after{content:'▎';animation:blink .85s steps(1) infinite;color:#ffd54a;font-size:14px;margin-left:1px;opacity:.9}
+@keyframes blink{50%{opacity:0}}
+.think-panel.idle .think-body:not(.card-mode){opacity:.35}   /* v1.5.10: 决策卡片不因落子变浅, 仅纯文本模式保留弱化 */
+.think-pager{position:absolute;right:5px;bottom:4px;display:none;gap:6px;align-items:center;padding:1px 7px;border-radius:9px;
+  background:rgba(0,0,0,.6);border:1px solid rgba(240,217,160,.2);font-size:10px;color:#f0d9a0;z-index:5;user-select:none}
+.think-pager.show{display:flex}
+.think-pager .pg-btn{cursor:pointer;padding:0 3px}
+.think-pager .pg-btn:hover{color:#ffd700}
+.think-pager .pg-info{opacity:.7;min-width:26px;text-align:center}
+
+/* ── v1.5 观战平台: 信息条 + 棋风徽章 + 决策卡片 + 动画 ── */
+.think-info{display:flex;flex-wrap:wrap;gap:4px;margin:6px 8px 2px;padding:5px 9px;background:rgba(255,255,255,.07);border:1px solid rgba(240,217,160,.28);border-radius:8px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.think-info:empty{display:none}
+.badge-style{display:inline-block;padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:bold;line-height:1.4}
+.badge-style.st-agg{background:rgba(192,57,43,.28);color:#ff8a7a;border:1px solid rgba(255,107,107,.45)}
+.badge-style.st-def{background:rgba(41,128,185,.28);color:#7ec3f0;border:1px solid rgba(93,173,226,.45)}
+.badge-style.st-bal{background:rgba(39,174,96,.28);color:#7fd6a0;border:1px solid rgba(88,214,141,.45)}
+.info-thinking{color:#f1c40f;font-size:10px;animation:blink 1.2s steps(1) infinite}
+.info-eval{font-size:10px;opacity:.85}
+.info-eval b.adv{color:#58d68d}
+.info-eval b.risk{color:#ff8a7a}
+.think-panel.thinking{border-color:rgba(241,196,15,.9);box-shadow:0 0 22px rgba(241,196,15,.5),inset 0 0 14px rgba(241,196,15,.12);animation:breath 2s ease-in-out infinite}
+.think-panel.thinking [id$="-name"]{color:#ffd54a;font-weight:bold;text-shadow:0 0 9px rgba(255,213,74,.55)}   /* v1.5.10: 思考方名称高亮 */
+.think-panel.thinking .think-dot{animation:pulse-check 1s ease-in-out infinite}
+@keyframes breath{50%{box-shadow:0 0 4px rgba(241,196,15,.08)}}
+/* 决策卡片模式 (替代 pre 文本流) */
+.think-body.card-mode{white-space:normal;overflow-y:auto;overflow-x:hidden;padding:6px 8px 8px}
+.dcard{border:1px solid rgba(240,217,160,.15);border-radius:7px;padding:4px 6px;margin-bottom:5px;background:rgba(0,0,0,.22);font-size:10px}
+.d-head{display:flex;justify-content:space-between;gap:4px;font-weight:bold;color:#f0d9a0;font-size:10.5px}
+.d-plan{color:#f1c40f;margin:2px 0 0}
+.d-sum{margin:2px 0 0;color:inherit;opacity:.92}
+.d-cands{margin:3px 0 0;padding:2px 0 0;border-top:1px dashed rgba(240,217,160,.12);font-size:9.5px;opacity:.85}
+.d-cand{display:flex;justify-content:space-between;gap:6px}
+.d-cand .sc{color:#58d68d;font-family:Consolas,monospace}
+.d-meta{display:flex;gap:8px;margin-top:3px;font-size:9px;opacity:.65}
+.d-toggle{background:none;border:0;cursor:pointer;font-size:13px;padding:0 4px;opacity:.5;margin-left:auto;transition:opacity .15s}
+.d-toggle:hover{opacity:1}
+.d-toggle.on{opacity:1;background:rgba(240,217,160,.18);border-radius:4px}
+.d-reason{margin-top:5px;padding:5px 7px;background:rgba(240,217,160,.06);border-left:2px solid #f0d9a0;font-size:10px;color:#d4c4a0;white-space:pre-wrap;line-height:1.4;max-height:140px;overflow-y:auto}
+.d-eval{color:#a8c4e0}
+.d-empty{opacity:.4;font-style:italic;padding:4px 2px}
+.d-more{text-align:center;opacity:.5;font-size:9.5px;padding:1px 0 3px}
+/* 吃子 ghost 淡出 + 落子滑入 */
+.piece.ghost-out{animation:ghostFade .32s ease-out forwards;pointer-events:none}
+@keyframes ghostFade{to{opacity:0;transform:scale(.6)}}
+/* 被将军: 将帅格红色脉冲 (加在 .in-check 之上) */
+.in-check{animation:checkPulse .9s ease-in-out infinite}
+@keyframes checkPulse{50%{box-shadow:0 0 0 3px rgba(231,76,60,.55),0 0 14px rgba(231,76,60,.4);border-color:#e74c3c}}
+
+/* 窄屏: 面板变横条, 红上黑下 */
+@media(max-width:1020px){
+  #arena{flex-direction:column;align-items:center}
+  #think-red{order:1;width:100%;max-width:460px;min-width:0}
+  #board-wrap{order:2}
+  #think-black{order:3;width:100%;max-width:460px;min-width:0}
+  .think-panel{max-height:88px}
+  .think-body{max-height:52px}
+}
+
+/* ── 横幅: 方色样式 ── */
+#ai-banner.busy.side-red{background:rgba(10,6,5,.9);color:#ff5a4a;border:1px solid rgba(192,57,43,.5);border-bottom:3px solid #c0392b}
+#ai-banner.busy.side-black{background:rgba(10,14,22,.9);color:#5fa8e8;border:1px solid rgba(95,168,232,.4);border-bottom:3px solid #3498db}
+/* ═══ v1.7 HUD ═══ */
+#last-move-badge{position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:60;background:rgba(10,6,2,.88);border:1px solid #a08040;border-radius:16px;padding:4px 16px;font-size:14px;color:#ffd54a;letter-spacing:1px;opacity:0;transition:opacity .5s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+#last-move-badge.show{opacity:1}
+#last-move-badge b{color:#f0d9a0}
+.think-captured{padding:2px 9px 0;font-size:11px;color:#c8b28a;letter-spacing:2px;min-height:8px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.think-captured:empty{display:none}
+.think-captured b{color:#e8d098;font-weight:normal;opacity:.7;margin-right:2px;letter-spacing:0}
+.think-spark{padding:2px 9px 4px;height:28px}
+.think-spark:empty{display:none}
+.think-spark svg{width:100%;height:26px;display:block}
+.think-head{cursor:pointer}
+.think-head .fold{margin-left:2px;opacity:.5;font-size:9px;flex:0 0 auto}
+.think-panel.collapsed .think-body,.think-panel.collapsed .think-info,.think-panel.collapsed .think-captured,.think-panel.collapsed .think-spark,.think-panel.collapsed .think-pager{display:none}
+#board.check-pulse{animation:checkpulse .55s ease-in-out 3}
+@keyframes checkpulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 28px rgba(231,76,60,.8),inset 0 0 18px rgba(231,76,60,.35)}}
+.eo-stats{font-size:12.5px;color:#c8b28a;line-height:1.9;margin-top:8px;padding-top:10px;border-top:1px dashed rgba(160,128,64,.4)}
+.eo-stats b{color:#ffd54a}
+.log-dot{font-size:8px;margin-right:3px}
+.log-dot.red{color:#e74c3c}.log-dot.black{color:#5fa8e8}
+.im-model{word-break:break-all;font-size:11px;font-weight:bold;color:#f0d9a0;line-height:1.4}
+.im-stat{font-size:10px;opacity:.75;color:#e8d5ae}
+.badge-quick{background:rgba(241,196,15,.2);color:#ffd54a;border:1px solid rgba(241,196,15,.5);border-radius:6px;padding:1px 6px;font-size:10px}
+.dcard.d-thinking{border-color:rgba(241,196,15,.5);color:#ffd54a;text-align:center;animation:pulse-check 1.2s ease-in-out infinite}
+
+/* ═══════════ v2 赛博 AI HUD 主题 — 黑曜石 × 暗金 (只改视觉, 不动布局) ═══════════ */
+:root{--c-normal:#FFB300;--c-think:#00CFFF;--c-warn:#FF8A00;--c-err:#FF4040;--c-win:#5CFF8A;--c-fail:#888888;--t1:#FFE8A0;--t2:#C8A75A;--t3:#75613A}
+body{background:#080607;background-image:radial-gradient(circle at center,#251808 0%,#080607 70%);background-attachment:fixed}
+h1{background:linear-gradient(180deg,#FFF0B5 0%,#FFE29A 45%,#D99B32 100%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none;filter:drop-shadow(0 0 14px rgba(255,176,0,.35))}
+.subtitle{color:#A88642}
+/* 棋盘: 多层金属外框 + 表面质感 */
+#board-container{background:linear-gradient(135deg,#3B270B,#1c1206 55%,#3B270B);border:1px solid #C28A20;box-shadow:inset 0 0 0 1px rgba(255,224,138,.7),0 0 0 3px #C28A20,0 0 0 5px #3B270B,0 0 26px rgba(255,176,0,.22),0 14px 44px rgba(0,0,0,.75)}
+#board{background:linear-gradient(160deg,#D8C078 0%,#C5A85A 100%);border-color:#8B6420}
+/* AI 面板: 暗色科技卡 (去游戏红黑感) */
+.think-panel{backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.think-panel.think-red{background:linear-gradient(180deg,#150808,#120707 60%);border-color:#6E1717}
+.think-panel.think-black{background:linear-gradient(180deg,#0d0d0c,#090909 60%);border-color:#514116}
+.think-red .think-head{color:#FF5757}
+.think-red .think-stat{color:#FFB36B}
+.think-black .think-head{color:#FFD66B}
+.think-black .think-stat{color:#B8A56A}
+.think-red .think-body{color:#E8C0A8}
+.think-black .think-body{color:#CDBE92}
+.think-panel.thinking{border-color:rgba(0,207,255,.6);box-shadow:0 0 22px rgba(0,207,255,.32),inset 0 0 14px rgba(0,207,255,.07)}
+/* 中间横幅: 暗金 HUD 状态栏 */
+#ai-banner{backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#ai-banner.busy{display:flex;background:linear-gradient(90deg,#15100A,#38270D,#15100A);color:#FFE4A3;border:1px solid #8F6518;border-bottom:2px solid #DFA83A;animation:none}
+#ai-banner.busy.side-red,#ai-banner.busy.side-black{background:linear-gradient(90deg,#15100A,#38270D,#15100A);color:#FFE4A3;border:1px solid #8F6518;border-bottom:2px solid #DFA83A}
+#ai-banner .ab-ico{color:#FFB000;text-shadow:0 0 8px rgba(255,176,0,.5);margin-right:6px}
+#ai-banner .ab-model{color:#FFE4A3;font-weight:bold}
+#ai-banner .ab-state{color:#FFC04D;margin-left:6px}
+#ai-banner .ab-dots{color:#FFB300;margin-right:6px;animation:hudDots 1.1s ease-in-out infinite}
+#ai-banner .ab-meta{color:#B89A55;margin-left:6px}
+#ai-banner.warn{display:flex;background:rgba(255,138,0,.1);color:#FF8A00;border:1px solid rgba(255,138,0,.5);animation:none}
+#ai-banner.err{display:flex;background:rgba(255,64,64,.1);color:#FF4040;border:1px solid rgba(255,64,64,.5)}
+@keyframes hudDots{0%,100%{opacity:.35;filter:brightness(.8)}50%{opacity:1;filter:brightness(1.5)}}
+/* 状态条: 玻璃拟态基座 */
+#status-bar{background:rgba(20,14,6,.55);border:1px solid rgba(255,176,0,.25);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+#status-bar.status-win{background:rgba(92,255,138,.1);color:#5CFF8A;border:1px solid rgba(92,255,138,.45)}
+#status-bar.status-draw{background:rgba(136,136,136,.1);color:#888888;border:1px solid rgba(136,136,136,.4)}
+/* 按钮: 低亮金属 */
+.btn{background:#171006;color:#D9B86C;border:1px solid #79551A}
+.btn:hover{background:#38270D;color:#FFF0B0;border-color:#FFC04D;box-shadow:0 0 10px rgba(255,192,77,.25)}
+input[type=checkbox],input[type=range]{accent-color:#FFB000}
+/* 文字层级 + 棋谱 */
+#move-log{background:rgba(10,7,3,.5);border:1px solid rgba(121,85,26,.35)}
+.log-entry .log-num{color:#75613A}
+.set-note{color:#75613A}
+.set-row label{color:#C8A75A}
+/* 终局卡: 暗金玻璃 */
+.eo-card{background:linear-gradient(160deg,#14100a,#0c0906 70%);border:1px solid #C28A20;box-shadow:inset 0 0 0 1px rgba(255,224,138,.35),0 14px 44px rgba(0,0,0,.7);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.eo-title{color:#5CFF8A;text-shadow:0 0 16px rgba(92,255,138,.35)}
+.eo-sub{color:#C8A75A}
+.eo-stats{color:#B89A55}
+</style>
+</head>
+<body>
+<h1>🦞 LLM-chess 象棋引擎 v1.5</h1>
+<div class="subtitle">AI 对战直播平台 · 战略决策流 · 棋风对垒 · 棋谱存档 · OpenAI协议(密钥服务端)</div>
+
+<div id="arena">
+  <div id="think-red" class="think-panel think-red idle">
+      <div class="think-head"><span class="think-dot">🔴</span><span id="think-red-name">红方</span><span class="think-stat" id="think-red-stat"></span></div>
+      <div class="think-info" id="think-red-info"></div>
+<div class="think-captured" id="think-red-captured" title="红方吃掉的子力"></div>
+<div class="think-spark" id="think-red-spark" title="红方自评走势 (本方视角)"></div>
+      <div class="think-body" id="think-red-body">等待对局开始…</div>
+  </div>
+
+  <div id="board-wrap">
+    <div id="board-container">
+      <!-- v3.9 静态兑底模型名: 与 config/keys.json 16 家供应商逐一核对去重; 中继可用时由 api/providers 动态覆盖, 不可用时保留兑底 -->
+      <datalist id="model-datalist">
+        <option value="glm-5.3-flash"></option>
+        <option value="glm-4.7-flash"></option>
+        <option value="glm-4.5-flash"></option>
+        <option value="deepseek-chat"></option>
+        <option value="deepseek-reasoner"></option>
+        <option value="deepseek-v4-flash-0731"></option>
+        <option value="deepseek-v4-pro-0813"></option>
+        <option value="kimi-k2-turbo-preview"></option>
+        <option value="kimi-k2-preview"></option>
+        <option value="kimi-k2.6"></option>
+        <option value="gpt-4o-mini"></option>
+        <option value="gpt-4.1-mini"></option>
+        <option value="MiniMax-M2.7"></option>
+        <option value="MiniMax-M2.7-highspeed"></option>
+        <option value="MiniMax-M3"></option>
+        <option value="qwen-max"></option>
+        <option value="qwen-plus"></option>
+        <option value="qwen-turbo"></option>
+        <option value="qwen3-max"></option>
+        <option value="qwen3.5-plus"></option>
+        <option value="doubao-1.5-pro-32k"></option>
+        <option value="doubao-pro-32k"></option>
+        <option value="hunyuan-turbo"></option>
+        <option value="hunyuan-pro"></option>
+        <option value="hunyuan-standard"></option>
+        <option value="generalv3.5"></option>
+        <option value="max-32k"></option>
+        <option value="4.0Ultra"></option>
+        <option value="yi-large"></option>
+        <option value="yi-medium"></option>
+        <option value="yi-spark"></option>
+        <option value="Baichuan4"></option>
+        <option value="Baichuan3-Turbo"></option>
+        <option value="step-2-16k"></option>
+        <option value="step-1v-8k"></option>
+        <option value="deepseek-ai/DeepSeek-V3"></option>
+        <option value="Qwen/Qwen2.5-72B-Instruct"></option>
+        <option value="claude-sonnet-4-5"></option>
+        <option value="claude-opus-4-1"></option>
+        <option value="claude-3-5-haiku-latest"></option>
+      </datalist>
+      <button id="snd-toggle" title="音效开关">🔊</button>
+    <button id="gear-toggle" title="对战设置">⚙</button>
+    <div id="board"><div id="last-move-badge"></div>
+        <svg id="board-lines" viewBox="0 0 432 480" preserveAspectRatio="xMidYMid meet"></svg>
+        <div id="col-labels"><span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span><span>i</span></div>
+        <div id="row-labels"><span>10</span><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span></div>
+    </div>
+
+    <div id="settings-overlay">
+        <div class="set-card">
+            <h3>🤖 对战设置 (v1.0)</h3>
+            <div class="set-cols">
+                <div class="set-col set-col-red">
+                    <div class="col-title">🔴 红方</div>
+                    <label class="set-check"><input type="checkbox" id="ai-red-enabled"> 启用非人类棋手</label>
+                    <div class="set-row"><label>对手类型</label>
+                        <select id="ai-red-type"><option value="human">人类</option><option value="random">随机AI</option><option value="llm">LLM</option></select>
+                    </div>
+                    <div class="set-row llm-only"><label>服务商 (密钥在服务端 config/keys.json)</label>
+                        <select id="ai-red-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
+                    </div>
+                    <div class="set-row llm-only"><label>模型名称</label>
+                        <input type="text" id="ai-red-model" list="model-datalist" placeholder="选或填模型名">
+                    </div>
+                    <div class="set-row llm-only"><label>AI 棋风 (注入提示词)</label>
+                        <select id="ai-red-style"><option value="aggressive">⚔️ 攻击型</option><option value="balanced" selected>⚖️ 均衡型</option><option value="defensive">🛡️ 防守型</option></select>
+                    </div>
+                    <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-red-quick"> 快答模式 (关闭深度思考, 直出决策+原因)</label></div>
+                </div>
+                <div class="set-col set-col-black">
+                    <div class="col-title">⚫ 黑方</div>
+                    <label class="set-check"><input type="checkbox" id="ai-black-enabled"> 启用非人类棋手</label>
+                    <div class="set-row"><label>对手类型</label>
+                        <select id="ai-black-type"><option value="human">人类</option><option value="random">随机AI</option><option value="llm">LLM</option></select>
+                    </div>
+                    <div class="set-row llm-only"><label>服务商 (密钥在服务端 config/keys.json)</label>
+                        <select id="ai-black-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
+                    </div>
+                    <div class="set-row llm-only"><label>模型名称</label>
+                        <input type="text" id="ai-black-model" list="model-datalist" placeholder="选或填模型名">
+                    </div>
+                    <div class="set-row llm-only"><label>AI 棋风 (注入提示词)</label>
+                        <select id="ai-black-style"><option value="aggressive">⚔️ 攻击型</option><option value="balanced" selected>⚖️ 均衡型</option><option value="defensive">🛡️ 防守型</option></select>
+                    </div>
+                    <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-black-quick"> 快答模式 (关闭深度思考, 直出决策+原因)</label></div>
+                </div>
+            </div>
+            <div id="server-warn" style="display:none;margin:2px 0 12px;padding:8px 10px;border-radius:6px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.35);font-size:11px;color:#f0b8b0;">
+                ⚠️ 未检测到本地服务 — LLM 对手需要 <b>node server.js</b> 启动 (浏览器 → 本地服务 → LLM API，密钥永不出服务器)。随机AI无需服务。
+            </div>
+            <div class="set-note">密钥仅保存在服务端 config/keys.json，前端永不接触。双方可各配不同类型/服务商。</div>
+            <div class="set-foot">
+                <button class="btn" onclick="document.getElementById('settings-overlay').classList.remove('show')">取消</button>
+                <button class="btn" onclick="XQApp.saveAISettings()">保存并开局</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="end-overlay">
+        <div class="eo-card">
+            <div class="eo-title" id="eo-title"></div>
+            <div class="eo-sub" id="eo-sub"></div>
+<div class="eo-stats" id="eo-stats"></div>
+            <button class="btn eo-btn" onclick="XQApp.restart()">🔁 再来一局</button>
+        </div>
+    </div>
+  </div><!-- /board-container -->
+  </div><!-- /board-wrap -->
+
+  <div id="think-black" class="think-panel think-black idle">
+      <div class="think-head"><span class="think-dot">⚫</span><span id="think-black-name">黑方</span><span class="think-stat" id="think-black-stat"></span></div>
+      <div class="think-info" id="think-black-info"></div>
+<div class="think-captured" id="think-black-captured" title="黑方吃掉的子力"></div>
+<div class="think-spark" id="think-black-spark" title="黑方自评走势 (本方视角)"></div>
+      <div class="think-body" id="think-black-body">等待对局开始…</div>
+  </div>
+</div><!-- /arena -->
+
+<div id="status-bar" class="status-red-turn">
+    <span id="status-text">当前回合：红方</span>
+    <span id="status-info"></span>
+</div>
+<div id="ai-banner"></div>
+<div id="btn-row"><button class="btn" id="btn-restart">🔄 重新开始</button><button class="btn" id="btn-replay-watch" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" title="全屏观战 (F 键)">⛶ 全屏</button></div>
+<div id="archive-row">
+    <button class="btn" id="btn-save" title="导出棋谱JSON">💾 存棋谱</button>
+    <button class="btn" id="btn-load" title="导入棋谱JSON并重放">📂 载入棋谱</button>
+</div>
+<div id="move-log"></div>
+
+<script src="core/piece.js"></script>
+<script src="core/move.js"></script>
+<script src="core/board.js"></script>
+<script src="core/rules.js"></script>
+<script src="core/generator.js"></script>
+<script src="core/judge.js"></script>
+<script src="core/engine.js"></script>
+<script src="evaluation/xiangqi_knowledge.js"></script>
+<script src="evaluation/position.js"></script>
+<script src="ai/random_agent.js"></script>
+<script src="ai/llm_agent.js"></script>
+<script src="benchmark/record.js"></script>
+<script src="replay/replay.js"></script>
+<script src="replay/replay_controller.js"></script>
+<script src="benchmark/elo.js"></script>
+<script src="benchmark/match.js"></script>
+<script src="ui/renderer.js"></script>
+<script src="ui/app.js"></script>
+</body>
+</html>

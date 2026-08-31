@@ -1,0 +1,21 @@
+{
+  "_说明": "这是格式模板。复制本文件为 keys.json 并填入至少一个 apiKey 后重启 server.js (server 首跑也会自动生成空白 keys.json)。keys.json 已被 .gitignore 排除, 不要提交到任何仓库。models 数组可选, 填了前端模型框变下拉。",
+  "providers": {
+    "moonshot": { "name": "Moonshot Kimi", "baseUrl": "https://api.moonshot.cn/v1", "apiKey": "", "models": ["kimi-k2-turbo-preview", "kimi-k2-preview", "kimi-k2.6"] },
+    "deepseek": { "name": "DeepSeek", "baseUrl": "https://api.deepseek.com/v1", "apiKey": "", "models": ["deepseek-chat", "deepseek-reasoner"], "_说明": "deepseek-chat=快不思考 / deepseek-reasoner=恒思考" },
+    "zhipu": { "name": "智谱 GLM", "baseUrl": "https://open.bigmodel.cn/api/paas/v4", "apiKey": "", "models": ["glm-4.7-flash", "glm-4.5-flash"] },
+    "openai": { "name": "OpenAI", "baseUrl": "https://api.openai.com/v1", "apiKey": "", "models": ["gpt-4o-mini", "gpt-4.1-mini"] },
+    "minimax": { "name": "MiniMax", "baseUrl": "https://api.minimaxi.com/v1", "apiKey": "", "models": ["MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M3"] },
+    "tokenrhythm": { "name": "TokenRhythm", "baseUrl": "https://tokenrhythm.studio/v1", "chatPath": "/chat/completions", "apiKey": "", "models": ["glm-5.3-flash", "deepseek-v4-flash-0731", "deepseek-v4-pro-0813"] },
+    "qwen": { "name": "阿里通义千问", "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1", "apiKey": "", "models": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen3-max", "qwen3.5-plus"] },
+    "volcengine": { "name": "字节豆包(火山方舟)", "baseUrl": "https://ark.cn-beijing.volces.com/api/v3", "apiKey": "", "models": ["doubao-1.5-pro-32k", "doubao-pro-32k"] },
+    "hunyuan": { "name": "腾讯混元", "baseUrl": "https://api.hunyuan.cloud.tencent.com/v1", "apiKey": "", "models": ["hunyuan-turbo", "hunyuan-pro", "hunyuan-standard"] },
+    "spark": { "name": "讯飞星火", "baseUrl": "https://spark-api-open.xf-yun.com/v1", "apiKey": "", "models": ["generalv3.5", "max-32k", "4.0Ultra"] },
+    "yi": { "name": "零一万物", "baseUrl": "https://api.lingyiwanwu.com/v1", "apiKey": "", "models": ["yi-large", "yi-medium", "yi-spark"] },
+    "baichuan": { "name": "百川智能", "baseUrl": "https://api.baichuan-ai.com/v1", "apiKey": "", "models": ["Baichuan4", "Baichuan3-Turbo"] },
+    "step": { "name": "阶跃星辰", "baseUrl": "https://api.stepfun.com/v1", "apiKey": "", "models": ["step-2-16k", "step-1v-8k"] },
+    "siliconflow": { "name": "硅基流动", "baseUrl": "https://api.siliconflow.cn/v1", "apiKey": "", "models": ["deepseek-ai/DeepSeek-V3", "Qwen/Qwen2.5-72B-Instruct"] },
+    "anthropic": { "name": "Anthropic Claude", "baseUrl": "https://api.anthropic.com", "protocol": "anthropic", "apiKey": "", "models": ["claude-sonnet-4-5", "claude-opus-4-1", "claude-3-5-haiku-latest"] },
+    "custom": { "name": "自定义(OpenAI兼容)", "baseUrl": "https://填入你的OpenAI兼容网关/v1", "apiKey": "", "_说明": "任意 OpenAI 兼容接口; models 留空则前端模型框可自由输入; 可加 headers 字段自定义请求头" }
+  }
+}

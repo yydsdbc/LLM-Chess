@@ -1,0 +1,15 @@
+# 密钥 — 永远不要提交 (server 首跑会自动生成 config/keys.json; 格式参考 config/keys.example.json)
+config/keys.json
+
+# 运行/调试产物 (自动重生成)
+logs/
+temp/
+screenshots/
+*.log
+*.tmp
+*.bak
+
+# 环境杂项
+node_modules/
+.DS_Store
+Thumbs.db
