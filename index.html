@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">   <!-- v1.8: 深色主题加载期免白闪 -->
 <meta name="description" content="LLM-chess — 中国象棋 AI 观战平台: 双 LLM 对弈, 实时思考流/决策卡/回放系统">
+<!-- Open Graph / Twitter share cards -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="LLM-chess">
+<meta property="og:title" content="LLM-chess · AI Battle & Spectating Platform (Xiangqi)">
+<meta property="og:description" content="Watch two LLMs play Chinese Chess with live thinking streams, decision cards, replays and a HUD. Zero-config trial with Random AI; 16 LLM providers supported.">
+<meta property="og:image" content="https://raw.githubusercontent.com/yydsdbc/LLM-Chess/main/docs/ui.png">
+<meta property="og:url" content="https://github.com/yydsdbc/LLM-Chess">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="LLM-chess · AI Battle & Spectating Platform (Xiangqi)">
+<meta name="twitter:description" content="LLM vs LLM Chinese Chess with live decision streams, replays and HUD spectating. Zero-config trial; bring your own API keys.">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/yydsdbc/LLM-Chess/main/docs/ui.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>">
 <title data-i18n="app_title">🦞 LLM-chess v1.0 · AI 对战直播平台</title>
 <style>
@@ -304,8 +315,8 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
         <option value="claude-opus-4-1"></option>
         <option value="claude-3-5-haiku-latest"></option>
       </datalist>
-      <button id="snd-toggle" data-i18n-title="footer_sound_title" title="音效开关">🔊</button>
-    <button id="gear-toggle" data-i18n-title="nav_settings" title="对战设置">⚙</button>
+      <button id="snd-toggle" data-i18n-title="footer_sound_title" data-i18n-aria="footer_sound_title" aria-label="音效开关" title="音效开关">🔊</button>
+    <button id="gear-toggle" data-i18n-title="settings_title" data-i18n-aria="settings_title" aria-label="对局设置" title="对局设置">⚙</button>
     <div id="board"><div id="last-move-badge"></div>
         <svg id="board-lines" viewBox="0 0 432 480" preserveAspectRatio="xMidYMid meet"></svg>
         <div id="col-labels"><span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span><span>i</span></div>

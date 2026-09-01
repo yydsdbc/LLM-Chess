@@ -1,0 +1,11 @@
+.git
+.gitignore
+node_modules
+logs
+temp
+screenshots
+docs
+config/keys.json
+*.log
+*.tmp
+*.bak

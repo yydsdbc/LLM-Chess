@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest an idea or improvement for LLM-chess
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for the suggestion! 中文或英文描述都可以。
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do, and what's missing or awkward today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen? Sketches / mockups welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Engine (core/)
+        - LLM agent / providers (ai/, server relay)
+        - Evaluation / knowledge (evaluation/)
+        - UI / Replay / HUD (ui/, replay/, index.html)
+        - Server / deployment (server.js, Docker, Start.cmd)
+        - Docs / other
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Willing to help?
+      options:
+        - label: I'd like to contribute a PR for this
+          required: false

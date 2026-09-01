@@ -135,6 +135,12 @@
       var v2 = t(tk);
       if (v2 != null) n2.setAttribute('title', v2);
     }
+    var anodes = root.document.querySelectorAll('[data-i18n-aria]');
+    for (var a = 0; a < anodes.length; a++) {
+      var n3 = anodes[a], ak = n3.getAttribute('data-i18n-aria');
+      var v3 = t(ak);
+      if (v3 != null) n3.setAttribute('aria-label', v3);
+    }
     try { root.document.title = t('app_title'); } catch (e) {}
     try { root.dispatchEvent(new root.CustomEvent('xq:i18n', { detail: { lang: cur } })); } catch (e2) {}
   }

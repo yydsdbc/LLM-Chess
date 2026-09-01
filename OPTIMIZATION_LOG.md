@@ -362,3 +362,27 @@
 - 对外品牌统一 v1.0: README 标题 / package.json 1.0.0 / server.js 与 start.js 横幅; 历史日志内 v2.x/v3.x 标签保留 (过程记录)
 - GitHub 描述改全英文并经 API 直写 (PATCH, GCM 缓存凭据), 修复复制粘贴产生的 ?? 乱码; git tag v1.0 已推送 (d52455c), 可基于 tag 发 GitHub Release
 - 教训: 向 git 传中文 -m 参数实际入库为 UTF-8 (node 核验通过), 控制台乱码只是 GBK 显示层; GitHub 描述含长破折号时经浏览器剪贴板可能变 ?? — 描述用纯 ASCII 最稳
+
+## 2026-08-31 17:10 UI i18n (v1.0.1) — 用户指令「添加英文版本 + 语言切换」
+- ui/i18n.js (新增): 零依赖轻量 i18n 框架 — 70 键双语映射 (zh 默认/en), XQ.I18N.t/tArgs/setLang/getLang/apply, localStorage xq_lang 持久化, data-i18n / data-i18n-title 属性驱动, apply 后派发 xq:i18n 事件
+- index.html: 引入 i18n.js (app.js 之前), 41 处静态中文加 data-i18n/data-i18n-title (title/h1/subtitle/设置面板全字段/think 面板/底部按钮/终局卡), 设置面板新增「语言」下拉 (中文/English)
+- ui/renderer.js: 状态条文案 (胜利/和棋/回合/将军/思考中) + 终局卡 eo-title 接 XQ.I18N.t/tArgs
+- ui/app.js: DOMContentLoaded 挂 ui-lang change 监听 → XQ.I18N.setLang(lang, true)
+- 范围说明: 系统提示词 (给模型) 保持中文不在 i18n 范围; 棋盘棋子字符 (帅将车马炮) 为领域字符暂不翻译 (后续可加 PIECE_CHARS 双语)
+- 测试: npm test 全链 EXIT 0 (含 check_ui 新 ID ui-lang/i18n.js 校验)
+
+## 2026-09-01 09:00 第11轮 (v1.0.daily, cron llmchess-daily-optimize-report) — 仓库公开后社区/部署基建 10 项
+
+1. .github/workflows/ci.yml (新增): CI 门禁 — push/PR 触发, Node 18/20/22 三版本矩阵, 全量 git ls-files js node --check + npm test 七套件; README 徽章行头部加 CI badge (链接 Actions)
+2. .github/ISSUE_TEMPLATE (新增): bug_report.yml + feature_request.yml (YAML 表单: 复现步骤/领域下拉/日志区附永不贴 key 警告) + config.yml (强制走模板)
+3. .github/dependabot.yml (新增): github-actions + npm 双生态每周检查 (应用零依赖, 主要守护 CI action 版本)
+4. CONTRIBUTING.md (新增): 零依赖规则/双环境模块约定 (XQ.* 命名, 禁 require)/提示词缓存契约 (system 恒定+append-only+重试居末, 勿破)/PR 前置 npm test+node --check
+5. CODE_OF_CONDUCT.md (新增): Contributor Covenant 2.1 精简版 (pledge/标准/执行/范围/署名)
+6. SECURITY.md (新增): 支持版本表 + GitHub 私密漏洞报告入口 + 安全模型说明 (keys 服务端/127.0.0.1 默认绑定/无鉴权提醒/运行产物不入库)
+7. Dockerfile + .dockerignore (新增): node:22-alpine 零依赖直拷, ENV LLMCHESS_HOST=0.0.0.0, HEALTHCHECK 打 /api/health, config 卷挂载保 keys.json 持久化 (注释含构建/运行命令); README 双语 Quick Start 各加 Docker 行
+8. render.yaml (新增): Render.com 一键部署模板 (buildCommand npm test 作门禁, healthCheckPath /api/health, 免费档可用, 部署后填 key 提示); README 双语各加云端演示行
+9. .github/workflows/release.yml (新增): 推 tag v* 自动跑 npm test 门禁后建 GitHub Release (generate_release_notes), 后续发版零手工
+10. index.html + ui/i18n.js: SEO/OG 补全 (og:title/description/image=docs/ui.png/url + twitter:card large_image, 分享卡片出图) + a11y (i18n apply() 支持 data-i18n-aria 属性; snd-toggle/gear-toggle 补 aria-label 双语切换; gear title 误用 nav_settings(值=齿轮图标) 修正为 settings_title)
+
+- 测试: node --check 37 文件 0 失败 - npm test 七套件全绿 EXIT 0 (run_tests 49 / evaluation 88 / llm_convo 149 / replay_smoke ALL PASS(短谱合成路径) / clean_reason 10 / cn_notation 25 / check_ui EXIT 0 含发布四件套守护)
+- server.js 未动 (零重启); systemPrompt 未动 (2393 字); GitHub 数据: stars/forks 0, 无 issue/PR, release v1.0 已发布, traffic 需 auth

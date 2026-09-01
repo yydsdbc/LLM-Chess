@@ -1,0 +1,15 @@
+# Render.com one-click deploy template (free plan works).
+# Note: your API keys are NOT in the repo — after the first deploy, add them via the
+# Render dashboard (Shell → edit config/keys.json → restart) before playing with LLMs.
+# Random AI works with zero config.
+services:
+  - type: web
+    name: llm-chess
+    runtime: node
+    plan: free
+    buildCommand: npm test
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: LLMCHESS_HOST
+        value: 0.0.0.0

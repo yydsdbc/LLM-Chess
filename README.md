@@ -1,6 +1,6 @@
 # 🦞 LLM-chess v1.0 · AI Battle & Spectating Platform
 
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-7%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
+[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-7%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
 
 ![LLM-chess v1.0 battle & spectating UI](docs/ui.png)
 
@@ -22,6 +22,8 @@ Your browser opens http://localhost:8788 automatically.
 - **Plug in an LLM**: edit `config/keys.json`, put your `apiKey` under any provider (a blank template is auto-generated on first run; format reference: `config/keys.example.json`) → restart once. 16 providers supported.
 - **One-key tests**: `npm test` (perft gold-standard engine suite + prompt/evaluation/replay/notation guards)
 - **Stop**: double-click Stop.cmd or `npm stop`
+- **Docker**: `docker build -t llm-chess . && docker run -p 8788:8788 --mount type=bind,src="$PWD/config",dst=/app/config llm-chess` — keys persist in your local `config/`
+- **Cloud demo**: a `render.yaml` template is included for one-click deploys on Render.com (add your API keys after the first deploy)
 
 ## Security & Configuration
 

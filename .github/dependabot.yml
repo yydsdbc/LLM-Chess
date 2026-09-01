@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # CI / release workflow actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  # The app itself has zero runtime dependencies; this only guards dev/engines metadata
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -18,6 +18,8 @@ cd LLM-chess
 - **接入 LLM**: 编辑 `config/keys.json` 填入任意服务商 apiKey (首次运行自动生成空白模板, 16 家服务商格式参考 `config/keys.example.json`) → 重启即生效
 - **一键测试**: `npm test` (引擎 perft 金标准 + 提示词/评价/回放/记谱 全套守护)
 - **停止**: 双击 Stop.cmd 或 `npm stop`
+- **Docker**: `docker build -t llm-chess . && docker run -p 8788:8788 --mount type=bind,src="$PWD/config",dst=/app/config llm-chess` — 密钥持久化在本地 `config/`
+- **云端演示**: 仓库自带 `render.yaml` 模板, 可一键部署到 Render.com (首次部署后请自行填入 API Key)
 
 ## 安全与配置
 

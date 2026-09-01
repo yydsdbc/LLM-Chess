@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/yydsdbc/LLM-Chess#readme
+    about: Quick start, security & configuration, project layout — please check the README first.
