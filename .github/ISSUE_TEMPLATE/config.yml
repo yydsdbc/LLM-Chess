@@ -3,3 +3,6 @@ contact_links:
   - name: Documentation
     url: https://github.com/yydsdbc/LLM-Chess#readme
     about: Quick start, security & configuration, project layout — please check the README first.
+  - name: Questions & ideas (Discussions)
+    url: https://github.com/yydsdbc/LLM-Chess/discussions
+    about: 使用问题 / 部署求助 / 想法交流 — Q&A and ideas live in Discussions, not in the issue tracker.

@@ -12,5 +12,24 @@
   "engines": {
     "node": ">=18"
   },
+  "keywords": [
+    "xiangqi",
+    "chinese-chess",
+    "llm",
+    "ai",
+    "game",
+    "openai",
+    "replay",
+    "zero-dependency"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yydsdbc/LLM-Chess.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yydsdbc/LLM-Chess/issues"
+  },
+  "homepage": "https://github.com/yydsdbc/LLM-Chess#readme",
+  "author": "杜 (yydsdbc)",
   "license": "MIT"
 }

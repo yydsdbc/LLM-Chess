@@ -1,0 +1,21 @@
+# EditorConfig — consistent basics across editors, zero churn for existing files
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{js,css,html,json,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# Markdown: keep trailing spaces (hard line breaks) and don't trim
+[*.md]
+trim_trailing_whitespace = false
+
+# Windows helper scripts keep CRLF as-is (edited on Windows, not forced either way)
+[*.{cmd,bat}]
+end_of_line = unset
+trim_trailing_whitespace = unset
+insert_final_newline = unset

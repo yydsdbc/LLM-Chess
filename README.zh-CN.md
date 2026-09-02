@@ -19,7 +19,7 @@ cd LLM-chess
 - **一键测试**: `npm test` (引擎 perft 金标准 + 提示词/评价/回放/记谱 全套守护)
 - **停止**: 双击 Stop.cmd 或 `npm stop`
 - **Docker**: `docker build -t llm-chess . && docker run -p 8788:8788 --mount type=bind,src="$PWD/config",dst=/app/config llm-chess` — 密钥持久化在本地 `config/`
-- **云端演示**: 仓库自带 `render.yaml` 模板, 可一键部署到 Render.com (首次部署后请自行填入 API Key)
+- **云端演示 (一键)**: [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/yydsdbc/LLM-Chess) — 仓库自带 `render.yaml`, 自动构建/运行/健康检查 (Render 免费档可用); 首次部署后请自行填入 API Key
 
 ## 安全与配置
 
@@ -218,3 +218,10 @@ Move 对象: `{ from:{x,y}, to:{x,y}, piece:{color,type,id}, captured }`
 ## 安全模型
 
 API Key 仅存在于服务端 `config/keys.json`（请勿提交到仓库）。前端通过同源 `/api/chat` 中继调用，请求体只含 `{provider, model, messages}`，密钥永不出服务器。Token 用量由中继透传的 `usage` 字段记录进棋谱。
+
+## 社区
+
+- 🐛 [Issues](https://github.com/yydsdbc/LLM-Chess/issues) — bug 与功能建议（带模板）
+- 💬 [Discussions](https://github.com/yydsdbc/LLM-Chess/discussions) — 问答 / 想法 / 作品展示
+- 🔀 欢迎 PR — 见 [CONTRIBUTING.md](CONTRIBUTING.md)（零依赖规则 + 测试门禁）
+- 🔒 安全漏洞：请用[私密漏洞报告](SECURITY.md)，勿公开提 issue

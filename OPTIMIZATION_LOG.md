@@ -386,3 +386,19 @@
 
 - 测试: node --check 37 文件 0 失败 - npm test 七套件全绿 EXIT 0 (run_tests 49 / evaluation 88 / llm_convo 149 / replay_smoke ALL PASS(短谱合成路径) / clean_reason 10 / cn_notation 25 / check_ui EXIT 0 含发布四件套守护)
 - server.js 未动 (零重启); systemPrompt 未动 (2393 字); GitHub 数据: stars/forks 0, 无 issue/PR, release v1.0 已发布, traffic 需 auth
+
+## 2026-09-02 09:00 第12轮 (v1.0.daily, cron llmchess-daily-optimize-report) — CI 红灯修复 + 回放 i18n + 社区基建 9 项
+
+1. test/replay_smoke.js **CI 红灯根因修复 (本轮最重要)**: 首个 CI failure (8b0b09f, 三 Node 版本全挂) 根因 = 第58行直接 readFileSync('logs/match_headless.json'), 而 logs/ 被 gitignore, CI 全新 checkout 无此文件 → ENOENT; (v2.5 短谱保护只兜短/坏 JSON, 漏了文件不存在); 修复 = existsSync+try/catch 统一入口, 缺文件/坏 JSON 都走合成谱兜底; 本地模拟 CI 路径实测 (临时挪走残谱 → 合成 12 手 ALL PASS) + 正常路径回归
+2. .github/workflows/ci.yml + release.yml 维护: 合入 Dependabot 三项 (actions/checkout v4→v7 / setup-node v4→v7 / softprops/action-gh-release v2→v3, 推送 main 后 3 个 PR 自动关闭, 顺带消除 runner Node20 弃用警告); ci 加 workflow_dispatch 手动触发; 矩阵加 windows-latest (node 22 include 单点, 校验主开发平台; 本机即 Windows 全套测试绿, 风险低)
+3. **回放层 i18n 全链** (ui/i18n.js +66 键 ZH/EN 双语 + ui/app.js): rpEnsure 骨架按钮/标题/占位符全部 data-i18n + data-i18n-title 标记, 构建后立即 XQ.I18N.apply() (EN 用户首次打开即英文); 动态面板 (选择器/头部摘要/信息面板/评估条/走法列表/键盘帮助模态/思考时长与评值图表标题) 全部改 t()/tArgs(); 判和局 result 原文 (repetition/natural/draw/agree) 本地化描述; xq:i18n 事件联动重刷回放层动态面板 (语言热切换生效); 自动核对脚本验证 used keys 全存在于 ZH 且 ZH/EN 键集一致
+4. .github/PULL_REQUEST_TEMPLATE.md (新增): 改动类型 checkbox + npm test/node --check 勾选 + 提示词缓存契约提醒 (system ≤2400/无特殊符号/dump --check) + 密钥红线 + 双语 README 同步提醒
+5. .editorconfig (新增): utf-8 / js·css·html·json·yml 2空格 / 去行尾空白 (md 不 trim 保硬换行, cmd 不强制 EOL), 零 churn
+6. package.json 元数据补全 (repository/bugs/homepage/author/keywords 8 个) + .nvmrc (22) — GitHub 侧栏/生态工具可读
+7. README.md + README.zh-CN.md: 云端演示行升级为 **Deploy to Render 一键部署按钮** (render.com/deploy?repo=); 新增 Community/社区节 (Issues/Discussions/CONTRIBUTING/SECURITY 私密漏洞报告入口)
+8. GitHub Discussions 已启用 (API PATCH has_discussions=true, GCM 凭据) + .github/ISSUE_TEMPLATE/config.yml contact_links 增 Discussions 入口 (分流问答, issue tracker 保持干净)
+9. docs/ui.png 截图轮换: headless Edge 重拍当前界面 (556KB→511KB, 含 i18n/终局卡等 v1.0.1 后演进), 视觉核验棋盘/双方面板/标题正常
+
+- 测试: npm test 七套件全绿 EXIT 0 (run_tests 49 / evaluation 88 / llm_convo 149 / replay_smoke ALL PASS(缺文件合成路径+正常路径双验证) / clean_reason 10 / cn_notation 25 / check_ui EXIT 0 含发布四件套守护); 改动 js 全 node --check; package.json JSON.parse 验证
+- server.js 未动 (零重启); systemPrompt 未动 (2393 字); GitHub 数据: stars/forks 0, 3 个 open PR (均为 dependabot action 版本升级, 本轮合入后自动关闭), release v1.0, traffic 见报告
+- 教训: (1) apply_patch 想替换 workflow 两行时把上下文行误写成新增 → setup-node 重复行, 逐文件读回核验才发现 — patch 后必读回; (2) i18n.js 块注释里写 "rpPaint*/" 会提前闭合注释 (node --check 秒抓) — 注释内禁出现 */;

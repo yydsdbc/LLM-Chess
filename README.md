@@ -23,7 +23,7 @@ Your browser opens http://localhost:8788 automatically.
 - **One-key tests**: `npm test` (perft gold-standard engine suite + prompt/evaluation/replay/notation guards)
 - **Stop**: double-click Stop.cmd or `npm stop`
 - **Docker**: `docker build -t llm-chess . && docker run -p 8788:8788 --mount type=bind,src="$PWD/config",dst=/app/config llm-chess` — keys persist in your local `config/`
-- **Cloud demo**: a `render.yaml` template is included for one-click deploys on Render.com (add your API keys after the first deploy)
+- **Cloud demo (one click)**: [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/yydsdbc/LLM-Chess) — the repo's `render.yaml` builds, runs and health-checks on Render.com's free tier; add your API keys after the first deploy.
 
 ## Security & Configuration
 
@@ -214,6 +214,13 @@ API keys exist only in server-side `config/keys.json` (never commit it — it is
 - **Evaluation: 槽心马/挂角马知识 (v3.9.2)** — 检测己方马已逼近对方九宫侧翼位 (x∈{1,2,6,7} + 对方宫城行 ±1), 双向点名 (攻方「可跴将抽车取势, 护住马眼勿轻兑」/ 守方「勿随手送马, 可驱赶/走跴」); 与窝心马 v2.5 (x=4 宫心) 互斥; 初始局零噪音。
 - **PGN 导出加中文记谱 (v3.9.2)** — rpExportPGN 每手 comment 追加 `{cn: 炮八平五}` (与原 summary 并列), 中文用户直接看走子, 国际 PGN 解析器忽略额外字段。
 - 5 项总计; test 149 / 88 / 49 / 53 / 10 / 25 / check_ui EXIT 0; 完整清单见 [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md) 11 轮。
+
+## Community
+
+- 🐛 [Issues](https://github.com/yydsdbc/LLM-Chess/issues) — bug reports & feature requests (templates included)
+- 💬 [Discussions](https://github.com/yydsdbc/LLM-Chess/discussions) — Q&A, ideas, show & tell
+- 🔀 Pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) (zero-dependency rules + test gates)
+- 🔒 Security issues: please use [private vulnerability reporting](SECURITY.md), not public issues
 
 ## License
 

@@ -792,6 +792,17 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       langSel.value = XQ.I18N.getLang();
       langSel.addEventListener('change', function () { XQ.I18N.setLang(langSel.value, true); });
     }
+    // v1.0.daily 语言切换联动回放层: 覆盖层打开时重刷图表标题与动态面板 (静态骨架由 data-i18n apply() 自动覆盖)
+    document.addEventListener('xq:i18n', function () {
+      if (rpEl && rpSession) {
+        rpPaintChartCaptions();
+        rpPaintHead();
+        rpPaintEval(rpSession.state());
+        rpPaintInfo(rpSession.state());
+        rpPaintMoveList();
+        rpOnPlayState(rpCtrl && rpCtrl.playing ? rpCtrl.playing() : false);
+      }
+    });
     // v1.7 思考面板折叠 (点 head 切换)
     ['think-red', 'think-black'].forEach(function (id) {
       var root = document.getElementById(id);
@@ -912,15 +923,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       '<style>#rp-moves li{padding:3px 8px;border-radius:6px;cursor:pointer;list-style:none;display:flex;gap:4px;align-items:baseline}#rp-moves li:hover{background:rgba(255,255,255,.08)}#rp-moves li.active{background:#e0a030;color:#1a0e08;font-weight:bold}#rp-moves li.active b{color:#1a0e08}#rp-moves li b{color:#e0a030;min-width:24px;text-align:right}#rp-moves li .rp-ml-side{min-width:18px;font-size:11px;text-align:center}#rp-moves::-webkit-scrollbar{width:6px}#rp-moves::-webkit-scrollbar-thumb{background:#7a5a2a;border-radius:3px}.btn:disabled{opacity:.4;cursor:not-allowed}.cell.next-target{background:rgba(224,160,48,.18);box-shadow:inset 0 0 0 2px rgba(224,160,48,.7)}#rp-moves-filter{width:100%;margin-bottom:4px;padding:4px 8px;border-radius:6px;border:1px solid #7a5a2a;background:#2a1a0c;color:#f0e0c0;font-size:12px;box-sizing:border-box}kbd{display:inline-block;padding:1px 6px;border-radius:4px;background:#3a2a1c;border:1px solid #7a5a2a;color:#f0d9a0;font-family:monospace;font-size:12px;margin-right:4px}</style>'
       + '<div style="max-width:1040px;margin:0 auto">'
       + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
-      + '  <b style="color:#f0d9a0;font-size:16px">🎬 对局回放</b>'
+      + '  <b style="color:#f0d9a0;font-size:16px" data-i18n="rp_title">🎬 对局回放</b>'
       + '  <select id="rp-pick" style="flex:1;min-width:260px;padding:6px;border-radius:6px;border:1px solid #7a5a2a;background:#2a1a0c;color:#f0e0c0;font-size:12px"></select>'
-      + '  <button class="btn" id="rp-import" title="导入本地棋谱 JSON (与主界面 保存棋谱 导出格式一致)">📂 导入</button>'
-      + '  <label style="color:#c4a56e;font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="rp-autoplay" style="accent-color:#e0a030"> 自动播放</label>'
-      + '  <button class="btn" id="rp-next-record" title="下一局">▶▶</button>'
-      + '  <button class="btn" id="rp-export-pgn" title="导出 PGN">💾 PGN</button>'
-      + '  <button class="btn" id="rp-help" title="键盘帮助 (?)">⌨</button>'
-      + '  <button class="btn" id="rp-fullscreen" title="全屏模式 (F)">⛶</button>'
-      + '  <button class="btn" id="rp-close" style="background:#c0392b">✕ 退出回放</button>'
+      + '  <button class="btn" id="rp-import" data-i18n="rp_import_btn" data-i18n-title="rp_import_title" title="导入本地棋谱 JSON (与主界面 保存棋谱 导出格式一致)">📂 导入</button>'
+      + '  <label style="color:#c4a56e;font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="rp-autoplay" style="accent-color:#e0a030"><span data-i18n="rp_autoplay_label"> 自动播放</span></label>'
+      + '  <button class="btn" id="rp-next-record" data-i18n-title="rp_nextrecord_title" title="下一局">▶▶</button>'
+      + '  <button class="btn" id="rp-export-pgn" data-i18n-title="rp_export_pgn_title" title="导出 PGN">💾 PGN</button>'
+      + '  <button class="btn" id="rp-help" data-i18n-title="rp_help_title" title="键盘帮助 (?)">⌨</button>'
+      + '  <button class="btn" id="rp-fullscreen" data-i18n-title="rp_full_title" title="全屏模式 (F)">⛶</button>'
+      + '  <button class="btn" id="rp-close" data-i18n="rp_close_btn" style="background:#c0392b">✕ 退出回放</button>'
       + '</div>'
       + '<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">'
       + '  <div style="position:relative;padding:10px 10px 22px 26px;background:linear-gradient(135deg,#6b4f1a,#a08040,#6b4f1a);border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.6)">'
@@ -934,31 +945,31 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '      <div class="rp-eb-red" style="background:linear-gradient(90deg,#c0392b,#e74c3c);width:50%;transition:width .3s"></div>'
       + '      <div class="rp-eb-black" style="background:linear-gradient(270deg,#2c3e50,#34495e);width:50%;transition:width .3s"></div>'
       + '      <div style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:#f0d9a0;opacity:.5"></div>'
-      + '      <span class="rp-eb-val" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#f0d9a0;font-size:11px;font-weight:bold;text-shadow:0 1px 2px rgba(0,0,0,.8);min-width:42px;text-align:center">均势</span>'
+      + '      <span class="rp-eb-val" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#f0d9a0;font-size:11px;font-weight:bold;text-shadow:0 1px 2px rgba(0,0,0,.8);min-width:42px;text-align:center" data-i18n="rp_even">均势</span>'
       + '    </div>'
       + '    <div id="rp-info" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:10px 12px;color:#f0e0c0;font-size:13px;line-height:1.7;min-height:160px"></div>'
-      + '    <input id="rp-moves-filter" placeholder="🔍 过滤走法 (summary / 坐标)">'
+      + '    <input id="rp-moves-filter" data-i18n="rp_filter_placeholder" placeholder="🔍 过滤走法 (summary / 坐标)">'
       + '    <ol id="rp-moves" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:6px 8px;margin:0;color:#e8d5ae;font-size:12px;line-height:1.5;max-height:140px;overflow-y:auto"></ol>'
-      + '    <div id="rp-timechart" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:6px 10px;font-size:11px;color:#c4a56e"><div style="margin-bottom:4px">⏱ 思考时长 · <span style="color:#c0392b">红</span>/<span style="color:#3498db">黑</span> · <span style="color:#e0a030">金=当前</span> · 点击跳转</div></div>'
-      + '    <div id="rp-evalchart" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:6px 10px;font-size:11px;color:#c4a56e"><div style="margin-bottom:4px">📈 评值走势 (红方视角, 上=红优) · <span style="color:#ffd76a">金点=当前</span> · 点击跳转</div></div>'
+      + '    <div id="rp-timechart" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:6px 10px;font-size:11px;color:#c4a56e"><div class="rp-tc-cap" style="margin-bottom:4px">⏱ 思考时长 · <span style="color:#c0392b">红</span>/<span style="color:#3498db">黑</span> · <span style="color:#e0a030">金=当前</span> · 点击跳转</div></div>'
+      + '    <div id="rp-evalchart" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:6px 10px;font-size:11px;color:#c4a56e"><div class="rp-ec-cap" style="margin-bottom:4px">📈 评值走势 (红方视角, 上=红优) · <span style="color:#ffd76a">金点=当前</span> · 点击跳转</div></div>'
       + '    <div style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:10px 12px">'
       + '      <input id="rp-range" type="range" min="0" max="0" value="0" step="1" style="width:100%;accent-color:#e0a030">'
       + '      <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px">'
-      + '        <button class="btn" id="rp-loop" title="循环播放 (L)">🔁</button>'
-      + '        <button class="btn" id="rp-start" title="回到开头">⏮</button>'
-      + '        <button class="btn" id="rp-prev" title="上一步">◀</button>'
-      + '        <button class="btn" id="rp-toggle" title="播放/暂停 (Space)" style="min-width:72px">▶ 播放</button>'
-      + '        <button class="btn" id="rp-next" title="下一步">▶|</button>'
-      + '        <button class="btn" id="rp-end" title="跳到结尾">⏭</button>'
-      + '        <button class="btn" id="rp-back5" title="后退5手" style="font-size:11px">⏪-5</button>'
-      + '        <button class="btn" id="rp-back10" title="后退10手" style="font-size:11px">⏪-10</button>'
-      + '        <button class="btn" id="rp-skip5" title="快进5手" style="font-size:11px">+5⏩</button>'
-      + '        <button class="btn" id="rp-skip10" title="快进10手" style="font-size:11px">+10⏩</button>'
-      + '        <button class="btn" id="rp-prev-cap" title="上一手吃子 (Shift+C)" style="font-size:11px">⏪吃</button>'
-      + '        <button class="btn" id="rp-next-cap" title="下一手吃子 (C)" style="font-size:11px">吃子⏩</button>'
+      + '        <button class="btn" id="rp-loop" data-i18n-title="rp_loop_title" title="循环播放 (L)">🔁</button>'
+      + '        <button class="btn" id="rp-start" data-i18n-title="rp_start_title" title="回到开头">⏮</button>'
+      + '        <button class="btn" id="rp-prev" data-i18n-title="rp_prev_title" title="上一步">◀</button>'
+      + '        <button class="btn" id="rp-toggle" data-i18n-title="rp_toggle_title" title="播放/暂停 (Space)" style="min-width:72px">▶ 播放</button>'
+      + '        <button class="btn" id="rp-next" data-i18n-title="rp_next_title" title="下一步">▶|</button>'
+      + '        <button class="btn" id="rp-end" data-i18n-title="rp_end_title" title="跳到结尾">⏭</button>'
+      + '        <button class="btn" id="rp-back5" data-i18n-title="rp_back5_title" title="后退5手" style="font-size:11px">⏪-5</button>'
+      + '        <button class="btn" id="rp-back10" data-i18n-title="rp_back10_title" title="后退10手" style="font-size:11px">⏪-10</button>'
+      + '        <button class="btn" id="rp-skip5" data-i18n-title="rp_skip5_title" title="快进5手" style="font-size:11px">+5⏩</button>'
+      + '        <button class="btn" id="rp-skip10" data-i18n-title="rp_skip10_title" title="快进10手" style="font-size:11px">+10⏩</button>'
+      + '        <button class="btn" id="rp-prev-cap" data-i18n-title="rp_prevcap_title" title="上一手吃子 (Shift+C)" style="font-size:11px">⏪吃</button>'
+      + '        <button class="btn" id="rp-next-cap" data-i18n-title="rp_nextcap_title" title="下一手吃子 (C)" style="font-size:11px">吃子⏩</button>'
       + '      </div>'
       + '      <div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:8px;flex-wrap:wrap">'
-      + '        <span style="color:#c4a56e;font-size:12px">倍速</span>'
+      + '        <span style="color:#c4a56e;font-size:12px" data-i18n="speed">倍速</span>'
       + '        <button class="btn rp-speed" data-x="0.25">0.25x</button>'
       + '        <button class="btn rp-speed" data-x="0.5">0.5x</button>'
       + '        <button class="btn rp-speed" data-x="1">1x</button>'
@@ -966,14 +977,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '        <button class="btn rp-speed" data-x="5">5x</button>'
       + '        <button class="btn rp-speed" data-x="10">10x</button>'
       + '        <button class="btn rp-speed" data-x="20">20x</button>'
-      + '        <span style="color:#c4a56e;font-size:12px;margin-left:8px">跳转</span>'
-      + '        <input id="rp-jump" type="number" min="0" step="1" placeholder="手" style="width:64px;padding:4px;border-radius:6px;border:1px solid #7a5a2a;background:#2a1a0c;color:#f0e0c0;font-size:12px">'
+      + '        <span style="color:#c4a56e;font-size:12px;margin-left:8px" data-i18n="rp_jump_label">跳转</span>'
+      + '        <input id="rp-jump" type="number" min="0" step="1" data-i18n="rp_jump_placeholder" placeholder="手" style="width:64px;padding:4px;border-radius:6px;border:1px solid #7a5a2a;background:#2a1a0c;color:#f0e0c0;font-size:12px">'
       + '        <button class="btn" id="rp-go">GO</button>'
       + '      </div>'
       + '    </div>'
       + '  </div>'
       + '</div></div>';
     document.body.appendChild(ov);
+    /* v1.0.daily 回放层 i18n: 骨架带 data-i18n 标记, 构建后立即按当前语言刷新 (含 EN 用户首次打开) */
+    if (XQ.I18N) XQ.I18N.apply();
     var lines = document.createElement('div');
     lines.style.cssText = 'position:absolute;top:0;left:0;width:432px;height:480px;pointer-events:none;z-index:1';
     var rb = ov.querySelector('#rp-board');
@@ -1047,8 +1060,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     rpEl.btnFull.onclick = rpToggleFull;
     document.addEventListener('fullscreenchange', function () {
       if (rpEl && rpEl.btnFull) {
+        var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
         rpEl.btnFull.textContent = document.fullscreenElement ? '⤡' : '⛶';
-        rpEl.btnFull.title = document.fullscreenElement ? '退出全屏 (F/Esc)' : '全屏模式 (F)';
+        rpEl.btnFull.title = document.fullscreenElement ? T('rp_exit_full_title') : T('rp_full_title');
       }
     });
     rpEl.autoplay.checked = rpGetSetting('autoplay');
@@ -1091,7 +1105,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           try { history.replaceState(null, '', '#rp=' + encodeURIComponent(o.value)); } catch (eH5) {}   // v3.9: 导入也写深链 (与 rpPickLoad 同款)
           rpStart(saved);
         }).catch(function (eImp) {
-          rpEl.info.innerHTML = '<span style="color:#e67e22">导入失败: ' + (eImp && eImp.message || eImp) + '</span>';
+          rpEl.info.innerHTML = '<span style="color:#e67e22">' + (XQ.I18N ? XQ.I18N.t('rp_import_fail') : '导入失败: ') + (eImp && eImp.message || eImp) + '</span>';
         });
       };
       input.click();
@@ -1111,6 +1125,19 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     }, { passive: false });
     rpPaintSpeeds();
     rpPaintLoop();
+    rpPaintChartCaptions();
+  }
+  /* v1.0.daily 图表标题双语 (含占位符嵌套 span, 走 tArgs 动态拼装不走 data-i18n) */
+  function rpPaintChartCaptions() {
+    if (!rpEl || !XQ.I18N) return;
+    var r = '<span style="color:#c0392b">' + XQ.I18N.t('rp_red_short') + '</span>';
+    var b = '<span style="color:#3498db">' + XQ.I18N.t('rp_black_short') + '</span>';
+    var g = '<span style="color:#e0a030">' + XQ.I18N.t('rp_gold_cur') + '</span>';
+    var tc = rpEl.timechart && rpEl.timechart.querySelector('.rp-tc-cap');
+    if (tc) tc.innerHTML = XQ.I18N.tArgs('rp_timechart_caption', { r: r, b: b, g: g });
+    var g2 = '<span style="color:#ffd76a">' + XQ.I18N.t('rp_gold_cur') + '</span>';
+    var ec = rpEl.evalchart && rpEl.evalchart.querySelector('.rp-ec-cap');
+    if (ec) ec.innerHTML = XQ.I18N.tArgs('rp_evalchart_caption', { g: g2 });
   }
   function rpPaintLoop() {
     var on = rpCtrl && rpCtrl.isLooping();
@@ -1137,14 +1164,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     sel.innerHTML = '';
     if (!list.length) {
       var o0 = document.createElement('option');
-      o0.value = ''; o0.textContent = '(暂无本地棋谱)'; sel.appendChild(o0);
+      o0.value = ''; o0.textContent = XQ.I18N ? XQ.I18N.t('rp_no_local') : '(暂无本地棋谱)'; sel.appendChild(o0);
     }
+    var T2 = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    var TA = XQ.I18N ? XQ.I18N.tArgs : function (k) { return k; };
     list.forEach(function (s) {
       var o = document.createElement('option');
       o.value = 'ls:' + s.id;
-      var tag = s.winner === 'red' ? '红胜' : s.winner === 'black' ? '黑胜' : (s.result ? '终局' : '');
+      var tag = s.winner === 'red' ? T2('rp_tag_red_win') : s.winner === 'black' ? T2('rp_tag_black_win') : (s.result ? T2('rp_tag_over') : '');
       var imp = typeof s.id === 'string' && s.id.indexOf('import-') === 0 ? '📂 ' : '';   // v3.9: 导入落库的棋谱加标记
-      o.textContent = imp + s.stamp + '  ' + s.red + ' vs ' + s.black + '  (' + s.plies + '手' + (tag ? '·' + tag : '') + ')';
+      o.textContent = imp + s.stamp + '  ' + s.red + ' vs ' + s.black + '  (' + TA('rp_moves_unit', { n: s.plies }) + (tag ? '·' + tag : '') + ')';
       sel.appendChild(o);
     });
     return fetch('logs/match_headless.json').then(function (r) { if (!r.ok) throw 0; return r.json(); })
@@ -1153,7 +1182,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           rpFileRecord = rec;
           var o = document.createElement('option');
           o.value = 'file:headless';
-          o.textContent = '📁 logs/match_headless.json  (' + rec.moves.length + '手)';
+          o.textContent = '📁 logs/match_headless.json  (' + (XQ.I18N ? XQ.I18N.tArgs('rp_moves_unit', { n: rec.moves.length }) : rec.moves.length + '手') + ')';
           sel.insertBefore(o, sel.firstChild);
         }
       }).catch(function () {});
@@ -1171,7 +1200,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   }
   function rpStart(record) {
     if (!record || !record.moves) {
-      rpEl.info.innerHTML = '<span style="color:#e67e22">⚠ 没有可回放的棋谱数据</span>'; return;
+      rpEl.info.innerHTML = '<span style="color:#e67e22">' + (XQ.I18N ? XQ.I18N.t('rp_no_record') : '⚠ 没有可回放的棋谱数据') + '</span>'; return;
     }
     if (rpCtrl) rpCtrl.dispose();
     rpSession = XQ.Replay.create(record);
@@ -1204,13 +1233,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     rpSavePos(st);
     rpLastIdx = st.idx;
   }
-  function rpOnPlayState(playing) { rpEl.toggle.textContent = playing ? '⏸ 暂停' : '▶ 播放'; }
+  function rpOnPlayState(playing) {
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    rpEl.toggle.textContent = playing ? T('btn_pause') : T('btn_play');
+  }
   var RP_AUTOPLAY_KEY = 'xq_replay:autoplay';
   function rpGetSetting(k) { try { return localStorage.getItem('xq_replay:' + k); } catch (e) { return null; } }
   function rpHeadProgress() {
     var cur = rpSession.idx(), tot = rpSession.total();
     var pct = Math.round(cur / Math.max(1, tot) * 100);
-    return ' · <b style="color:#e0a030">' + pct + '%</b> (' + cur + '/' + tot + '手)';
+    return ' · <b style="color:#e0a030">' + pct + '%</b> ' + (XQ.I18N ? XQ.I18N.tArgs('rp_progress', { c: cur, t: tot }) : '(' + cur + '/' + tot + '手)');
   }
   function rpCountMaterial(cells) {
     var r = 0, b = 0;
@@ -1222,14 +1254,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   }
   function rpHeadMaterial() {
     var mat = rpCountMaterial(rpSession.engine().snapshot().cells);
-    var tag = mat.diff === 0 ? ' · 均势' : (mat.diff > 0 ? ' · <span style="color:#e74c3c">红+' + mat.diff + '</span>' : ' · <span style="color:#3498db">黑+' + (-mat.diff) + '</span>');
-    return ' · 子力 <span style="color:#e74c3c">🔴 ' + mat.red + '</span>-<span style="color:#3498db">⚫ ' + mat.black + '</span>' + tag;
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TA = XQ.I18N ? XQ.I18N.tArgs : function (k) { return k; };
+    var tag = mat.diff === 0 ? ' · ' + T('rp_even') : (mat.diff > 0 ? ' · <span style="color:#e74c3c">' + TA('rp_red_plus', { n: mat.diff }) + '</span>' : ' · <span style="color:#3498db">' + TA('rp_black_plus', { n: -mat.diff }) + '</span>');
+    return ' · ' + T('rp_material') + ' <span style="color:#e74c3c">🔴 ' + mat.red + '</span>-<span style="color:#3498db">⚫ ' + mat.black + '</span>' + tag;
   }
   function rpHeadMaxTime() {
     var rec = rpSession.record, maxT = 0, maxN = 0;
     for (var i = 0; i < rec.moves.length; i++) { var t = rec.moves[i].timeMs || 0; if (t > maxT) { maxT = t; maxN = i + 1; } }
     if (maxT <= 0) return '';
-    return ' · 最长 <b>' + (maxT / 1000).toFixed(1) + 's</b> <a href="javascript:void(0)" id="rp-jump-max" style="color:#e0a030;text-decoration:underline" data-ply="' + maxN + '">@#' + maxN + '</a>';
+    return ' · ' + (XQ.I18N ? XQ.I18N.tArgs('rp_longest', { s: (maxT / 1000).toFixed(1) }) : '最长 ' + (maxT / 1000).toFixed(1) + 's') + ' <a href="javascript:void(0)" id="rp-jump-max" style="color:#e0a030;text-decoration:underline" data-ply="' + maxN + '">@#' + maxN + '</a>';
   }
   function rpPaintTimeChart() {
     if (!rpEl || !rpEl.timechart) return;
@@ -1336,24 +1369,26 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   }
   function rpShowHelp() {
     if (document.getElementById('rp-help-overlay')) return;
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    var row = function (keys, label) { return '<tr><td>' + keys + '</td><td>' + label + '</td></tr>'; };
     var html = '<div id="rp-help-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">'
       + '<div style="background:#2a1a0c;border:1px solid #7a5a2a;border-radius:14px;padding:20px 24px;max-width:520px;color:#f0e0c0;box-shadow:0 8px 32px rgba(0,0,0,.7)">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="color:#f0d9a0;font-size:18px">⌨️ 键盘快捷键</b>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="color:#f0d9a0;font-size:18px">' + T('rp_help_title_h') + '</b>'
       + '<button onclick="document.getElementById(&quot;rp-help-overlay&quot;).remove()" class="btn" style="background:#c0392b">✕</button></div>'
       + '<table style="width:100%;font-size:13px;line-height:2">'
-      + '<tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>上一步 / 下一步</td></tr>'
-      + '<tr><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>跳到开头 / 结尾</td></tr>'
-      + '<tr><td><kbd>Space</kbd> / <kbd>0</kbd></td><td>播放 / 暂停</td></tr>'
-      + '<tr><td><kbd>L</kbd></td><td>循环切换</td></tr>'
-      + '<tr><td><kbd>F</kbd></td><td>回放全屏切换 (全屏时 Esc 先退全屏)</td></tr>'
-      + '<tr><td><kbd>1</kbd>~<kbd>7</kbd></td><td>倍速: 0.25x / 0.5x / 1x / 2x / 5x / 10x / 20x</td></tr>'
-      + '<tr><td><kbd>[</kbd> / <kbd>]</kbd></td><td>后退 / 前进 5 手 (v3.9a)</td></tr>'
-      + '<tr><td><kbd>C</kbd> / <kbd>Shift+C</kbd></td><td>下一手吃子 / 上一手吃子 (v3.9.2)</td></tr>'
-      + '<tr><td>滚轮</td><td>棋盘上 步进 (180ms 节流)</td></tr>'
-      + '<tr><td><kbd>?</kbd> / <kbd>/</kbd></td><td>显示本帮助 (再次按下或点击遮罩关闭)</td></tr>'
-      + '<tr><td><kbd>Esc</kbd></td><td>退出回放</td></tr>'
+      + row('<kbd>←</kbd> / <kbd>→</kbd>', T('rp_hk_prev_next'))
+      + row('<kbd>Home</kbd> / <kbd>End</kbd>', T('rp_hk_home_end'))
+      + row('<kbd>Space</kbd> / <kbd>0</kbd>', T('rp_hk_space'))
+      + row('<kbd>L</kbd>', T('rp_hk_loop'))
+      + row('<kbd>F</kbd>', T('rp_hk_full'))
+      + row('<kbd>1</kbd>~<kbd>7</kbd>', T('rp_hk_speeds'))
+      + row('<kbd>[</kbd> / <kbd>]</kbd>', T('rp_hk_skip5') + ' (v3.9a)')
+      + row('<kbd>C</kbd> / <kbd>Shift+C</kbd>', T('rp_hk_capture') + ' (v3.9.2)')
+      + row(T('rp_hk_wheel').split(' ')[0] === '棋盘上' ? '滚轮' : 'Wheel', T('rp_hk_wheel'))
+      + row('<kbd>?</kbd> / <kbd>/</kbd>', T('rp_hk_help'))
+      + row('<kbd>Esc</kbd>', T('rp_hk_esc'))
       + '</table>'
-      + '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed rgba(122,90,42,.4);font-size:12px;color:#c4a56e">💡 走法列表点击跳转 · 时间柱状图点击跳转 · 最长思考 @#N 点击跳转<br>主界面快捷键: <kbd>M</kbd> 静音 · <kbd>R</kbd> 重开 · <kbd>F</kbd> 全屏观战 (回放打开时 F 由回放接管)</div>'
+      + '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed rgba(122,90,42,.4);font-size:12px;color:#c4a56e">' + T('rp_hk_tips') + '<br>' + T('rp_hk_main') + '</div>'
       + '</div></div>';
     var d = document.createElement('div');
     d.innerHTML = html;
@@ -1367,17 +1402,21 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (m.side === 'red') { rN++; rT += (m.timeMs || 0); }
       else { bN++; bT += (m.timeMs || 0); }
     }
-    return '<br><span style="color:#e74c3c">🔴 红 ' + rN + '手/' + Math.round(rT / 1000) + 's</span> · <span style="color:#3498db">⚫ 黑 ' + bN + '手/' + Math.round(bT / 1000) + 's</span> · 平均 ' + Math.round((rT + bT) / Math.max(1, rec.moves.length) / 1000 * 10) / 10 + 's/手';
+    var TA = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    return '<br><span style="color:#e74c3c">🔴 ' + T('rp_red_short') + ' ' + TA('rp_moves_secs', { n: rN, s: Math.round(rT / 1000) }) + '</span> · <span style="color:#3498db">⚫ ' + T('rp_black_short') + ' ' + TA('rp_moves_secs', { n: bN, s: Math.round(bT / 1000) }) + '</span> · ' + TA('rp_avg_per_move', { s: Math.round((rT + bT) / Math.max(1, rec.moves.length) / 1000 * 10) / 10 });
   }
   function rpPaintHead() {
     var s = rpSession.summary;
-    var tag = s.winner === 'red' ? '红胜' : s.winner === 'black' ? '黑胜' : (s.result ? s.result : '未完');
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TA = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
+    var resTag = { repetition: T('rp_res_repetition'), natural: T('rp_res_natural'), draw: T('rp_res_draw'), agree: T('rp_res_agree') };
+    var tag = s.winner === 'red' ? T('rp_tag_red_win') : s.winner === 'black' ? T('rp_tag_black_win') : (s.result ? (resTag[s.result] || s.result) : T('rp_tag_ongoing'));
     rpEl.head.innerHTML = '<b>' + esc2(s.stamp) + '</b> · '
       + esc2(s.red) + (s.redModel ? ' <span style="color:#c4a56e;font-size:11px">[' + esc2(s.redModel) + ']</span>' : '')
       + ' <span style="color:#7a5a2a">vs</span> '
       + esc2(s.black) + (s.blackModel ? ' <span style="color:#c4a56e;font-size:11px">[' + esc2(s.blackModel) + ']</span>' : '')
-      + ' · <b>' + s.plies + '</b> 手 · ' + tag
-      + (s.durationMs ? ' · 总时长 ' + Math.round(s.durationMs / 1000) + 's' : '')
+      + ' ' + TA('rp_head_plies', { n: s.plies }) + ' ' + tag
+      + (s.durationMs ? ' · ' + TA('rp_total_time', { s: Math.round(s.durationMs / 1000) }) : '')
       + rpHeadSideStats()
       + rpHeadProgress()
       + rpHeadMaterial()
@@ -1438,56 +1477,57 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (animate && last) { playDrop(!!last.captured); if (st.check) playCheck(); }
   }
   function rpPaintInfo(st) {
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TA = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
     var e = st.entry;
     var html = '';
     if (!e) {
       var delaySec = rpCtrl ? Math.round(rpCtrl.delay() / 1000) : 10;
-      html = '<b style="font-size:15px">初始局面</b> · 共 <b>' + st.total + '</b> 手, 默认每步 <b>' + delaySec + 's</b>, 按 ▶ 播放 或 ↔ 步进';
+      html = '<b style="font-size:15px">' + T('rp_initial') + '</b> · ' + TA('rp_initial_hint', { n: st.total, s: delaySec });
     } else {
       var opp = e.side === 'red' ? 'black' : 'red';
-      var sideTag = e.side === 'red' ? '🔴 红方' : '⚫ 黑方';
+      var sideTag = e.side === 'red' ? T('rp_side_red_full') : T('rp_side_black_full');
       var model = e.side === 'red' ? rpSession.summary.redModel : rpSession.summary.blackModel;
       var pc = (XQ.Piece.CHARS[e.side] && XQ.Piece.CHARS[e.side][e.piece]) || e.piece;
-      var capTxt = e.captured ? ' 吃 ' + ((XQ.Piece.CHARS[opp] && XQ.Piece.CHARS[opp][e.captured]) || e.captured) : '';
-      html += '<div style="font-size:15px"><b>第 ' + st.idx + '/' + st.total + '</b> 手 · ' + sideTag
+      var capTxt = e.captured ? TA('rp_capture', { p: (XQ.Piece.CHARS[opp] && XQ.Piece.CHARS[opp][e.captured]) || e.captured }) : '';
+      html += '<div style="font-size:15px"><b>' + TA('rp_move_of', { n: st.idx, t: st.total }) + '</b> · ' + sideTag
         + (model ? ' <span style="color:#c4a56e;font-size:11px">[' + esc2(model) + ']</span>' : '') + '</div>';
       html += '<div style="font-size:18px;margin:4px 0"><b style="color:#f0d9a0">' + esc2(pc) + '</b> <span style="color:#e8d5ae">' + esc2(e.from) + ' → ' + esc2(e.to) + '</span><span style="color:#e67e22">' + esc2(capTxt) + '</span></div>';
       /* v1.7.6 疑误着法提示: 静态交换推演此手净丢子 */
       if ((st.risk || 0) >= ((XQ.Replay && XQ.Replay.RISK_MARK) || 3)) {
-        html += '<div style="color:#e67e22;font-size:12px">⚠ <b>疑似失着</b>: 静态推演此着净丢 ' + st.risk.toFixed(1) + ' 分 (落点被反吃/白丢)</div>';
+        html += '<div style="color:#e67e22;font-size:12px">' + TA('rp_suspect', { s: st.risk.toFixed(1) }) + '</div>';
       }
       /* v1.7.9 一步效果: 将/杀/困 标注 */
-      if (st.mark === '杀') html += '<div style="color:#ff5050;font-size:13px;font-weight:bold">🏁 绝杀! 将军且无解, 直接取胜</div>';
-      else if (st.mark === '困') html += '<div style="color:#ff5050;font-size:13px;font-weight:bold">🔒 困毙! 对方无子可动, 判负</div>';
-      else if (st.mark === '将') html += '<div style="color:#e0a030;font-size:12px">⚔ 本手将军</div>';
-      if (e.summary) html += '<div>🧠 <b>AI简短分析:</b> ' + esc2(e.summary) + '</div>';
-      else html += '<div>🧠 <b>AI简短分析:</b> <span style="color:#c4a56e">兑底·安全着法 (3次尝试失败后由安全阀代走, 无模型摘要)</span></div>';   // v3.4: 兑底手回放不空白
-      if (e.plan) html += '<div style="color:#c4a56e;font-size:12px">📋 策略: ' + esc2(e.plan) + '</div>';
-      if (e.evaluation) html += '<div>⚖️ <b>局面评价:</b> ' + esc2(e.evaluation) + '</div>';
-      html += '<div>🎯 <b>信心值:</b> ' + (typeof e.confidence === 'number' ? e.confidence : '—')
-        + ' &nbsp; ⏱ 思考 <b>' + (e.timeMs ? (e.timeMs / 1000).toFixed(1) + 's' : '—') + '</b></div>';
+      if (st.mark === '杀') html += '<div style="color:#ff5050;font-size:13px;font-weight:bold">' + T('rp_mate') + '</div>';
+      else if (st.mark === '困') html += '<div style="color:#ff5050;font-size:13px;font-weight:bold">' + T('rp_stuck') + '</div>';
+      else if (st.mark === '将') html += '<div style="color:#e0a030;font-size:12px">' + T('rp_check_now') + '</div>';
+      if (e.summary) html += '<div>🧠 <b>' + T('rp_ai_summary') + '</b> ' + esc2(e.summary) + '</div>';
+      else html += '<div>🧠 <b>' + T('rp_ai_summary') + '</b> <span style="color:#c4a56e">' + T('rp_fallback_summary') + '</span></div>';   // v3.4: 兑底手回放不空白
+      if (e.plan) html += '<div style="color:#c4a56e;font-size:12px">📋 ' + T('rp_plan') + ' ' + esc2(e.plan) + '</div>';
+      if (e.evaluation) html += '<div>⚖️ <b>' + T('rp_eval_label') + '</b> ' + esc2(e.evaluation) + '</div>';
+      html += '<div>🎯 <b>' + T('rp_confidence') + '</b> ' + (typeof e.confidence === 'number' ? e.confidence : '—')
+        + ' &nbsp; ' + T('rp_think_time') + ' <b>' + (e.timeMs ? (e.timeMs / 1000).toFixed(1) + 's' : '—') + '</b></div>';
       if (e.candidates && e.candidates.length) {
-        html += '<div style="color:#c4a56e;font-size:12px">候选: '
+        html += '<div style="color:#c4a56e;font-size:12px">' + T('rp_candidates') + ' '
           + e.candidates.map(function (c) { return '<code style="background:rgba(255,255,255,.06);padding:1px 5px;border-radius:4px">' + esc2(c.move) + '(' + esc2(c.score || '?') + ')</code>'; }).join(' ')
           + '</div>';
       }
     }
     if (st.over) {
-      var t = st.winner === 'red' ? '🏆 红方胜利' : st.winner === 'black' ? '🏆 黑方胜利' : '🤝 和棋';
+      var t = st.winner === 'red' ? T('status_win_red') : st.winner === 'black' ? T('status_win_black') : T('status_draw');
       html = '<div style="color:#f1c40f;font-weight:bold;font-size:16px;margin-bottom:6px">' + t + '</div>' + html;
     }
-    if (st.skippedCount > 0) html += '<div style="color:#e67e22;font-size:11px;margin-top:4px">⚠ ' + st.skippedCount + ' 手数据异常已跳过 (rebuild 容错)</div>';
+    if (st.skippedCount > 0) html += '<div style="color:#e67e22;font-size:11px;margin-top:4px">' + TA('rp_skipped', { n: st.skippedCount }) + '</div>';
     /* v1.6.2 ETA: 剩 N 手 ≈ X秒 @ Yx */
     if (rpCtrl && st.idx < st.total && !st.over) {
       var delay = rpCtrl.delay() / 1000, remain = st.total - st.idx;
-      html += '<div style="color:#c4a56e;font-size:12px;margin-top:4px">⏳ 剩 <b>' + remain + '</b> 手 ≈ <b>' + Math.round(remain * delay) + '</b>秒 @ <b>' + rpCtrl.speed() + 'x</b></div>';
+      html += '<div style="color:#c4a56e;font-size:12px;margin-top:4px">' + TA('rp_eta', { n: remain, s: Math.round(remain * delay), x: rpCtrl.speed() }) + '</div>';
     }
     /* v1.6.2 下着预览: 下一手方色/棋子/坐标/AI分析 */
     if (st.idx < st.total && !st.over) {
       var nxt = rpSession.record.moves[st.idx];
       var nTag = nxt.side === 'red' ? '🔴' : '⚫';
       var nPc = (XQ.Piece.CHARS[nxt.side] && XQ.Piece.CHARS[nxt.side][nxt.piece]) || nxt.piece;
-      html += '<div style="font-size:12px;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(122,90,42,.4)">↪ <b style="color:#e0a030">下着</b> ' + nTag + ' <b style="color:#f0d9a0">' + esc2(nPc) + '</b> <span style="color:#e8d5ae">' + esc2(nxt.from) + ' → ' + esc2(nxt.to) + '</span>' + (nxt.summary ? ' <span style="color:#c4a56e">· ' + esc2(nxt.summary) + '</span>' : '') + '</div>';
+      html += '<div style="font-size:12px;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(122,90,42,.4)">↪ <b style="color:#e0a030">' + T('rp_next_move') + '</b> ' + nTag + ' <b style="color:#f0d9a0">' + esc2(nPc) + '</b> <span style="color:#e8d5ae">' + esc2(nxt.from) + ' → ' + esc2(nxt.to) + '</span>' + (nxt.summary ? ' <span style="color:#c4a56e">· ' + esc2(nxt.summary) + '</span>' : '') + '</div>';
     }
     rpEl.info.innerHTML = html;
     rpEl.range.max = st.total;
@@ -1511,12 +1551,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     rpEl.ebRed.style.width = pct + '%';
     rpEl.ebBlack.style.width = (100 - pct) + '%';
     if (st.over) {
-      rpEl.ebVal.textContent = st.winner === 'red' ? '🏆 红胜' : st.winner === 'black' ? '🏆 黑胜' : '🤝 和棋';
+      var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+      rpEl.ebVal.textContent = st.winner === 'red' ? T('rp_tag_red_win') : st.winner === 'black' ? T('rp_tag_black_win') : T('status_draw');
       rpEl.ebVal.style.color = '#f1c40f';
       rpEl.ebRed.style.width = st.winner === 'red' ? '100%' : '0%';
       rpEl.ebBlack.style.width = st.winner === 'black' ? '100%' : '0%';
     } else {
-      rpEl.ebVal.textContent = isFinite(v) ? (v > 0 ? '+' + v.toFixed(1) : v.toFixed(1)) : '均势';
+      rpEl.ebVal.textContent = isFinite(v) ? (v > 0 ? '+' + v.toFixed(1) : v.toFixed(1)) : (XQ.I18N ? XQ.I18N.t('rp_even') : '均势');
       rpEl.ebVal.style.color = '#f0d9a0';
     }
   }
@@ -1525,6 +1566,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (!rpEl || !rpEl.movelist || !rpSession) return;
     var rec = rpSession.record;
     var cur = rpSession.idx();
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TA = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
     var risks = rpSession.risks ? rpSession.risks() : {};   // v1.7.6: 疑误着法静态风险分
     var marks = rpSession.marks ? rpSession.marks() : {};   // v1.7.9: 将/杀/困 一步效果标注
     var riskMark = (XQ.Replay && XQ.Replay.RISK_MARK) || 3;
@@ -1537,15 +1579,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (q && (label + ' ' + m.from + m.to + ' #' + m.n).toLowerCase().indexOf(q) < 0) continue;
       var cls = (i + 1 === cur) ? ' class="active"' : '';
       var sideTag = m.side === 'red' ? '🔴' : '⚫';
-      var risky = (risks[i + 1] || 0) >= riskMark ? '<span title="静态推演疑似白丢 ' + (risks[i + 1]).toFixed(1) + ' 分" style="color:#e67e22">⚠</span> ' : '';
+      var risky = (risks[i + 1] || 0) >= riskMark ? '<span title="' + esc2(TA('rp_title_risky', { s: (risks[i + 1]).toFixed(1) })) + '" style="color:#e67e22">⚠</span> ' : '';
       var mk = marks[i + 1];   // v1.7.9: 将/杀/困 彩色标记 (杀 > 风险 > 将 > 标签)
-      var mkHtml = mk === '杀' ? '<span title="绝杀: 将军且无解, 直接取胜" style="color:#ff5050;font-weight:bold">杀</span> '
-        : mk === '困' ? '<span title="困毙: 对方无子可动, 判负" style="color:#ff5050">困</span> '
-        : mk === '将' ? '<span title="将军" style="color:#e0a030">将</span> ' : '';
+      var mkHtml = mk === '杀' ? '<span title="' + esc2(T('rp_title_mate')) + '" style="color:#ff5050;font-weight:bold">杀</span> '
+        : mk === '困' ? '<span title="' + esc2(T('rp_title_stuck')) + '" style="color:#ff5050">困</span> '
+        : mk === '将' ? '<span title="' + esc2(T('rp_title_check')) + '" style="color:#e0a030">将</span> ' : '';
       html += '<li' + cls + ' data-ply="' + (i + 1) + '"><span class="rp-ml-side">' + sideTag + '</span><b>' + m.n + '</b><span style="flex:1">' + mkHtml + risky + esc2(label) + '</span></li>';
       visible++;
     }
-    rpEl.movelist.innerHTML = html || '<li style="color:#7a5a2a;justify-content:center">无匹配走法</li>';
+    rpEl.movelist.innerHTML = html || '<li style="color:#7a5a2a;justify-content:center">' + T('rp_no_match') + '</li>';
     if (visible > 0) { var act = rpEl.movelist.querySelector('li.active'); if (act) act.scrollIntoView({ block: 'nearest' }); }
   }
   /* v1.6.1 边界禁用: 在起点 ⏮◀ 灰, 在终点 ⏭▶| 灰 (循环开启时 ▶ 在终点可继续) */

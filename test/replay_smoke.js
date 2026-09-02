@@ -55,9 +55,14 @@ function synthesizeRecord() {
   recS.tokens = { red: { total: 1000, requests: 12 }, black: { total: 900, requests: 12 } };
   return recS;
 }
-let rec = JSON.parse(fs.readFileSync('logs/match_headless.json', 'utf8'));
+/* CI 修复: 全新 checkout (logs/ 被 gitignore) 无该文件 → ENOENT 崩溃 (2026-09-01 首个 CI failure 根因);
+ * 有文件但坏 JSON 同样兑底 — 短谱保护统一入口 */
+const MP = 'logs/match_headless.json';
+let rec = null;
+if (fs.existsSync(MP)) { try { rec = JSON.parse(fs.readFileSync(MP, 'utf8')); } catch (e) { rec = null; } }
 if (!rec || !Array.isArray(rec.moves) || rec.moves.length < 8) {
-  console.log('(短谱保护: json ' + (rec && rec.moves ? rec.moves.length : '无') + ' 手 < 8 → 合成 12 手确定性测试谱)');
+  const why = rec && rec.moves ? rec.moves.length + ' 手 < 8' : (fs.existsSync(MP) ? 'JSON 解析失败' : '文件不存在 (CI 全新 checkout)');
+  console.log('(短谱保护: json ' + why + ' → 合成 12 手确定性测试谱)');
   rec = synthesizeRecord();
 }
 
