@@ -13,12 +13,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         node-version: [18, 20, 22]
         # windows-latest 校验主开发平台路径处理 (Start.cmd 用户群), node 22 单点即可
         include:
           - os: windows-latest
             node-version: 22
-            os-note: windows
     steps:
       - uses: actions/checkout@v7
 
