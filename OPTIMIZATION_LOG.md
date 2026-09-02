@@ -402,3 +402,10 @@
 - 测试: npm test 七套件全绿 EXIT 0 (run_tests 49 / evaluation 88 / llm_convo 149 / replay_smoke ALL PASS(缺文件合成路径+正常路径双验证) / clean_reason 10 / cn_notation 25 / check_ui EXIT 0 含发布四件套守护); 改动 js 全 node --check; package.json JSON.parse 验证
 - server.js 未动 (零重启); systemPrompt 未动 (2393 字); GitHub 数据: stars/forks 0, 3 个 open PR (均为 dependabot action 版本升级, 本轮合入后自动关闭), release v1.0, traffic 见报告
 - 教训: (1) apply_patch 想替换 workflow 两行时把上下文行误写成新增 → setup-node 重复行, 逐文件读回核验才发现 — patch 后必读回; (2) i18n.js 块注释里写 "rpPaint*/" 会提前闭合注释 (node --check 秒抓) — 注释内禁出现 */;
+
+### 第12轮补记: CI 推送后两轮 hotfix (同日, 推送后真实 CI 验证闭环)
+- hotfix a5aabd2: ci.yml matrix 基础组合漏定义 os (runs-on 空值) → GitHub 启动失败 0 jobs; 修复 = os:[ubuntu-latest] 进基础矩阵 + windows include
+- hotfix c442e6b → 7b7126a: ubuntu20 job 挂 F1 随机局测试 — 既有 flaky (Math.random 抽样, finished>=1 概率性); 修复 = 种子化 LCG (0x2F6E2B1) 确定性抽样, 三平台同结果; 种子下边际 finished=2/10 / plies=2420 (门槛 1/1500) 舒适
+- 最终 CI 7b7126a: 4/4 jobs success (ubuntu 18/20/22 + windows-latest 22) — 仓库公开以来 CI 徽章首次全绿
+- Dependabot PR #1/#2/#3 已关闭 (变更已直入 main, 留言说明)
+- 教训: (1) workflow matrix include 语义 — include 只补/并, 不给未定义键兜底, runs-on 引用的键必须在基础组合有值; (2) 随机抽样断言进 CI 必须种子化, 概率性通过不是通过; (3) push 后要等真实 CI 结论, 本地全绿不等于 CI 绿
