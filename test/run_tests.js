@@ -579,6 +579,9 @@ check('E15 自然限着时钟: 吃子重置 (capture → naturalClock 归零), �
 
 /* ═════════ F. 随机AI对弈 (v1.0 目标) ═════════ */
 check('F1 随机vs随机10局零非法且多数正常终局', (function () {
+  // v1.0.daily: Math.random → 种子化 LCG (CI 三平台同结果, 消除 finished>=1 的随机抖动; node20 曾抽到 0 局终局致 CI 红)
+  var seed = 0x2F6E2B1;
+  function rnd() { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }
   // 同步跑若干短局 (直接用引擎+随机选择, 不走match的异步)
   var games = 10, bad = 0, finished = 0, totalPlies = 0;
   for (var g = 0; g < games; g++) {
@@ -587,7 +590,7 @@ check('F1 随机vs随机10局零非法且多数正常终局', (function () {
     while (!e.isOver() && plies < 250) {
       var moves = e.generateLegalMoves(e.turn());
       if (!moves.length) break;
-      var m = moves[(Math.random() * moves.length) | 0];
+      var m = moves[(rnd() * moves.length) | 0];
       var r = e.applyPlayerMove(m.from.x, m.from.y, m.to.x, m.to.y);
       if (!r.ok) { bad++; break; }
       plies++;
