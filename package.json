@@ -7,6 +7,8 @@
     "start": "node tools/start.js",
     "stop": "node tools/stop.js",
     "server": "node server.js",
+    "check": "node tools/check.js",
+    "match": "node test/match_headless.js",
     "test": "node test/run_tests.js && node test/test_evaluation.js && node test/test_llm_convo.js && node test/replay_smoke.js && node test/_clean_reason_check.js && node test/cn_notation_check.js && node test/check_ui.js"
   },
   "engines": {

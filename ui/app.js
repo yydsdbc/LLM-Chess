@@ -792,6 +792,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       langSel.value = XQ.I18N.getLang();
       langSel.addEventListener('change', function () { XQ.I18N.setLang(langSel.value, true); });
     }
+    // v1.0.daily 棋子记谱切换 (ui-pieces 下拉: 汉字/西文字母, localStorage xq_pieces 持久化, 切换即重绘)
+    var pieceSel = document.getElementById('ui-pieces');
+    if (pieceSel) {
+      try { pieceSel.value = localStorage.getItem('xq_pieces') || 'cn'; } catch (e5) {}
+      pieceSel.addEventListener('change', function () {
+        try { localStorage.setItem('xq_pieces', pieceSel.value); } catch (e6) {}
+        refresh();
+      });
+    }
     // v1.0.daily 语言切换联动回放层: 覆盖层打开时重刷图表标题与动态面板 (静态骨架由 data-i18n apply() 自动覆盖)
     document.addEventListener('xq:i18n', function () {
       if (rpEl && rpSession) {

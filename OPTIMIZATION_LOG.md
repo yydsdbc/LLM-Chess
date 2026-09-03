@@ -409,3 +409,20 @@
 - 最终 CI 7b7126a: 4/4 jobs success (ubuntu 18/20/22 + windows-latest 22) — 仓库公开以来 CI 徽章首次全绿
 - Dependabot PR #1/#2/#3 已关闭 (变更已直入 main, 留言说明)
 - 教训: (1) workflow matrix include 语义 — include 只补/并, 不给未定义键兜底, runs-on 引用的键必须在基础组合有值; (2) 随机抽样断言进 CI 必须种子化, 概率性通过不是通过; (3) push 后要等真实 CI 结论, 本地全绿不等于 CI 绿
+
+## 2026-09-03 09:00 第13轮 (v1.0.daily, cron llmchess-daily-optimize-report) — CI 门禁补全 + a11y/国际化 10 项
+
+1. tools/check.js (新增): `npm run check` 统一入口 — 全业务 js 跨平台语法扫描 (node --check, 排除产物目录) + 提示词硬门禁 dump --check; 此前 dump --check 只在本机跑, CI 不设防, 本轮补全
+2. .github/workflows/ci.yml — 语法步骤改 `npm run check` (替代 git ls-files | xargs, Windows runner 不友好且漏提示词门禁); CI 与本地检查首次同源
+3. package.json — scripts 补 `check` (语法+提示词门禁) 与 `match` (node test/match_headless.js 一条命令开无头对局)
+4. .github/workflows/greetings.yml (新增): 首次 issue/PR 自动欢迎 (双语: 模板补全/密钥红线/npm test+npm run check 指引/Discussions 分流)
+5. index.html — a11y: prefers-reduced-motion 媒体查询全站动效降级 (落子/脉冲/闪烁/呼吸/光晕), 前庭敏感用户不再被持续动画干扰
+6. ui/i18n.js — a11y/SEO: `<html lang>` 同步移入 apply() (初始加载即生效, 存了 en 的用户刷新后 lang 属性不再停在 zh-CN); setLang 原地同步去重
+7. 棋子西文记谱切换 (国际用户): core/piece.js LETTERS 表 (KABNRCP, 红大写/黑小写) + ui/renderer.js pieceGlyph() + index.html ui-pieces 下拉 (设置面板, ui-lang 旁) + i18n 双语键 + ui/app.js change 监听 (localStorage xq_pieces 持久化, 切换即重绘); 仅棋盘显示层, HUD 中文记谱/评估/决策卡不受影响; 回放层共用 render 核心自动生效
+8. docs/ARCHITECTURE.md (新增): 贡献者架构文档 — mermaid 模块地图 / LLM 单手数据流 / 提示词缓存契约 (勿破) / 测试地图表 / 零依赖与产物约定
+9. README.md + README.zh-CN.md — 徽章升级: 补 Release (github/v/release) + Stars (github/stars) 徽章; 中文版首次补徽章行 (此前只有英文版有)
+10. test/check_ui.js 第8节 — README 双语版本一致性守护: 主/中文档 h1 版本号须一致且与 package.json version 对齐 (防后续轮改版漂移)
+
+- 测试: npm run check (语法全扫+提示词门禁) + npm test 七套件; 改动 js 全 node --check; server.js 未动 (零重启); systemPrompt 未动 (2393 字)
+- GitHub 数据 (直连, 代理当日故障): stars/forks/watchers/subscribers 0, open issues/PRs 0, release v1.0 (2026-08-31), traffic 需 auth (401), 最近推送 2026-09-02; 另: 仓库 topics 经 API 直写 (SEO/可发现性), GitHub 社交预览图需仓库 Settings 手动上传 (API 不支持)
+- 教训: apply_patch 多文件补丁失败会半途落地 (piece.js/renderer.js 已改而 i18n.js 未改) — 多文件补丁后必须逐文件核验; 手写 patch 缩进易错, 复杂中文锚点优先用 edit 工具逐字匹配; 兜/兑形近字第三次踩坑 (LOG 教训读了自己也踩)

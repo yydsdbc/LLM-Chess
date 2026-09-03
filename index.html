@@ -255,6 +255,8 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 .eo-title{color:#5CFF8A;text-shadow:0 0 16px rgba(92,255,138,.35)}
 .eo-sub{color:#C8A75A}
 .eo-stats{color:#B89A55}
+/* v1.0.daily a11y: 尊重 prefers-reduced-motion — 前庭敏感用户全站动效降级为瞬时 (落子/脉冲/闪烁/呼吸/光晕) */
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;scroll-behavior:auto !important}}
 </style>
 </head>
 <body>
@@ -368,6 +370,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
             <div class="set-note">密钥仅保存在服务端 config/keys.json，前端永不接触。双方可各配不同类型/服务商。</div>
             <div class="set-foot">
                 <div class="set-row" style="margin-bottom:8px"><label data-i18n="language_label">语言</label><select id="ui-lang"><option value="zh">中文</option><option value="en">English</option></select></div>
+                <div class="set-row" style="margin-bottom:8px"><label data-i18n="pieces_label">棋子显示</label><select id="ui-pieces"><option value="cn">汉字</option><option value="en">Letters</option></select></div>
                 <button class="btn" onclick="document.getElementById('settings-overlay').classList.remove('show')"><span data-i18n="btn_close">取消</span></button>
                 <button class="btn" onclick="XQApp.saveAISettings()"><span data-i18n="btn_save_settings">保存并开局</span></button>
             </div>

@@ -15,6 +15,7 @@
     app_subtitle: 'AI 对战直播平台 · 战略决策流 · 棋风对垒 · 棋谱存档 · OpenAI协议(密钥服务端)',
     nav_settings: '⚙', nav_replay: '🎬', nav_help: '?',
     language_label: '语言',
+    pieces_label: '棋子显示', pieces_cn: '汉字', pieces_en: '西文字母',
     settings_title: '对局设置',
     side_red: '红方', side_black: '黑方',
     enabled: '启用非人类棋手',
@@ -103,6 +104,7 @@
     app_subtitle: 'AI battles live · Decision cards · Play styles · Game archive · OpenAI protocol (keys server-side)',
     nav_settings: '⚙', nav_replay: '🎬', nav_help: '?',
     language_label: 'Language',
+    pieces_label: 'Piece glyphs', pieces_cn: 'Chinese', pieces_en: 'Letters',
     settings_title: 'Game Settings',
     side_red: 'Red', side_black: 'Black',
     enabled: 'Enable non-human player',
@@ -201,12 +203,14 @@
   }
   function setLang(lang, persist) {
     cur = has(lang);
-    if (persist) { try { root.localStorage.setItem(LS_KEY, cur); } catch (e) {} }
-    try { if (root.document) root.document.documentElement.setAttribute('lang', cur === 'en' ? 'en' : 'zh-CN'); } catch (e) {}
+    if (persist) { try { root.localStorage.setItem(LS_KEY, cur); } catch (e) {}
+    }
     apply();
   }
   function apply() {
     if (typeof root.document === 'undefined') return;
+    // v1.0.daily a11y/SEO: <html lang> 随界面语言同步 — 移入 apply 使初始加载 (存了 en 的用户) 也生效
+    try { root.document.documentElement.setAttribute('lang', getLang() === 'en' ? 'en' : 'zh-CN'); } catch (e) {}
     var nodes = root.document.querySelectorAll('[data-i18n]');
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i], k = n.getAttribute('data-i18n');

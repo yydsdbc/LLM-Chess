@@ -27,8 +27,9 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
-      - name: Syntax check all tracked JS files
-        run: git ls-files "*.js" | xargs -n 1 node --check
+      # v1.0.daily: 统一入口 npm run check (全 js 语法扫描 + 提示词硬门禁 dump --check) — 替代 xargs 管道 (Windows runner 不友好), CI 首次设防提示词门禁
+      - name: Syntax + prompt gate (npm run check)
+        run: npm run check
 
       - name: Run full test suite (7 suites)
         run: npm test

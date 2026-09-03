@@ -63,3 +63,12 @@ const pubFiles = ['.gitignore', 'LICENSE', 'package.json', 'config/keys.example.
 const missingPub = pubFiles.filter(f => !fs.existsSync(__dirname + '/../' + f));
 console.log('发布文件:', missingPub.length ? '缺失 ' + missingPub.join(', ') : '4/4 (gitignore/LICENSE/package.json/keys.example)');
 if (missingPub.length) process.exit(1);
+
+// 8) v1.0.daily README 双语版本一致性 + package.json 版本对齐 (防主/中文档版本漂移)
+const pkg = JSON.parse(fs.readFileSync(__dirname + '/../package.json', 'utf8'));
+const tEn = (fs.readFileSync(__dirname + '/../README.md', 'utf8').match(/^\uFEFF?#.+$/m) || [''])[0];
+const tZh = (fs.readFileSync(__dirname + '/../README.zh-CN.md', 'utf8').match(/^\uFEFF?#.+$/m) || [''])[0];
+const vEn = (tEn.match(/v(\d+\.\d+)/) || [])[1];
+const vZh = (tZh.match(/v(\d+\.\d+)/) || [])[1];
+console.log('README version:', 'EN=' + vEn, 'ZH=' + vZh, 'pkg=' + pkg.version);
+if (!vEn || !vZh || vEn !== vZh || pkg.version.indexOf(vEn) !== 0) process.exit(1);

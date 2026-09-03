@@ -4,6 +4,14 @@
   var XQ = root.XQ = root.XQ || {};
   var CS = 48, W = 432, H = 480, HC = CS / 2;
 
+  // v1.0.daily 棋子记谱切换: localStorage xq_pieces = 'cn' 汉字 (默认) | 'en' 西文字母 — 仅棋盘显示层
+  function pieceGlyph(p) {
+    var mode = 'cn';
+    try { mode = (root.localStorage && root.localStorage.getItem('xq_pieces')) || 'cn'; } catch (e) {}
+    var table = mode === 'en' ? XQ.Piece.LETTERS : XQ.Piece.CHARS;
+    return (table[p.color] || {})[p.type] || XQ.Piece.CHARS[p.color][p.type];
+  }
+
   /* ── 棋盘线条 (一次绘制) ── */
   function drawBoard(svgEl) {
     var lines = '';
@@ -65,7 +73,7 @@
         if (p) {
           var pe = document.createElement('div');
           pe.className = 'piece ' + p.color;
-          pe.textContent = XQ.Piece.CHARS[p.color][p.type];
+          pe.textContent = pieceGlyph(p);
           if (snap.lastMove && x === snap.lastMove.to.x && y === snap.lastMove.to.y) pe.classList.add('just-placed');
           c.appendChild(pe);
         }
@@ -88,7 +96,7 @@
           if (m0.captured) {
             var gh = document.createElement('div');
             gh.className = 'piece ghost-out ' + m0.captured.color;
-            gh.textContent = XQ.Piece.CHARS[m0.captured.color][m0.captured.type];
+            gh.textContent = pieceGlyph(m0.captured);
             c.insertBefore(gh, pe);   // ghost 在新子下方淡出
           }
           view.pendingAnim = null;
