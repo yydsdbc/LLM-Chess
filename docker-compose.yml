@@ -1,0 +1,13 @@
+# LLM-Chess — 一键 Docker 部署: docker compose up -d
+# 密钥放 ./config/keys.json (容器内挂载为 /app/config, 持久化), 无需改镜像
+# 局域网访问: 在 .env 或环境变量里设 LLMCHESS_HOST=0.0.0.0
+services:
+  llm-chess:
+    build: .
+    image: llm-chess:latest
+    container_name: llm-chess
+    ports:
+      - "8788:8788"
+    volumes:
+      - ./config:/app/config
+    restart: unless-stopped

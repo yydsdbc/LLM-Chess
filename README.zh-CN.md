@@ -2,7 +2,7 @@
 
 # 🦞 LLM-chess v1.0 · AI 对战直播平台
 
-[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-7%20suites-brightgreen)
+[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-8%20suites-brightgreen)
 
 中国象棋 + LLM 对战平台。v1.5 决策卡片流/棋风对垒/观战动效；v1.6 回放系统（不调 LLM 快速重看对局）；v1.7 HUD 观战仪表盘（被吃托盘/中文记谱/评值走势/终局结算）；v2 赛博暗金主题。核心引擎可独立用于搜索算法（alpha-beta / MCTS）与 Agent 研发。
 
@@ -21,6 +21,7 @@ cd LLM-chess
 - **一键测试**: `npm test` (引擎 perft 金标准 + 提示词/评价/回放/记谱 全套守护)
 - **停止**: 双击 Stop.cmd 或 `npm stop`
 - **Docker**: `docker build -t llm-chess . && docker run -p 8788:8788 --mount type=bind,src="$PWD/config",dst=/app/config llm-chess` — 密钥持久化在本地 `config/`
+- **Docker Compose**: `docker compose up -d` — 构建+运行一条命令, `./config` 卷挂载密钥持久化
 - **云端演示 (一键)**: [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/yydsdbc/LLM-Chess) — 仓库自带 `render.yaml`, 自动构建/运行/健康检查 (Render 免费档可用); 首次部署后请自行填入 API Key
 
 ## 安全与配置
@@ -154,7 +155,7 @@ LLM-chess/
 - 全屏观战：顶部 ⛶ 按钮或 F 键（设置/输入框聚焦时不抢键；回放打开时 F 归回放全屏管）。
 - 竞技场布局：左侧红方 / 右侧黑方思考流面板（LLM 流式输出 reasoning，侧边显示累计耗时/手数）；底部横幅带方色 + 棋谱行记录每手耗时 ⏱。窄屏自动变红上黑下横条。
 - 存档：下方 💾 导出当前对局 JSON；📂 导入并重放。
-- 批量对局：`node benchmark/cli.js 10 200`
+- 批量对局：`node benchmark/cli.js 10 200` · 无头 LLM 对局 `node test/match_headless.js <服务商> <模型> [maxPlies]` — 详见 [docs/BENCHMARK.md](docs/BENCHMARK.md)
 
 ## 测试
 
@@ -166,6 +167,7 @@ LLM-chess/
 | `node test/replay_smoke.js` | 回放系统 45 项 (数据层/控制层/倍速/循环/跳转/容错/杀标注/parseEval方向/导入落库/战绩汇总) |
 | `node test/_clean_reason_check.js` | 思考流清洗 10 项 (垃圾压缩/记谱保留/复述删改) |
 | `node test/cn_notation_check.js` | 中文记谱 25 项 (经典谱锚点/同列多兵前中后消歧/同列多车马边界/旧键哨兵) |
+| `node test/i18n_check.js` | i18n 守护 6 组 (zh/en 键集一致/键值非空/占位符一致/静态与动态键覆盖/哨兵键) |
 | `node test/check_ui.js` | 4 文件语法 + getElementById/HTML 交叉核查 |
 | `node test/analyze_blunders.js <log.json>` | 瞎走检测 (送吃/免费吃/漏吃/拉锯/错失必杀, 静态交换评估) |
 | `node test/smoke_relay.js` | 真实中继单发 (需 key) |
@@ -221,8 +223,17 @@ Move 对象: `{ from:{x,y}, to:{x,y}, piece:{color,type,id}, captured }`
 
 API Key 仅存在于服务端 `config/keys.json`（请勿提交到仓库）。前端通过同源 `/api/chat` 中继调用，请求体只含 `{provider, model, messages}`，密钥永不出服务器。Token 用量由中继透传的 `usage` 字段记录进棋谱。
 
+## Roadmap
+
+- [ ] **多模型联赛** — benchmark/elo 评分表已就位: 定时无头联赛 + 榜单页
+- [ ] **GitHub Pages 零配置演示** — 随机 AI 纯前端可跑, 一键在线试玩
+- [ ] **评价知识库扩充** — 杀法模式/残局定式, evaluation/ 双向点名机制可插拔
+- [ ] **语音解说 (TTS)** — 观战直播中文棋评播报
+- [ ] **英文系统提示词实验** — 当前中文提示词对中文模型最优, 对英文模型谨慎探索
+
 ## 社区
 
+- 📜 [更新日志](CHANGELOG.md) — 里程碑历史 (逐轮开发日志见 [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md))
 - 🐛 [Issues](https://github.com/yydsdbc/LLM-Chess/issues) — bug 与功能建议（带模板）
 - 💬 [Discussions](https://github.com/yydsdbc/LLM-Chess/discussions) — 问答 / 想法 / 作品展示
 - 🔀 欢迎 PR — 见 [CONTRIBUTING.md](CONTRIBUTING.md)（零依赖规则 + 测试门禁）

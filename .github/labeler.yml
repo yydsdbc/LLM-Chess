@@ -1,0 +1,40 @@
+# PR 自动标签 (actions/labeler v5 语法): 按改动路径打标
+core:
+  - changed-files:
+      - any-glob-to-any-file: ["core/**"]
+
+ai:
+  - changed-files:
+      - any-glob-to-any-file: ["ai/**"]
+
+ui:
+  - changed-files:
+      - any-glob-to-any-file: ["ui/**", "index.html"]
+
+replay:
+  - changed-files:
+      - any-glob-to-any-file: ["replay/**"]
+
+evaluation:
+  - changed-files:
+      - any-glob-to-any-file: ["evaluation/**"]
+
+benchmark:
+  - changed-files:
+      - any-glob-to-any-file: ["benchmark/**"]
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file: ["test/**"]
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file: ["docs/**", "*.md"]
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/**"]
+
+config:
+  - changed-files:
+      - any-glob-to-any-file: ["config/**", "Dockerfile", "docker-compose.yml", "render.yaml", ".devcontainer/**", "package.json"]

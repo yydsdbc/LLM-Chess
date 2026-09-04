@@ -1,0 +1,14 @@
+{
+  "name": "LLM-Chess",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "forwardPorts": [8788],
+  "portsAttributes": {
+    "8788": { "label": "LLM-Chess server", "onAutoForward": "openBrowser" }
+  },
+  "postCreateCommand": "npm test",
+  "customizations": {
+    "vscode": {
+      "extensions": ["editorconfig.editorconfig"]
+    }
+  }
+}

@@ -1,0 +1,26 @@
+name: PR Labels
+
+# PR 按改动路径自动打标签 (.github/labeler.yml); 标签不存在时先自动补建
+on: [pull_request_target]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for spec in "core:E11D48" "ai:5B8DEF" "ui:F2A33C" "replay:8E6CD9" "evaluation:2FA46A" "benchmark:D9B23C" "tests:6E7B8B" "docs:0E8A16" "ci:BFD4F2" "config:FBCA04"; do
+            l="${spec%%:*}"; c="${spec##*:}"
+            gh label create "$l" --color "$c" --force || true
+          done
+
+      - uses: actions/labeler@v5
+        with:
+          sync-labels: true

@@ -426,3 +426,21 @@
 - 测试: npm run check (语法全扫+提示词门禁) + npm test 七套件; 改动 js 全 node --check; server.js 未动 (零重启); systemPrompt 未动 (2393 字)
 - GitHub 数据 (直连, 代理当日故障): stars/forks/watchers/subscribers 0, open issues/PRs 0, release v1.0 (2026-08-31), traffic 需 auth (401), 最近推送 2026-09-02; 另: 仓库 topics 经 API 直写 (SEO/可发现性), GitHub 社交预览图需仓库 Settings 手动上传 (API 不支持)
 - 教训: apply_patch 多文件补丁失败会半途落地 (piece.js/renderer.js 已改而 i18n.js 未改) — 多文件补丁后必须逐文件核验; 手写 patch 缩进易错, 复杂中文锚点优先用 edit 工具逐字匹配; 兜/兑形近字第三次踩坑 (LOG 教训读了自己也踩)
+
+## 2026-09-04 09:00 第4轮 (v1.0.daily, cron llmchess-daily-optimize-report) — 社区运维/文档/i18n 守护 10 项
+
+1. CHANGELOG.md (新增): 里程碑式更新日志 (Keep a Changelog 风) — Unreleased/1.0.1/1.0.0 三段, 与逐轮 OPTIMIZATION_LOG 分层; README 双语社区节挂链
+2. docker-compose.yml (新增): `docker compose up -d` 一键部署, ./config 卷挂载密钥持久化; README 双语 Quick Start 补行
+3. test/i18n_check.js (新增, npm test 第8套件): 6 组断言 — zh/en 键集一致/键值非空/占位符逐键一致/index.html data-i18n 覆盖/ui+replay JS t() 字面量覆盖/哨兵键; **首跑即抓真 bug**: btn_save_settings 键缺失于字典, apply() 会把「保存并开局」按钮覆盖成原始键名 — 已补 zh/en 两键修复
+4. index.html a11y: 状态条 role="status" aria-live="polite" (读屏实时播报回合/将军/胜负); ai-banner 有意不加 live (每秒 tick 会刷屏读屏)
+5. .github/labeler.yml + workflows/labeler.yml (新增): PR 按改动路径自动打标签 (core/ai/ui/replay/evaluation/benchmark/tests/docs/ci/config 10 类), 步骤先 gh label create --force 补建标签再 actions/labeler@v5
+6. .devcontainer/devcontainer.json (新增): Node 22 容器一键贡献环境, postCreateCommand=npm test 门禁, 8788 端口自动转发开浏览器
+7. docs/BENCHMARK.md (新增): 无头对局/瞎走分析双语指南 — benchmark/cli.js 冒烟+Elo / match_headless 用法与统计行口径 (缓存命中/系统拦截/attempts) / analyze_blunders 检测类型与 --top --type / 棋谱流向; README 双语批量对局行挂链
+8. README 双语 Roadmap 节 (新增): 多模型联赛/GitHub Pages 零配置演示/评价知识库扩充/TTS 解说/英文提示词实验 (诚实标注当前中文提示词最优)
+9. .github/FUNDING.yml (新增): GitHub Sponsors (github: yydsdbc), 仓库页显示 Sponsor 按钮
+10. ci.yml 安全加固: 补最小权限 `permissions: contents: read` (release/greetings 已有, 此前 ci 缺); README 双语套件徽章 7→8
+
+- 测试: npm run check (语法 39 文件 + 提示词门禁 PASS) + npm test 八套件全绿 EXIT 0 (run_tests 49 / evaluation 88 / llm_convo 149 / replay_smoke ALL PASS / clean_reason 10 / cn_notation 25 / i18n_check 6/6 / check_ui EXIT 0); 改动 js 全 node --check; package.json/devcontainer.json JSON.parse 验证
+- server.js 未动 (零重启); systemPrompt 未动 (2393 字)
+- GitHub 数据 (代理故障, 直连成功): stars/forks/watchers/subscribers 0, open issues/PRs 0, release v1.0 (2026-08-31), traffic 需 auth (401), 最近推送 2026-09-03
+- 教训: (1) 新增守护测试首跑就抓到存量 bug (i18n 覆盖缺口) — 守护类测试要先跑通再挂链; (2) 阈值型断言 (键数>=30) 首日用真实值校准, 拍脑袋阈值会误报

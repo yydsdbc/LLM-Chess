@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 最小权限: 只读代码即可跑测试 (v1.0.daily 第4轮安全加固)
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
