@@ -130,13 +130,14 @@ h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0
 .think-pager .pg-btn:hover{color:#ffd700}
 .think-pager .pg-info{opacity:.7;min-width:26px;text-align:center}
 
-/* ── v1.5 观战平台: 信息条 + 棋风徽章 + 决策卡片 + 动画 ── */
+/* ── v1.5 观战平台: 信息条 + 等级徽章 + 决策卡片 + 动画 ── */
 .think-info{display:flex;flex-wrap:wrap;gap:4px;margin:6px 8px 2px;padding:5px 9px;background:rgba(255,255,255,.07);border:1px solid rgba(240,217,160,.28);border-radius:8px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 .think-info:empty{display:none}
 .badge-style{display:inline-block;padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:bold;line-height:1.4}
-.badge-style.st-agg{background:rgba(192,57,43,.28);color:#ff8a7a;border:1px solid rgba(255,107,107,.45)}
-.badge-style.st-def{background:rgba(41,128,185,.28);color:#7ec3f0;border:1px solid rgba(93,173,226,.45)}
-.badge-style.st-bal{background:rgba(39,174,96,.28);color:#7fd6a0;border:1px solid rgba(88,214,141,.45)}
+.badge-style.st-none{background:rgba(120,120,120,.28);color:#c8c8c8;border:1px solid rgba(160,160,160,.45)}
+.badge-style.st-low{background:rgba(41,128,185,.28);color:#7ec3f0;border:1px solid rgba(93,173,226,.45)}
+.badge-style.st-mid{background:rgba(39,174,96,.28);color:#7fd6a0;border:1px solid rgba(88,214,141,.45)}
+.badge-style.st-high{background:rgba(241,196,15,.28);color:#ffd968;border:1px solid rgba(255,176,0,.5)}
 .info-thinking{color:#f1c40f;font-size:10px;animation:blink 1.2s steps(1) infinite}
 .info-eval{font-size:10px;opacity:.85}
 .info-eval b.adv{color:#58d68d}
@@ -261,7 +262,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 </head>
 <body>
 <h1 data-i18n="app_title">🦞 LLM-chess v1.0 · AI 对战直播平台</h1>
-<div class="subtitle" data-i18n="app_subtitle">AI 对战直播平台 · 战略决策流 · 棋风对垒 · 棋谱存档 · OpenAI协议(密钥服务端)</div>
+<div class="subtitle" data-i18n="app_subtitle">AI 对战直播平台 · 战略决策流 · 风格分级 · 棋谱存档 · OpenAI协议(密钥服务端)</div>
 
 <div id="arena">
   <div id="think-red" class="think-panel think-red idle">
@@ -341,9 +342,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                     <div class="set-row llm-only"><label data-i18n="model">模型名称</label>
                         <input type="text" id="ai-red-model" list="model-datalist" data-i18n="model_placeholder" placeholder="选或填模型名">
                     </div>
-                    <div class="set-row llm-only"><label data-i18n="style">AI 棋风 (注入提示词)</label>
-                        <select id="ai-red-style"><option value="aggressive" data-i18n="style_aggressive">⚔️ 攻击型</option><option value="balanced" selected data-i18n="style_balanced">⚖️ 均衡型</option><option value="defensive" data-i18n="style_defensive">🛡️ 防守型</option></select>
-                    </div>
+                    <div class="set-row llm-only"><label data-i18n="prompt_level">提示词等级 (风格注入量)</label>`n                        <select id="ai-red-style"><option value="none" data-i18n="pl_none">无 (不注入)</option><option value="low" data-i18n="pl_low">低 (一句话)</option><option value="mid" selected data-i18n="pl_mid">中 (标准)</option><option value="high" data-i18n="pl_high">高 (标准+战术)</option></select>`n                    </div>
                     <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-red-quick"> <span data-i18n="quick_mode">快答模式 (关闭深度思考, 直出决策+原因)</span></label></div>
                 </div>
                 <div class="set-col set-col-black">
@@ -358,9 +357,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                     <div class="set-row llm-only"><label data-i18n="model">模型名称</label>
                         <input type="text" id="ai-black-model" list="model-datalist" data-i18n="model_placeholder" placeholder="选或填模型名">
                     </div>
-                    <div class="set-row llm-only"><label data-i18n="style">AI 棋风 (注入提示词)</label>
-                        <select id="ai-black-style"><option value="aggressive" data-i18n="style_aggressive">⚔️ 攻击型</option><option value="balanced" selected data-i18n="style_balanced">⚖️ 均衡型</option><option value="defensive" data-i18n="style_defensive">🛡️ 防守型</option></select>
-                    </div>
+                    <div class="set-row llm-only"><label data-i18n="prompt_level">提示词等级 (风格注入量)</label>`n                        <select id="ai-black-style"><option value="none" data-i18n="pl_none">无 (不注入)</option><option value="low" data-i18n="pl_low">低 (一句话)</option><option value="mid" selected data-i18n="pl_mid">中 (标准)</option><option value="high" data-i18n="pl_high">高 (标准+战术)</option></select>`n                    </div>
                     <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-black-quick"> <span data-i18n="quick_mode">快答模式 (关闭深度思考, 直出决策+原因)</span></label></div>
                 </div>
             </div>

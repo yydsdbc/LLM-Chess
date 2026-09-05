@@ -476,3 +476,16 @@
 10. **勘察记录**: ui/app.js 1608 行拆分评估后本轮不做 (一次性重构风险>收益, 拆分点留档: 决策卡/HUD/回放三块); moonshot 插件 9.1 (openclaw 侧) 不涉及本仓
 - server.js 改动说明: 本轮动了 server.js (CORS/限流/health/keys缓存/ETag), 生效需重启 node server.js — Start.cmd/Stop.cmd 或 npm restart
 - 下轮候选: app.js 拆分 (ui/render 分离), Dockerfile 多阶段构建, replay URL 分享 (share per-move link), engine worker 线程化
+
+## 2026-09-05 17:50 第16轮 (杜指令: 删除棋风设置, 改为提示词等级 无/低/中/高)
+
+1. **ai/llm_agent.js**: style(attack/balanced/defensive) → promptLevel(none/low/mid/high) 分级注入 — none=零风格节 / low=一句话 / mid=标准 / high=标准+战术补充(兑大子简化/保持复杂度/对方车炮未动勿换大子/保中兵); legacy style 映射 aggressive→high, defensive/balanced→mid (旧存档/旧调用兼容); 评分驱动节删'均势按棋风'
+2. **index.html**: 红黑两个棋风下拉 → 提示词等级下拉 (无/低/中/高); 徽章 CSS st-agg/st-def/st-bal → st-none/st-low/st-mid/st-high (灰/蓝/绿/金); subtitle 棋风对垒→风格分级
+3. **ui/i18n.js**: style 4 键 → prompt_level + pl_none/pl_low/pl_mid/pl_high (ZH/EN); subtitle 同步
+4. **ui/app.js**: styleCN/styleClass → levelCN/levelClass (无/低/中/高); 设置读写默认 balanced→mid; LLMAgent.create 传 promptLevel; agents[side].style 字段名保留 (存档兼容, 值为等级); modelCard 徽章迁移
+5. **record 存档兼容**: style 字段名不变 (值域变化), 旧谱 aggressive/defensive/balanced 经 levelCN 兜底显示'中' (未知值回落 mid 样式)
+6. **门禁修复**: mid 风格节注入致 system 2413>2400 门禁 → mid 文案三轮压缩 (威胁/王城/均衡出子/果断进攻/急回防), high 级不受影响 (2510 是可选高预算)
+7. **新增 test/_prompt_level_smoke.js**: 9 断言 (分级注入/none 无节/legacy 兼容/system 恒定/无残留)
+8. **回归**: npm test 并行 9/9 全绿 (test_llm_convo 149 项含 system 长度门禁全过)
+- 设计说明: '提示词等级'控制的是风格注入量而非棋风种类 — none=纯引擎驱动零风格偏置 / low 一句话 / mid 标准 / high 加战术细节; 每级 system 长度恒定 (前缀缓存不变式保持)
+- 触点清单: llm_agent.js(核心) / index.html(下拉+CSS+subtitle) / i18n.js(ZH/EN 5新键) / app.js(读写+徽章+agent创建) / record 存档字段名兼容

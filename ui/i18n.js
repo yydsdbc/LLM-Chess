@@ -12,7 +12,7 @@
   var LANGS = ['zh', 'en'];
   var ZH = {
     app_title: '🦞 LLM-chess v1.0 · AI 对战直播平台',
-    app_subtitle: 'AI 对战直播平台 · 战略决策流 · 棋风对垒 · 棋谱存档 · OpenAI协议(密钥服务端)',
+    app_subtitle: 'AI 对战直播平台 · 战略决策流 · 风格分级 · 棋谱存档 · OpenAI协议(密钥服务端)',
     nav_settings: '⚙', nav_replay: '🎬', nav_help: '?',
     language_label: '语言',
     pieces_label: '棋子显示', pieces_cn: '汉字', pieces_en: '西文字母',
@@ -22,7 +22,7 @@
     type: '类型', type_human: '人类', type_random: '随机AI', type_llm: 'LLM',
     provider: '服务商', model: '模型',
     model_placeholder: '选或填模型名',
-    style: '棋风', style_aggressive: '攻击型', style_defensive: '防守型', style_balanced: '均衡型',
+    prompt_level: '提示词等级 (风格注入量)', pl_none: '无 (不注入)', pl_low: '低 (一句话)', pl_mid: '中 (标准)', pl_high: '高 (标准+战术)',
     quick_mode: '快答模式 (关闭深度思考, 直出决策+原因)',
     btn_start: '开始对局', btn_reset: '重开', btn_save_settings: '保存并开局',
     btn_save: '💾 保存棋谱', btn_load: '📂 载入棋谱',
@@ -101,7 +101,7 @@
   };
   var EN = {
     app_title: '🦞 LLM-chess v1.0 · AI Battle & Spectating Platform',
-    app_subtitle: 'AI battles live · Decision cards · Play styles · Game archive · OpenAI protocol (keys server-side)',
+    app_subtitle: 'AI battles live · Decision cards · Tiered style injection · Game archive · OpenAI protocol (keys server-side)',
     nav_settings: '⚙', nav_replay: '🎬', nav_help: '?',
     language_label: 'Language',
     pieces_label: 'Piece glyphs', pieces_cn: 'Chinese', pieces_en: 'Letters',
@@ -111,7 +111,7 @@
     type: 'Type', type_human: 'Human', type_random: 'Random AI', type_llm: 'LLM',
     provider: 'Provider', model: 'Model',
     model_placeholder: 'Select or type a model name',
-    style: 'Style', style_aggressive: 'Aggressive', style_defensive: 'Defensive', style_balanced: 'Balanced',
+    prompt_level: 'Prompt level (style injection)', pl_none: 'None (no injection)', pl_low: 'Low (one-liner)', pl_mid: 'Mid (standard)', pl_high: 'High (standard + tactics)',
     quick_mode: 'Quick mode (skip deep thinking, output decision + reason directly)',
     btn_start: 'Start Game', btn_reset: 'Reset', btn_save_settings: 'Save & Start',
     btn_save: '💾 Save Game', btn_load: '📂 Load Game',

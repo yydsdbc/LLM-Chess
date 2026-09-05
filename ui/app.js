@@ -141,9 +141,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         + (e.secs ? ' | ' + e.secs + 's' : '');
     }).join('\n');
   }
-  /* v1.5 棋风徽章与决策面板 */
-  function styleCN(s) { return s === 'aggressive' ? '攻击型' : s === 'defensive' ? '防守型' : '均衡型'; }
-  function styleClass(s) { return s === 'aggressive' ? 'st-agg' : s === 'defensive' ? 'st-def' : 'st-bal'; }
+  /* v1.0.3 提示词等级徽章与决策面板 */
+  function levelCN(s) { return s === 'none' ? '无' : s === 'low' ? '低' : s === 'high' ? '高' : '中'; }
+  function levelClass(s) { return s === 'none' ? 'st-none' : s === 'low' ? 'st-low' : s === 'high' ? 'st-high' : 'st-mid'; }
   /* v1.7.2 模型信息卡: 提供商/模型全名/总思考时间/_tokens — 放在思考内容上方的浮卡里 */
   function modelCardHTML(side, holder) {
     var h = holder || agents[side];
@@ -163,7 +163,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   }
   function infoHTML(side, holder, evaluation) {
     var h = holder || agents[side];
-    var badge = (h && h.quick ? '<span class="badge-quick">⚡快答</span> ' : '') + (h ? '<span class="badge-style ' + styleClass(h.style) + '">' + styleCN(h.style) + '</span>' : '');
+    var badge = (h && h.quick ? '<span class="badge-quick">⚡快答</span> ' : '') + (h ? '<span class="badge-style ' + levelClass(h.style) + '">' + levelCN(h.style) + '</span>' : '');
     return modelCardHTML(side, h) + badge + (evaluation ? ' <span class="info-eval">⚖️ ' + esc2(evaluation) + '</span>' : '');
   }
   /* v1.7 中文记谱: 炮二平五 / 马八进七 (红汉字/黑数字, 马象走目标列, 直线子走步数) */
@@ -647,7 +647,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         type: document.getElementById(d.type).value,
         provider: document.getElementById(d.provider).value,
         model: document.getElementById(d.model).value,
-        style: document.getElementById(d.style) ? document.getElementById(d.style).value : 'balanced',
+        style: document.getElementById(d.style) ? document.getElementById(d.style).value : 'mid',
         quick: document.getElementById(d.quick) ? document.getElementById(d.quick).checked : false
       };
     });
@@ -660,7 +660,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       document.getElementById(d.type).value = v.type || 'human';
       document.getElementById(d.provider).value = v.provider || 'deepseek';
       document.getElementById(d.model).value = v.model || '';
-      if (document.getElementById(d.style)) document.getElementById(d.style).value = v.style || 'balanced';
+      if (document.getElementById(d.style)) document.getElementById(d.style).value = v.style || 'mid';
       if (document.getElementById(d.quick)) document.getElementById(d.quick).checked = !!v.quick;
     });
   }
@@ -689,12 +689,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           agents[side] = null; return;
         }
         var agent = XQ.LLMAgent.create({
-          side: side, provider: v.provider, model: v.model, style: v.style || 'balanced',
+          side: side, provider: v.provider, model: v.model, promptLevel: v.style || 'mid',
           thinking: v.quick ? 'disabled' : 'enabled',   // v1.7.2: 快答模式关思考 (不支持时 400 自动降级)
           onThinking: function (s, text) { if (aiBusy && s === side) showThinking(s, text); },
           onRetry: function (info) { view.aiRetries = view.aiRetries || {}; view.aiRetries[side] = info.attempt; }   // v2.5: 重试实时可见 (状态条 重试N次)
         });
-        agents[side] = { kind: 'llm', label: v.model || 'LLM', model: v.model, provider: v.provider, quick: !!v.quick, style: v.style || 'balanced', agent: agent };
+        agents[side] = { kind: 'llm', label: v.model || 'LLM', model: v.model, provider: v.provider, quick: !!v.quick, style: v.style || 'mid', agent: agent };
       }
     });
     paintGear();
@@ -738,9 +738,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     decisionLog.red = [];
     decisionLog.black = [];
     XQ.UI.thinkPanel('red', { name: '红方', title: currentRecord.red.name, stat: '', text: '等待对局开始…', active: false,
-      info: modelCardHTML('red') + (currentRecord.red.style ? '<span class="badge-style ' + styleClass(currentRecord.red.style) + '">' + styleCN(currentRecord.red.style) + '</span>' : '') });
+      info: modelCardHTML('red') + (currentRecord.red.style ? '<span class="badge-style ' + levelClass(currentRecord.red.style) + '">' + levelCN(currentRecord.red.style) + '</span>' : '') });
     XQ.UI.thinkPanel('black', { name: '黑方', title: currentRecord.black.name, stat: '', text: '等待对局开始…', active: false,
-      info: modelCardHTML('black') + (currentRecord.black.style ? '<span class="badge-style ' + styleClass(currentRecord.black.style) + '">' + styleCN(currentRecord.black.style) + '</span>' : '') });
+      info: modelCardHTML('black') + (currentRecord.black.style ? '<span class="badge-style ' + levelClass(currentRecord.black.style) + '">' + levelCN(currentRecord.black.style) + '</span>' : '') });
   }
   function restartGame() {
     engine.newGame();

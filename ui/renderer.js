@@ -273,7 +273,7 @@
     if (!root) return;
     var body = root.querySelector('.think-body');
     var st = thinkState[key] = thinkState[key] || { text: '', pages: [''], idx: 0 };
-    // v1.5 AI 信息条: 棋风徽章 + 当前优势评价
+    // v1.5 AI 信息条: 等级徽章 + 当前优势评价
     if (opts.info !== undefined) {
       var infoEl = document.getElementById(key === 'red' ? 'think-red-info' : 'think-black-info');
       if (infoEl) infoEl.innerHTML = opts.info;
