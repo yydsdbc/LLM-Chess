@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# 同一分支/PR 的新推送取消仍在跑的旧 run (省 runner 时长, 只看最新结论)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -35,5 +40,5 @@ jobs:
       - name: Syntax + prompt gate (npm run check)
         run: npm run check
 
-      - name: Run full test suite (7 suites)
+      - name: Run full test suite (9 suites)
         run: npm test

@@ -8,7 +8,7 @@ Thanks for your interest! LLM-chess is a **zero-dependency** Node.js project —
 git clone https://github.com/yydsdbc/LLM-Chess.git
 cd LLM-Chess
 npm start    # http://localhost:8788
-npm test     # 7 test suites, all must pass
+npm test     # 9 test suites, all must pass
 ```
 
 Zero-config trial: start the app, open settings (gear icon), set a side to **Random AI**. No API key needed.
@@ -34,6 +34,18 @@ The LLM request structure is cache-optimized — please preserve it:
 2. `node --check` any JS file you touched.
 3. Update `README.md` / `README.zh-CN.md` if behavior or usage changed.
 4. One logical change per PR; short imperative commit subject (e.g. `replay: remember last speed`).
+
+## Cutting a release (maintainer runbook)
+
+1. Move the Unreleased items in `CHANGELOG.md` under a new version heading; bump `version` in `package.json` (README h1 keeps the `v1.0` brand — a guard test enforces prefix consistency).
+2. Commit, tag, push: `git tag v1.0.x && git push origin main --tags`.
+3. [`release.yml`](.github/workflows/release.yml) runs `npm test` as a gate and publishes the GitHub Release with auto-generated notes.
+
+## Docs map
+
+- Architecture overview: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Benchmarks & headless matches: [docs/BENCHMARK.md](docs/BENCHMARK.md)
+- Support triage: [.github/SUPPORT.md](.github/SUPPORT.md)
 
 ## Filing issues
 

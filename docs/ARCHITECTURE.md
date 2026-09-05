@@ -69,4 +69,4 @@ Run everything with `npm test` (7 suites) — CI runs `npm run check` + `npm tes
 - **Zero dependencies.** Browser modules attach to the `XQ.*` namespace and must not use `require()`; Node-only code lives in `server.js`, `tools/`, `test/`.
 - Static UI files are hot-reloadable (F5); only `server.js` changes need a restart.
 - Artifacts (`logs/`, `temp/`, `screenshots/`) never enter git; neither does `config/keys.json`.
-- See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR checklist and [SECURITY.md](SECURITY.md) for the security model.
+- See [CONTRIBUTING.md](../CONTRIBUTING.md) for the PR checklist and [SECURITY.md](../SECURITY.md) for the security model.

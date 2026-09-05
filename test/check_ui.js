@@ -58,10 +58,10 @@ console.log('script src missing:', missingSrc.length ? missingSrc.join(', ') : '
 console.log('localStorage keys:', lsLiteral.size, 'literal | 非 xq_ 前缀:', badLs.length ? badLs.join(', ') : '(none)');
 if (missingSrc.length || badLs.length) process.exit(1);
 
-// 7) v3.9 发布四件套存在性 (GitHub 用户体验守护)
-const pubFiles = ['.gitignore', 'LICENSE', 'package.json', 'config/keys.example.json'];
+// 7) 发布文件存在性守护 (v1.0.daily 第14轮: 四件套扩容 4→6, +CHANGELOG/SUPPORT)
+const pubFiles = ['.gitignore', 'LICENSE', 'package.json', 'config/keys.example.json', 'CHANGELOG.md', '.github/SUPPORT.md'];
 const missingPub = pubFiles.filter(f => !fs.existsSync(__dirname + '/../' + f));
-console.log('发布文件:', missingPub.length ? '缺失 ' + missingPub.join(', ') : '4/4 (gitignore/LICENSE/package.json/keys.example)');
+console.log('发布文件:', missingPub.length ? '缺失 ' + missingPub.join(', ') : '6/6 (gitignore/LICENSE/package.json/keys.example/CHANGELOG/SUPPORT)');
 if (missingPub.length) process.exit(1);
 
 // 8) v1.0.daily README 双语版本一致性 + package.json 版本对齐 (防主/中文档版本漂移)

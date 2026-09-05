@@ -444,3 +444,20 @@
 - server.js 未动 (零重启); systemPrompt 未动 (2393 字)
 - GitHub 数据 (代理故障, 直连成功): stars/forks/watchers/subscribers 0, open issues/PRs 0, release v1.0 (2026-08-31), traffic 需 auth (401), 最近推送 2026-09-03
 - 教训: (1) 新增守护测试首跑就抓到存量 bug (i18n 覆盖缺口) — 守护类测试要先跑通再挂链; (2) 阈值型断言 (键数>=30) 首日用真实值校准, 拍脑袋阈值会误报
+
+## 2026-09-05 09:00 第14轮 (v1.0.daily, cron llmchess-daily-optimize-report) — v1.0.2 发布 + 社区运维 10 项
+
+1. CHANGELOG.md [1.0.2] - 2026-09-05 节建立 (收编 09-04 Unreleased 内容 + 本轮新增), package.json 1.0.0→1.0.2 — check_ui 版本守护通过 (README h1 v1.0 前缀校验)
+2. tag v1.0.2 推送 → release.yml 首次真实收割: npm test 门禁 → 自动建 GitHub Release (generate_release_notes); v1.0 之后 5 天积累全部进正式版
+3. .github/workflows/stale.yml (新增): 30 天无活动打 stale 标, 再 14 天自动关 (pinned/keep/security/有 assignee 豁免) — 无人值守仓库自动运维
+4. .github/SUPPORT.md (新增): 支持分流 (问答走 Discussions 勿开 issue) + 提问前自查清单; README 双语社区节挂链
+5. .github/CODEOWNERS (新增) + package.json funding 字段: PR 自动请求 yydsdbc review; npm fund 指向 GitHub Sponsors
+6. ci.yml concurrency 组 (cancel-in-progress): 同 ref 新推送自动取消旧 run 省 runner 时长; 套件计数注释 7→9
+7. test/link_check.js (新增, npm test 第9套件): 全仓 .md 相对链接守护 (fenced code 剥离, http/mailto/纯锚点跳过) — 首跑即抓 7 条真死链 (.github/SUPPORT.md 与 docs/ARCHITECTURE.md 的文件相对链接在 GitHub 渲染时全部 404, 已修为 ../ 路径); README 双语套件徽章 8→9 + 测试表补行 + 目录树计数 7→9
+8. CONTRIBUTING.md: 新增 "Cutting a release" 维护者手册 (CHANGELOG→package version→tag push→release.yml 门禁) + Docs map (ARCHITECTURE/BENCHMARK/SUPPORT 交叉链接); 套件数 7→9
+9. docker-compose.yml 补 healthcheck (/api/health, busybox wget, 与 Dockerfile HEALTHCHECK 同口径, start_period 10s)
+10. check_ui 发布文件守护 4→6 (+CHANGELOG.md/.github/SUPPORT.md) — 发布物误删防线扩容
+
+- 测试: npm run check (40 文件语法 + 提示词门禁 PASS) + npm test 九套件全绿 EXIT 0 (run_tests 49 / evaluation 88 / llm_convo 149 / replay_smoke ALL PASS / clean_reason 10 / cn_notation 25 / i18n_check 6/6 / link_check 31 链接 0 断 / check_ui EXIT 0 含发布 6 件套 + 版本守护 pkg=1.0.2)
+- server.js 未动 (零重启); systemPrompt 未动 (2393 字)
+- 教训: (1) 守护测试首跑抓存量 bug 二度应验 (i18n_check 之后 link_check 又抓 7 条) — 新守护套件必须先真实跑再挂链; (2) .github/ 与 docs/ 下的 md 相对链接要写 ../ 前缀, GitHub 按文件路径解析而非仓库根

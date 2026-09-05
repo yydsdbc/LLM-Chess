@@ -1,6 +1,6 @@
 {
   "name": "llm-chess",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "中国象棋 LLM 对战直播平台 — 引擎/评价/回放/HUD 全栈, 零配置随机对战, 或接入 16 家 LLM 服务商",
   "main": "server.js",
   "scripts": {
@@ -9,7 +9,7 @@
     "server": "node server.js",
     "check": "node tools/check.js",
     "match": "node test/match_headless.js",
-    "test": "node test/run_tests.js && node test/test_evaluation.js && node test/test_llm_convo.js && node test/replay_smoke.js && node test/_clean_reason_check.js && node test/cn_notation_check.js && node test/i18n_check.js && node test/check_ui.js"
+    "test": "node test/run_tests.js && node test/test_evaluation.js && node test/test_llm_convo.js && node test/replay_smoke.js && node test/_clean_reason_check.js && node test/cn_notation_check.js && node test/i18n_check.js && node test/link_check.js && node test/check_ui.js"
   },
   "engines": {
     "node": ">=18"
@@ -33,5 +33,6 @@
   },
   "homepage": "https://github.com/yydsdbc/LLM-Chess#readme",
   "author": "杜 (yydsdbc)",
-  "license": "MIT"
+  "license": "MIT",
+  "funding": "https://github.com/sponsors/yydsdbc"
 }

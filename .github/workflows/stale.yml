@@ -1,0 +1,32 @@
+name: Stale
+
+# 无人值守仓库的自动运维: 30 天无活动的 issue/PR 打 stale 标签, 再 14 天无动静自动关闭。
+# pinned/keep 标签与有 assignee 的不受影响; 任何留言/提交都会解除 stale。
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-stale: 30
+          days-before-close: 14
+          stale-issue-message: "This issue has been inactive for 30 days — it will be closed in 14 days if nothing changes. If it is still relevant, leave a comment. / 此 issue 30 天无活动, 14 天后将自动关闭; 仍相关请留言。"
+          stale-pr-message: "This PR has been inactive for 30 days — it will be closed in 14 days if nothing changes. Rebase and comment to keep it alive. / 此 PR 30 天无活动, 14 天后将自动关闭; rebase 并留言即可继续。"
+          close-issue-message: "Closed for inactivity — reopen with new details anytime. / 因无活动关闭, 随时欢迎带新信息重开。"
+          close-pr-message: "Closed for inactivity — feel free to reopen / rebase. / 因无活动关闭, 欢迎 rebase 后重开。"
+          stale-issue-label: "stale"
+          stale-pr-label: "stale"
+          exempt-issue-labels: "pinned,keep,security"
+          exempt-pr-labels: "pinned,keep,security,work-in-progress"
+          exempt-all-assignees: true
+          operations-per-run: 60

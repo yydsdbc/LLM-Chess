@@ -1,6 +1,6 @@
 # 🦞 LLM-chess v1.0 · AI Battle & Spectating Platform
 
-[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-8%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
+[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-9%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
 
 ![LLM-chess v1.0 battle & spectating UI](docs/ui.png)
 
@@ -68,7 +68,7 @@ LLM-chess/
 ├── replay/
 │   ├── replay.js            # replay data layer: record → engine state machine (tolerant of dirty data)
 │   └── replay_controller.js # replay control: play/pause/step/seek/7 speeds/loop
-└── test/               # 7 suites, see Testing below (perft gold standard included)
+└── test/               # 9 suites, see Testing below (perft gold standard included)
 ```
 
 ## Features
@@ -156,6 +156,7 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 | `node test/_clean_reason_check.js` | reasoning-stream cleaner, 10 checks |
 | `node test/cn_notation_check.js` | Chinese notation, 25 checks (classic anchors / file-disambiguation 前中后 / legacy-key sentinel) |
 | `node test/i18n_check.js` | i18n guards (zh/en key parity, placeholder parity, data-i18n / t() coverage) |
+| `node test/link_check.js` | docs link guard — relative links in all `.md` files must resolve to real files |
 | `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files |
 | `node test/analyze_blunders.js <log.json>` | blunder detector (hanging moves, missed mates, shuffling; `--top=N --type=...`) |
 | `node test/match_headless.js <provider> <model> [n]` | headless LLM game, n moves |
@@ -228,6 +229,7 @@ API keys exist only in server-side `config/keys.json` (never commit it — it is
 ## Community
 
 - 📜 [Changelog](CHANGELOG.md) — milestone history (per-round dev log: [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md))
+- 🙋 Questions / support — start with [SUPPORT.md](.github/SUPPORT.md) (Q&A lives in Discussions, not issues)
 - 🐛 [Issues](https://github.com/yydsdbc/LLM-Chess/issues) — bug reports & feature requests (templates included)
 - 💬 [Discussions](https://github.com/yydsdbc/LLM-Chess/discussions) — Q&A, ideas, show & tell
 - 🔀 Pull requests welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) (zero-dependency rules + test gates)

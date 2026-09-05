@@ -6,7 +6,11 @@ Format based on Keep a Changelog; versions follow SemVer.
 
 ## [Unreleased]
 
-### Added (2026-09-04, daily round 4)
+_Nothing yet._
+
+## [1.0.2] - 2026-09-05
+
+### Added (2026-09-04, daily round)
 - `CHANGELOG.md` — milestone history (this file)
 - `docker-compose.yml` — one-command Docker deployment (`docker compose up -d`, keys persist in `./config`)
 - `test/i18n_check.js` — i18n CI guard: zh/en key parity, placeholder parity, `data-i18n` / `t()` coverage (8th test suite)
@@ -16,6 +20,17 @@ Format based on Keep a Changelog; versions follow SemVer.
 - README Roadmap (EN + zh), `.github/FUNDING.yml` (GitHub Sponsors)
 - CI minimal `permissions: contents: read` hardening
 - a11y: status bar is now a screen-reader live region (turn / check / result announcements)
+
+### Added (2026-09-05, daily round)
+- **Release v1.0.2** — first cut of the tag-driven release automation (`release.yml`: npm test gate → GitHub Release with generated notes)
+- `test/link_check.js` — docs link guard (9th test suite): every relative link in all `.md` files must resolve to a real file
+- `.github/workflows/stale.yml` — stale bot: 30d inactive → `stale` label, +14d → auto-close (pinned/security/assigned exempt)
+- `.github/SUPPORT.md` — support triage: Discussions first + pre-asking checklist
+- `.github/CODEOWNERS` + npm `funding` — auto review requests; `npm fund` points to GitHub Sponsors
+- CI concurrency cancel — superseded runs on the same ref stop early
+- `docker-compose.yml` healthcheck — `/api/health` probe (busybox wget, matches Dockerfile HEALTHCHECK)
+- CONTRIBUTING — "Cutting a release" runbook + docs map (ARCHITECTURE / BENCHMARK / SUPPORT)
+- Release-file guard extended 4 → 6 (`CHANGELOG.md`, `SUPPORT.md`)
 
 ## [1.0.1] - 2026-08-31
 

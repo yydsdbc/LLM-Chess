@@ -2,7 +2,7 @@
 
 # 🦞 LLM-chess v1.0 · AI 对战直播平台
 
-[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-8%20suites-brightgreen)
+[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-9%20suites-brightgreen)
 
 中国象棋 + LLM 对战平台。v1.5 决策卡片流/棋风对垒/观战动效；v1.6 回放系统（不调 LLM 快速重看对局）；v1.7 HUD 观战仪表盘（被吃托盘/中文记谱/评值走势/终局结算）；v2 赛博暗金主题。核心引擎可独立用于搜索算法（alpha-beta / MCTS）与 Agent 研发。
 
@@ -168,6 +168,7 @@ LLM-chess/
 | `node test/_clean_reason_check.js` | 思考流清洗 10 项 (垃圾压缩/记谱保留/复述删改) |
 | `node test/cn_notation_check.js` | 中文记谱 25 项 (经典谱锚点/同列多兵前中后消歧/同列多车马边界/旧键哨兵) |
 | `node test/i18n_check.js` | i18n 守护 6 组 (zh/en 键集一致/键值非空/占位符一致/静态与动态键覆盖/哨兵键) |
+| `node test/link_check.js` | 文档链接守护 (全仓 .md 相对链接指向的文件必须存在) |
 | `node test/check_ui.js` | 4 文件语法 + getElementById/HTML 交叉核查 |
 | `node test/analyze_blunders.js <log.json>` | 瞎走检测 (送吃/免费吃/漏吃/拉锯/错失必杀, 静态交换评估) |
 | `node test/smoke_relay.js` | 真实中继单发 (需 key) |
@@ -234,6 +235,7 @@ API Key 仅存在于服务端 `config/keys.json`（请勿提交到仓库）。�
 ## 社区
 
 - 📜 [更新日志](CHANGELOG.md) — 里程碑历史 (逐轮开发日志见 [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md))
+- 🙋 使用问题/支持 — 先看 [SUPPORT.md](.github/SUPPORT.md) (问答在 Discussions, 勿开 issue)
 - 🐛 [Issues](https://github.com/yydsdbc/LLM-Chess/issues) — bug 与功能建议（带模板）
 - 💬 [Discussions](https://github.com/yydsdbc/LLM-Chess/discussions) — 问答 / 想法 / 作品展示
 - 🔀 欢迎 PR — 见 [CONTRIBUTING.md](CONTRIBUTING.md)（零依赖规则 + 测试门禁）
