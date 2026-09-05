@@ -6,8 +6,13 @@ Format based on Keep a Changelog; versions follow SemVer.
 
 ## [Unreleased]
 
-### Added (2026-09-05, round 5)
+_Nothing yet._
+
+## [1.0.3] - 2026-09-05
+
+### Added (2026-09-05, rounds 5-16)
 - **Parallel test runner** (`test/run_all.js`): 9 suites in parallel — `npm test` 33.5s → 19s; serial chain kept as `npm run test:serial`; 5-min global timeout
+- **Prompt-level tiers replace play-styles**: settings dropdown now None/Low/Mid/High — controls how much style guidance is injected into the LLM system prompt (legacy aggressive/balanced/defensive archives display via fallback map); system prompt stays constant per tier (prefix-cache invariant kept); tier badges (grey/blue/green/gold)
 - **Rate limit** on `/api/chat` (30 req/min per IP, in-memory sliding window) — protects keys from runaway loops / malicious local pages
 - **CORS hardening**: same-origin echo instead of `*` (blocks third-party web pages from driving the relay with the user's browser)
 - **ETag/304** for static files (`Cache-Control: no-cache` + sha1 ETag) — mid-game F5 reloads are near-instant

@@ -1,6 +1,6 @@
 {
   "name": "llm-chess",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "中国象棋 LLM 对战直播平台 — 引擎/评价/回放/HUD 全栈, 零配置随机对战, 或接入 16 家 LLM 服务商",
   "main": "server.js",
   "scripts": {
