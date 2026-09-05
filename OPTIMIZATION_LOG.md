@@ -461,3 +461,18 @@
 - 测试: npm run check (40 文件语法 + 提示词门禁 PASS) + npm test 九套件全绿 EXIT 0 (run_tests 49 / evaluation 88 / llm_convo 149 / replay_smoke ALL PASS / clean_reason 10 / cn_notation 25 / i18n_check 6/6 / link_check 31 链接 0 断 / check_ui EXIT 0 含发布 6 件套 + 版本守护 pkg=1.0.2)
 - server.js 未动 (零重启); systemPrompt 未动 (2393 字)
 - 教训: (1) 守护测试首跑抓存量 bug 二度应验 (i18n_check 之后 link_check 又抓 7 条) — 新守护套件必须先真实跑再挂链; (2) .github/ 与 docs/ 下的 md 相对链接要写 ../ 前缀, GitHub 按文件路径解析而非仓库根
+
+## 2026-09-05 16:50 第15轮 (v1.0.3 Unreleased, 杜指令"纵观LLM-Chess做20个优化" — 服务端安全+性能批次)
+
+1. **server.js CORS 收紧**: Access-Control-Allow-Origin 从 '*' 改为同源 Origin 回显 (localhost/127.0.0.1 白名单; 防任意第三方网页借用户浏览器 POST /api/chat 烧 key); file:// 调试 Origin=null 兜底
+2. **/api/chat 限流**: 每 IP 30 次/分内存滑动窗 (429+Retry-After; 防失控循环/恶意刷请求烧 key; 超过 1000 IP 自动清过期)
+3. **/api/health 真实版本**: 硬编码 '3.6' → 从 package.json 读 (v1.0.2)
+4. **npm test 并行化**: 新增 test/run_all.js 零依赖 runner (9 套件并行, 33.5s→19s -43%; 5min 全局超时兜底; 任一失败输出 tail 定位); 原串行链保留 npm run test:serial
+5. **keys.json mtime 缓存**: server 端密钥热加载语义不变 (文件一改立即生效), 但省每请求磁盘 IO+JSON 解析; 编辑器半写 (SyntaxError)/临时删除 (ENOENT) 容错保留上次有效配置
+6. **静态文件 ETag/304**: sha1 ETag + no-cache (文件未变 304 空回, 对局中 F5 秒开; 动态 api 不走此路径)
+7. **BENCHMARK.md 补限流说明**: 并行无头对局撞 429 的处理指引
+8. **CHANGELOG [Unreleased] 记录本轮 7 项**
+9. **回归验证**: server.js 3 处改动后 npm test 9/9 全绿 (并行 runner); smoke_ui 的 health 检查只断言 relay 字段不受 version 改动影响
+10. **勘察记录**: ui/app.js 1608 行拆分评估后本轮不做 (一次性重构风险>收益, 拆分点留档: 决策卡/HUD/回放三块); moonshot 插件 9.1 (openclaw 侧) 不涉及本仓
+- server.js 改动说明: 本轮动了 server.js (CORS/限流/health/keys缓存/ETag), 生效需重启 node server.js — Start.cmd/Stop.cmd 或 npm restart
+- 下轮候选: app.js 拆分 (ui/render 分离), Dockerfile 多阶段构建, replay URL 分享 (share per-move link), engine worker 线程化

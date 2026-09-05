@@ -6,6 +6,15 @@ Format based on Keep a Changelog; versions follow SemVer.
 
 ## [Unreleased]
 
+### Added (2026-09-05, round 5)
+- **Parallel test runner** (`test/run_all.js`): 9 suites in parallel — `npm test` 33.5s → 19s; serial chain kept as `npm run test:serial`; 5-min global timeout
+- **Rate limit** on `/api/chat` (30 req/min per IP, in-memory sliding window) — protects keys from runaway loops / malicious local pages
+- **CORS hardening**: same-origin echo instead of `*` (blocks third-party web pages from driving the relay with the user's browser)
+- **ETag/304** for static files (`Cache-Control: no-cache` + sha1 ETag) — mid-game F5 reloads are near-instant
+- **keys.json mtime cache** in the relay (hot-reload semantics preserved; no disk read + JSON.parse per request; editor half-write tolerance)
+- **`/api/health` now reports the real package version** (was hardcoded `3.6`)
+- `docs/BENCHMARK.md`: rate-limit note for parallel headless matches
+
 _Nothing yet._
 
 ## [1.0.2] - 2026-09-05

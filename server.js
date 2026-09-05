@@ -17,12 +17,22 @@ const path = require('path');
 const PORT = parseInt(process.argv[2] || process.env.PORT || '8788', 10);
 const ROOT = __dirname;
 const KEYS_PATH = path.join(ROOT, 'config', 'keys.json');
+let VERSION = 'unknown';
+try { VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || 'unknown'; } catch (e) {}
 
 /* ── 密钥配置加载 ── */
+/* v1.0.3: mtime 缓存 — keys.json 未改动时复用上次解析 (热加载语义不变: 文件一改立即生效, 省每请求磁盘 IO/JSON 解析) */
+let _keysCache = null, _keysMtime = 0;
 function loadKeys() {
   try {
-    return JSON.parse(fs.readFileSync(KEYS_PATH, 'utf8'));
+    const st = fs.statSync(KEYS_PATH);
+    if (_keysCache && st.mtimeMs === _keysMtime) return _keysCache;
+    _keysCache = JSON.parse(fs.readFileSync(KEYS_PATH, 'utf8'));
+    _keysMtime = st.mtimeMs;
+    return _keysCache;
   } catch (e) {
+    if (_keysCache && (e.code === 'ENOENT' || e instanceof SyntaxError)) return _keysCache;   // 编辑器半写/临时删除容错: 保留上次有效配置
+    _keysCache = null; _keysMtime = 0;
     const template = {
       _说明: '在此填入各服务商 apiKey 后重启 server.js。此文件不要提交到任何仓库。',
       providers: {
@@ -65,7 +75,10 @@ function serveStatic(req, res, urlPath) {
   if (!full.startsWith(ROOT)) { res.writeHead(403); return res.end('forbidden'); }
   fs.readFile(full, (err, buf) => {
     if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('404 Not Found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+    // v1.0.3: ETag/304 — 文件未变时浏览器用本地副本 (对局中 F5 秒开, 省带宽); api/keys 动态路径不走这里
+    const etag = '"' + require('crypto').createHash('sha1').update(buf).digest('hex').slice(0, 16) + '"';
+    if (req.headers['if-none-match'] === etag) { res.writeHead(304, { ETag: etag }); return res.end(); }
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache', ETag: etag });
     res.end(buf);
   });
 }
@@ -106,7 +119,7 @@ function relay(providerCfg, payload, res) {
       upRes.on('end', () => {
         res.writeHead(upRes.statusCode || 502, {
           'Content-Type': upRes.headers['content-type'] || 'application/json',
-          'Access-Control-Allow-Origin': req_origin_safe()
+          'Access-Control-Allow-Origin': req_origin_safe(req)
         });
         res.end(Buffer.concat(out));
       });
@@ -115,7 +128,7 @@ function relay(providerCfg, payload, res) {
       res.writeHead(upRes.statusCode || 502, {
         'Content-Type': upRes.headers['content-type'] || 'text/event-stream',
         'Cache-Control': 'no-store',
-        'Access-Control-Allow-Origin': req_origin_safe()
+        'Access-Control-Allow-Origin': req_origin_safe(req)
       });
       upRes.on('data', c => res.write(c));
       upRes.on('end', () => res.end());
@@ -195,7 +208,7 @@ function relayAnthropic(providerCfg, payload, res) {
         res.writeHead(upRes.statusCode || 502, { 'Content-Type': 'application/json; charset=utf-8' });
         return res.end(JSON.stringify({ error: httpErr }));
       }
-      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': req_origin_safe() });
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': req_origin_safe(req) });
       const frame = o2 => res.write('data: ' + JSON.stringify(o2) + '\n\n');
       frame({ choices: [{ delta: { content: text }, finish_reason: 'stop' }], usage });
       frame({ choices: [], usage });
@@ -210,8 +223,29 @@ function relayAnthropic(providerCfg, payload, res) {
   upReq.write(body);
   upReq.end();
 }
-// 同源部署无需 CORS; 保守起见带个头 (file:// 调试也友好)
-function req_origin_safe() { return '*'; }
+// 同源部署无需 CORS; 回显同源 Origin (防任意网页盗用用户浏览器打 LLM 烧 key); file:// 调试友好 (Origin 为空时回退 *)
+function req_origin_safe(req) {
+  const o = req && req.headers && req.headers.origin;
+  if (!o) return '*';
+  try {
+    const u = new URL(o);
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '0.0.0.0') return o;
+    if (u.origin === 'null') return '*';
+  } catch (e) {}
+  return '*';
+}
+
+// v1.0.3: /api/chat 轻量限流 (每 IP 30 次/分, 内存滑动窗, 零依赖)
+const _rlMap = new Map();
+function chatRateLimit(req) {
+  const ip = (req.socket && req.socket.remoteAddress) || 'unknown';
+  const now = Date.now();
+  let entry = _rlMap.get(ip);
+  if (!entry || now - entry.start >= 60000) { entry = { start: now, count: 0 }; _rlMap.set(ip, entry); }
+  entry.count++;
+  if (_rlMap.size > 1000) { for (const [k, v] of _rlMap) { if (now - v.start >= 60000) _rlMap.delete(k); } }
+  return entry.count <= 30;
+}
 
 function readBody(req) {
   return new Promise(resolve => {
@@ -234,7 +268,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': req_origin_safe(req),
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     });
@@ -244,7 +278,7 @@ const server = http.createServer(async (req, res) => {
   /* ── API ── */
   if (u === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ ok: true, relay: true, version: '3.6' }));
+    return res.end(JSON.stringify({ ok: true, relay: true, version: VERSION }));
   }
 
   if (u === '/api/providers') {
@@ -259,6 +293,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (u === '/api/chat' && req.method === 'POST') {
+    // v1.0.3: 轻量限流 (每 IP 每分钟 30 次, 防失控/恶意刷请求烧 key; 内存滑动窗, 零依赖)
+    if (!chatRateLimit(req)) {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60' });
+      return res.end(JSON.stringify({ error: 'rate limited: max 30 requests/min per IP' }));
+    }
     const body = await readBody(req);
     if (!body) {
       res.writeHead(400, { 'Content-Type': 'application/json' });

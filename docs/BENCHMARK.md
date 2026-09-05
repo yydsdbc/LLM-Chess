@@ -23,6 +23,7 @@ node test/match_headless.js tokenrhythm glm-5.3-flash 30   # [provider] [model] 
 - Writes `logs/match_headless.json` (atomic tmp+rename) and auto-runs the blunder detector at the end.
 - Requires an `apiKey` for the provider in `config/keys.json` (hot-reloaded per request).
 - Exit codes: **MATCH OK** = meta rate 100% and game complete; **MATCH INCOMPLETE** = partial game (fallback moves carry no meta) — expected exit code, not a crash. 兑底/残局属预期退出码，非故障。
+- **Rate limit**: the `/api/chat` relay throttles at 30 requests/min per IP (v1.0.3). Single-headless matches stay far below this; if you run parallel matches on one host and see `429 rate limited`, stagger them or raise the limit in `server.js` (`chatRateLimit`).
 
 ### Stat lines / 统计行口径
 
