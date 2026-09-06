@@ -49,7 +49,7 @@ globalThis.fetch = async function (url, opts) {
   await agent.next(engine, null);
   const inc = calls[1].messages;
 
-  let md = '# LLM 实际发送的提示词 (v1.5.8 真实渲染)\n\n';
+  let md = '# LLM 实际发送的提示词 (v' + JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version + ' 真实渲染)\n\n';
   md += '> 生成时间: ' + new Date().toLocaleString('zh-CN') + ' | 场景: 红方执子, mock 对局第1手与第3手\n\n';
   md += '---\n\n## 一、首手 (每局第一次调用)\n\n### System (完整提示词)\n\n```text\n' + first[0].content + '\n```\n\n';
   md += '### User\n\n```text\n' + first[1].content + '\n```\n\n';
@@ -67,6 +67,16 @@ globalThis.fetch = async function (url, opts) {
     console.log('[--check] 特殊符号扫描: ' + (bad.length ? '发现 ' + bad.join(' ') : '0 (通过)'));
     console.log('[--check] 增量消息数: ' + inc.length + ' | 历史对数: ' + ((inc.length - 2) / 2 | 0));
     if (sys.length > 2400 || bad.length) { console.log('[--check] ✗ 守护违例 — exit 1'); process.exit(1); }   // v3.9a: 升级为硬门禁
+    // v1.0.4: prompts_dump 漂移守护 — 磁盘上的 dump 若与当前代码渲染不一致 (除生成时间行) 即 fail, 防文档腐化
+    const dumpPath = path.join(ROOT, 'prompts_dump.md');
+    if (fs.existsSync(dumpPath)) {
+      const norm = (s) => s.split(/\r?\n/).filter((l) => !l.startsWith('> 生成时间:')).join('\n').trim();
+      if (norm(md) !== norm(fs.readFileSync(dumpPath, 'utf8'))) {
+        console.log('[--check] prompts_dump.md 与当前提示词不一致 — 运行 node test/dump_prompts.js 重新生成后提交');
+        process.exit(1);
+      }
+      console.log('[--check] prompts_dump.md 新鲜度: PASS');
+    }
     return;
   }
   fs.writeFileSync(path.join(ROOT, 'prompts_dump.md'), md, 'utf8');

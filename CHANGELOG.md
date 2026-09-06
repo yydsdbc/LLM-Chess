@@ -6,7 +6,14 @@ Format based on Keep a Changelog; versions follow SemVer.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+- Docs refreshed to the v1.0.3 prompt-level tiers (README EN/ZH) — removed stale play-style references
+- `prompts_dump.md` regenerated from the live agent (tier system); `npm run check` now guards dump freshness (drift = fail)
+- Docker image: OCI labels; `test/` no longer baked into the runtime image
+- CI matrix: Node 24 added
+
+### Added
+- `AGENTS.md` — AI-agent operating guide (hard test gates, release flow, cron conventions)
 
 ## [1.0.3] - 2026-09-05
 

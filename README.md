@@ -75,7 +75,7 @@ LLM-chess/
 
 ### Live Spectating (v1.5)
 - **Decision cards**: after each move the panel streams cards — move / plan / summary / candidate moves with scores / confidence / time, last 4 kept.
-- **Styles**: each side can pick Aggressive / Balanced / Defensive, injected into the system prompt and archived with the game record.
+- **Prompt levels**: each side can pick None / Low / Mid / High — how much style guidance is injected into the system prompt (None = pure engine-evaluation play); the level is archived with the game record (legacy aggressive/balanced/defensive records still load and display).
 - **Effects**: sliding moves (0.28s), captured-piece ghost fade, check warning sound, red king-square pulse, breathing think-panel border.
 - **Unified output protocol**: extended JSON `{from,to,plan,summary,candidates[{move,score}],evaluation,confidence}`; strict retries with field validation (first 2 attempts), coordinate fallback against the legal list (3rd attempt); nested JSON via brace-pairing scanner.
 

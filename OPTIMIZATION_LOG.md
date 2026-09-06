@@ -489,3 +489,16 @@
 8. **回归**: npm test 并行 9/9 全绿 (test_llm_convo 149 项含 system 长度门禁全过)
 - 设计说明: '提示词等级'控制的是风格注入量而非棋风种类 — none=纯引擎驱动零风格偏置 / low 一句话 / mid 标准 / high 加战术细节; 每级 system 长度恒定 (前缀缓存不变式保持)
 - 触点清单: llm_agent.js(核心) / index.html(下拉+CSS+subtitle) / i18n.js(ZH/EN 5新键) / app.js(读写+徽章+agent创建) / record 存档字段名兼容
+
+## 2026-09-06 09:00 第17轮 (v1.0.daily, cron llmchess-daily-optimize-report)
+
+1. **README.md**: Features/Styles 段改为 Prompt levels (None/Low/Mid/High, None=纯引擎评价; legacy 棋风存档仍可读) — v1.0.3 改造后的文档对齐
+2. **README.zh-CN.md**: 4 处棋风残留清理 (AI信息面板徽章=无灰/低蓝/中绿/高金; 棋风系统→提示词等级系统含存档字段说明; 快速上手/设置入口改'提示词等级')
+3. **test/dump_prompts.js**: 标题版本号从 package.json 动态取 (原硬编码 v1.5.8); --check 新增 prompts_dump 漂移守护 (磁盘 dump 与代码渲染不一致即 exit 1, 除生成时间行) — 文档腐化防线
+4. **prompts_dump.md**: 重新生成 (v1.0.3 真实渲染, 含提示词等级段; 首手 system 2399 字达标)
+5. **Dockerfile**: OCI 标签 (title/description/source/licenses/documentation); COPY 剔除 test/ (镜像不含测试套件)
+6. **.github/workflows/ci.yml**: node-version 矩阵加 24 (18/20/22/24 + windows 22)
+7. **CHANGELOG.md**: Unreleased 段记录本轮 (Changed x4 + Added AGENTS.md)
+8. **AGENTS.md**: 入库 (昨夜写于 D:\projects 迁移时, agent 操作手册: 硬门禁/常用命令/发版流程/cron 约定)
+- 验证: npm run check ALL PASS (含新漂移守护) + npm test 并行 9/9 全绿
+- 背景: 项目昨夜迁 D:\projects (junction 兼容); 本轮为迁移后首次 daily 轮

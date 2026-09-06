@@ -4,14 +4,21 @@
 #         (bind-mount config/ so the auto-generated keys.json persists across restarts)
 FROM node:22-alpine
 
+# OCI image metadata (shows on registries: source/license/docs)
+LABEL org.opencontainers.image.title="LLM-Chess" \
+      org.opencontainers.image.description="Watch two LLMs play Chinese Chess (Xiangqi) with live thinking streams, replays and a HUD" \
+      org.opencontainers.image.source="https://github.com/yydsdbc/LLM-Chess" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.documentation="https://github.com/yydsdbc/LLM-Chess#readme"
+
 WORKDIR /app
 ENV NODE_ENV=production \
     LLMCHESS_HOST=0.0.0.0
 
 # App is dependency-free: copy source directly (config/ ships keys.example.json only,
-# keys.json is gitignored and generated on first run)
+# keys.json is gitignored and generated on first run). test/ is not baked into the runtime image.
 COPY package.json server.js index.html ./
-COPY ai benchmark config core evaluation replay test tools ui ./
+COPY ai benchmark config core evaluation replay tools ui ./
 
 EXPOSE 8788
 
