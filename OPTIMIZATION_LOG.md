@@ -516,3 +516,9 @@
 10. **CHANGELOG Unreleased 记录本轮**
 - 边界遵守: server.js 未动 (零重启); ai/llm_agent.js 未动 (system prompt/缓存架构零风险, prompts_dump 新鲜度 PASS); 无新依赖
 - 验证: npm run check ALL PASS (45 文件语法 + prompt 门禁) + npm test 并行 10/10 全绿 (新增 _replay_edge 首跑抓出 skipped 计数断言错误并修正 — 守护先真实跑再挂链纪律再次应验)
+
+## 2026-09-06 12:50 第18轮复审 (龙虾, zcode 产出 review)
+1. [ui/app.js] 修复键盘走子回归: Enter/Space 原先无条件 preventDefault — 无光标时吞掉 Tab 聚焦按钮的原生激活; 现无 kbCursor 直接放行
+2. [ui/renderer.js] 修复折叠计数: logTrimmed 模块级不复位, 重开对局后 '更早 N 手已折叠' 数字累积错; 现 move-log 清空后首条重置
+- 复核确认: 672bd99 其余各项与报告一致 (SVG viewBox 缩放/输入框守卫/回放键位 gating/i18n zh-en 对齐/徽章 10 suites/_replay_edge 纯函数); server.js 与 ai/llm_agent.js 确未动
+- 验证: node --check ✓ + npm run check ALL PASS + npm test 10/10

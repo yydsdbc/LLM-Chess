@@ -25,6 +25,10 @@ Format based on Keep a Changelog; versions follow SemVer.
 - **move-log DOM cap**: entries beyond 150 are folded into a "N earlier moves" line (long-game DOM growth bounded; full game still replayable/exportable)
 - Keyboard-shortcut help and i18n dictionaries updated for all new keys (zh/en parity guarded)
 
+### Fixed
+- Keyboard: Enter/Space no longer swallow native button activation when no keyboard cursor is active (round-18 regression caught in review)
+- Move-log: folded-moves counter resets on new game (stale "N earlier moves" count after restart)
+
 ## [1.0.3] - 2026-09-05
 
 ### Added (2026-09-05, rounds 5-16)

@@ -190,6 +190,7 @@
   var LOG_CAP = 150, logTrimmed = 0;
   function logMove(n, side, pieceChar, name, capturedType, capturedChar, secs, cn) {
     var log = document.getElementById('move-log');
+    if (!log.children.length) logTrimmed = 0;   // v1.0.daily 复审修复: 新对局重置折叠计数 (重开/导入清空 move-log 后不再累积旧值)
     var e = document.createElement('div');
     e.className = 'log-entry';
     e.dataset.ply = n;   // v1.5.5: 点击复盘 — 点击该手跳到该局面

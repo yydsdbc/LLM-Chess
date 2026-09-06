@@ -916,8 +916,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         ev.preventDefault(); return;
       }
       if (k === 'enter' || k === ' ') {
-        if (kbCursor && !engine.isOver() && !aiBusy) { onCellClick(kbCursor.x, kbCursor.y); }
-        ev.preventDefault(); return;
+        if (!kbCursor) return;   // v1.0.daily 复审修复: 无光标时放行原生行为 (Tab 聚焦按钮的 Enter/Space 激活不再被吞)
+        ev.preventDefault();
+        if (!engine.isOver() && !aiBusy) { onCellClick(kbCursor.x, kbCursor.y); }
+        return;
       }
       if (k === 'escape' && kbCursor) { kbCursor = null; refresh(); ev.preventDefault(); return; }
       if (k === 'm') document.getElementById('snd-toggle').click();
