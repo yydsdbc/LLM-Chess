@@ -20,20 +20,20 @@
 <title data-i18n="app_title">🦞 LLM-chess v1.0 · AI 对战直播平台</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--board-h:504px}
+:root{--board-h:504px;--cell:48px}
 body{font-family:"Microsoft YaHei","PingFang SC",sans-serif;text-align:center;background:linear-gradient(135deg,#1a0f08 0%,#2c1810 50%,#1a0f08 100%);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
 h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0,0,.5);letter-spacing:2px}
 .subtitle{color:#c4a56e;font-size:12px;margin-bottom:12px;letter-spacing:1px}
 #board-container{position:relative;display:inline-block;padding:10px 10px 18px 26px;background:linear-gradient(135deg,#6b4f1a,#a08040,#6b4f1a);border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.1)}   /* v1.5.10: 左/下加宽容纳行列坐标 */
-#board{display:grid;grid-template-columns:repeat(9,48px);grid-template-rows:repeat(10,48px);width:432px;height:480px;position:relative;background:#dcc88a;border:2px solid #5a3a18;box-sizing:content-box}
-#board-lines{position:absolute;top:0;left:0;width:432px;height:480px;pointer-events:none;z-index:1}
-#col-labels{position:absolute;top:calc(100% + 3px);left:0;width:432px;display:grid;grid-template-columns:repeat(9,48px);z-index:4;pointer-events:none}
+#board{display:grid;grid-template-columns:repeat(9,var(--cell));grid-template-rows:repeat(10,var(--cell));width:calc(var(--cell)*9);height:calc(var(--cell)*10);position:relative;background:#dcc88a;border:2px solid #5a3a18;box-sizing:content-box}
+#board-lines{position:absolute;top:0;left:0;width:calc(var(--cell)*9);height:calc(var(--cell)*10);pointer-events:none;z-index:1}
+#col-labels{position:absolute;top:calc(100% + 3px);left:0;width:calc(var(--cell)*9);display:grid;grid-template-columns:repeat(9,var(--cell));z-index:4;pointer-events:none}
 #col-labels span{text-align:center;font-size:11px;font-weight:bold;color:rgba(255,240,200,.62);line-height:12px}
-#row-labels{position:absolute;right:calc(100% + 3px);top:0;height:480px;width:18px;display:grid;grid-template-rows:repeat(10,48px);z-index:4;pointer-events:none}
+#row-labels{position:absolute;right:calc(100% + 3px);top:0;height:calc(var(--cell)*10);width:18px;display:grid;grid-template-rows:repeat(10,var(--cell));z-index:4;pointer-events:none}
 #row-labels span{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;color:rgba(255,240,200,.62)}
-.cell{width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;position:relative;z-index:3;user-select:none;transition:background .15s}
+.cell{width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;font-size:calc(var(--cell)*0.5);cursor:pointer;position:relative;z-index:3;user-select:none;transition:background .15s}
 .cell:hover{background:rgba(139,105,20,.15)}
-.piece{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:bold;font-family:"KaiTi","STKaiti","SimKai",serif;background:radial-gradient(circle at 35% 35%,#fffdf5,#e8d098);border:2px solid #7a5c1e;box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 1px 3px rgba(255,255,255,.6),inset 0 -1px 2px rgba(0,0,0,.1);transition:transform .12s ease-out,box-shadow .12s ease-out;cursor:pointer;line-height:1}
+.piece{width:calc(var(--cell)*0.83);height:calc(var(--cell)*0.83);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:calc(var(--cell)*0.42);font-weight:bold;font-family:"KaiTi","STKaiti","SimKai",serif;background:radial-gradient(circle at 35% 35%,#fffdf5,#e8d098);border:2px solid #7a5c1e;box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 1px 3px rgba(255,255,255,.6),inset 0 -1px 2px rgba(0,0,0,.1);transition:transform .12s ease-out,box-shadow .12s ease-out;cursor:pointer;line-height:1}
 .piece::before{content:"";position:absolute;top:2px;left:2px;right:2px;bottom:2px;border-radius:50%;border:1.5px solid rgba(122,92,30,.3);pointer-events:none}
 .piece.red{color:#c0392b;border-color:#8b4513;background:radial-gradient(circle at 35% 35%,#fff5ee,#f0c898)}
 .piece.black{color:#1a1a1a;border-color:#2c1810;background:radial-gradient(circle at 35% 35%,#fafafa,#ddd0a8)}
@@ -43,9 +43,15 @@ h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0
 .cell.selected{background:rgba(52,152,219,.3) !important}
 .cell.selected .piece{box-shadow:0 0 0 2px #3498db,0 0 10px rgba(52,152,219,.4)}
 .cell.legal-target::after{content:"";position:absolute;width:10px;height:10px;border-radius:50%;background:rgba(46,204,113,.5);pointer-events:none}
-.cell.legal-capture::after{content:"";position:absolute;width:40px;height:40px;border-radius:50%;border:2.5px solid rgba(231,76,60,.55);pointer-events:none}
-.cell.illegal-target::after{content:"";position:absolute;width:26px;height:26px;border-radius:50%;background-color:rgba(220,53,69,.14);background-image:linear-gradient(45deg,transparent 43%,rgba(220,53,69,.88) 43%,rgba(220,53,69,.88) 57%,transparent 57%),linear-gradient(-45deg,transparent 43%,rgba(220,53,69,.88) 43%,rgba(220,53,69,.88) 57%,transparent 57%);pointer-events:none}
+.cell.legal-capture::after{content:"";position:absolute;width:calc(var(--cell)*0.83);height:calc(var(--cell)*0.83);border-radius:50%;border:2.5px solid rgba(231,76,60,.55);pointer-events:none}
+.cell.illegal-target::after{content:"";position:absolute;width:calc(var(--cell)*0.54);height:calc(var(--cell)*0.54);border-radius:50%;background-color:rgba(220,53,69,.14);background-image:linear-gradient(45deg,transparent 43%,rgba(220,53,69,.88) 43%,rgba(220,53,69,.88) 57%,transparent 57%),linear-gradient(-45deg,transparent 43%,rgba(220,53,69,.88) 43%,rgba(220,53,69,.88) 57%,transparent 57%);pointer-events:none}
 .cell.last-move{background:rgba(241,196,15,.2) !important}
+/* v1.0.daily a11y: 键盘走子光标 (方向键移动 / Enter 选子走子) — 青色描边区别于鼠标选中 */
+.cell.kb-cursor{box-shadow:inset 0 0 0 3px rgba(0,207,255,.85);background:rgba(0,207,255,.12)}
+/* v1.0.daily a11y: 屏幕阅读器专用着法播报区 (视觉隐藏) */
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* v1.0.daily 长对局: move-log 超上限裁剪提示行 */
+.log-more{text-align:center;color:#75613A;font-size:9px;padding:1px 0}
 .cell.last-start{background:rgba(241,196,15,.12) !important}
 .cell.in-check{background:rgba(231,76,60,.35) !important;animation:pulse-check .6s ease-in-out infinite}
 .cell.in-check .piece{box-shadow:0 0 0 2px #e74c3c,0 0 12px rgba(231,76,60,.5) !important}
@@ -104,6 +110,9 @@ h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0
 .set-note{font-size:10px;color:#8a7550;line-height:1.5;margin:2px 0 12px}
 .set-foot{display:flex;justify-content:flex-end;gap:8px}
 @media(max-width:600px){.set-cols{flex-direction:column}}
+
+/* v1.0.daily 移动端适配: 棋盘 432px 定宽在小屏等比缩放 (--cell 随视口收缩; SVG 线条走 viewBox 自适应, 列/行标与棋子随动) */
+@media(max-width:460px){:root{--cell:calc((100vw - 80px)/9)}}
 
 /* ── 竞技场: 左红思考 | 棋盘 | 右黑思考 ── */
 #arena{display:flex;align-items:stretch;justify-content:center;gap:10px;width:100%;max-width:960px;margin:0 auto}
@@ -399,6 +408,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
     <span id="status-info"></span>
 </div>
 <div id="ai-banner"></div>
+<div id="sr-move" class="sr-only" aria-live="polite"></div>
 <div id="btn-row"><button class="btn" id="btn-restart" data-i18n="btn_reset">🔄 重新开始</button><button class="btn" id="btn-replay-watch" data-i18n-title="nav_replay" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" data-i18n-title="btn_fullscreen" title="全屏观战 (F 键)">⛶ 全屏</button></div>
 <div id="archive-row">
     <button class="btn" id="btn-save" data-i18n-title="btn_save" title="导出棋谱JSON">💾 存棋谱</button>

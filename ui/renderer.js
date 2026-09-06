@@ -102,6 +102,8 @@
           view.pendingAnim = null;
         }
         if (selected && selected.x === x && selected.y === y) c.classList.add('selected');
+        // v1.0.daily a11y: 键盘走子光标 (app 键盘事件维护 view.kbCursor, 方向键移动 + Enter 选子走子)
+        if (view.kbCursor && view.kbCursor.x === x && view.kbCursor.y === y) c.classList.add('kb-cursor');
         var hit = legal.find(function (t) { return t.x === x && t.y === y; });
         if (hit) c.classList.add(hit.isCapture ? 'legal-capture' : 'legal-target');
         else if (danger[x + ',' + y]) c.classList.add('illegal-target');
@@ -183,6 +185,9 @@
     b.innerHTML = msg || '';   // v2 HUD: 分段配色 (ico/model/state/meta spans)
   }
 
+  /* v1.0.daily 长对局 (100+ 手) DOM 防护: move-log 条目超上限只保留尾部, 头部一行折叠提示
+     (100 手 = 100+ 常驻节点 + 每手 scrollTop 强制重排; 裁剪封顶节点数, 全程仍可回放/棋谱导出) */
+  var LOG_CAP = 150, logTrimmed = 0;
   function logMove(n, side, pieceChar, name, capturedType, capturedChar, secs, cn) {
     var log = document.getElementById('move-log');
     var e = document.createElement('div');
@@ -193,6 +198,19 @@
       + pieceChar + '</span> ' + name + (capturedChar ? ' ×' + capturedChar : '')
       + (secs ? '<span class="log-secs"> ⏱' + secs + 's</span>' : '');
     log.appendChild(e);
+    var entries = log.querySelectorAll('.log-entry');
+    if (entries.length > LOG_CAP) {
+      logTrimmed++;
+      entries[0].parentNode.removeChild(entries[0]);
+      var more = log.querySelector('.log-more');
+      if (!more) {
+        more = document.createElement('div');
+        more.className = 'log-more';
+        log.insertBefore(more, log.firstChild);
+      }
+      var T = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return ('… ' + a.n + ' earlier moves folded'); };
+      more.textContent = T('log_trimmed', { n: logTrimmed });
+    }
     log.scrollTop = log.scrollHeight;
   }
 

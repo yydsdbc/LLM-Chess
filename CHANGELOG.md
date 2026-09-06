@@ -14,6 +14,16 @@ Format based on Keep a Changelog; versions follow SemVer.
 
 ### Added
 - `AGENTS.md` — AI-agent operating guide (hard test gates, release flow, cron conventions)
+- **Mobile board scaling**: the 432px fixed board shrinks proportionally under 460px viewports (`--cell` CSS variable drives cells, pieces, labels; SVG lines scale via viewBox)
+- **Keyboard play (a11y)**: arrow keys move a board cursor, Enter/Space selects & moves, Esc cancels — the board is playable without a mouse
+- **Replay bookmarks**: `B` tags/untags the current ply, 🔖 shows in the move list, persisted per game in localStorage
+- **Screen-reader move announcements** (`#sr-move` aria-live region, Chinese notation)
+- New test suite `test/_replay_edge.js` (replay edge cases + bookmark pure logic) — npm test is now 10 suites
+
+### Changed
+- **Error banners**: 402 / insufficient-balance provider errors now show a dedicated top-up message (i18n, ZH/EN)
+- **move-log DOM cap**: entries beyond 150 are folded into a "N earlier moves" line (long-game DOM growth bounded; full game still replayable/exportable)
+- Keyboard-shortcut help and i18n dictionaries updated for all new keys (zh/en parity guarded)
 
 ## [1.0.3] - 2026-09-05
 

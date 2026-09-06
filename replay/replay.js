@@ -188,5 +188,17 @@ function parseEval(s) {
     };
   }
 
-  XQ.Replay = { listLocal: listLocal, summarize: summarize, parseEval: parseEval, create: create, moveRisk: moveRisk, RISK_VALS: RISK_VALS, RISK_MARK: RISK_MARK };
+  /* v1.0.daily 回放书签 (纯逻辑, node 可测): toggle 返回新数组 (升序去重); 非法 ply 忽略返回副本 */
+  function toggleBookmark(list, ply) {
+    ply = Math.round(Number(ply));
+    if (!isFinite(ply) || ply < 1) return (list || []).slice();
+    var out = [], had = false;
+    (list || []).forEach(function (p) { if (p === ply) { had = true; return; } out.push(p); });
+    if (!had) { out.push(ply); out.sort(function (a, b) { return a - b; }); }
+    return out;
+  }
+  /* 书签 localStorage 键 (按棋谱 id 隔离) */
+  function bookmarkKey(id) { return 'xq_replay:bm:' + (id || 'unknown'); }
+
+  XQ.Replay = { listLocal: listLocal, summarize: summarize, parseEval: parseEval, create: create, moveRisk: moveRisk, RISK_VALS: RISK_VALS, RISK_MARK: RISK_MARK, toggleBookmark: toggleBookmark, bookmarkKey: bookmarkKey };
 })(typeof window !== 'undefined' ? window : globalThis);

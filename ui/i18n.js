@@ -49,6 +49,9 @@
     warn_auth: '⚠️ 鉴权失败 (401): 请检查 config/keys.json 对应服务商的 apiKey',
     warn_timeout: '⚠️ 上游超时/无响应, 已自动重试',
     warn_blocked: '⚠️ 系统拦截: {reason}',
+    warn_pay: '💰 服务商余额不足/欠费 (402): 请为对应服务商账户充值后重试',
+    sr_move: '第{n}手 {side} {cn}',
+    log_trimmed: '… 更早 {n} 手已折叠 (点击棋谱列表可复盘全程)',
     warn_open_first: '请先打开对局', warn_loading: '加载中…',
     stats_cached: '缓存', stats_blocked: '拦截',
     sound_on: '🔊 音效 开', sound_off: '🔇 音效 关',
@@ -96,8 +99,9 @@
     rp_hk_skip5: '后退 / 前进 5 手', rp_hk_capture: '下一手吃子 / 上一手吃子',
     rp_hk_wheel: '棋盘上 步进 (180ms 节流)', rp_hk_help: '显示本帮助 (再次按下或点击遮罩关闭)',
     rp_hk_esc: '退出回放',
+    rp_bm_title: '书签 (按 B 标注/取消当前手)', rp_hk_bm: '书签: 标注/取消当前手 (走法列表 🔖 可见, 按棋谱持久保存)',
     rp_hk_tips: '💡 走法列表点击跳转 · 时间柱状图点击跳转 · 最长思考 @#N 点击跳转',
-    rp_hk_main: '主界面快捷键: M 静音 · R 重开 · F 全屏观战 (回放打开时 F 由回放接管)'
+    rp_hk_main: '主界面快捷键: M 静音 · R 重开 · F 全屏观战 · 方向键移动光标 + Enter/Space 选子走子 + Esc 取消 (回放打开时 F 由回放接管)'
   };
   var EN = {
     app_title: '🦞 LLM-chess v1.0 · AI Battle & Spectating Platform',
@@ -138,6 +142,9 @@
     warn_auth: '⚠️ Auth failed (401): check the apiKey for this provider in config/keys.json',
     warn_timeout: '⚠️ Upstream timeout / no response, retrying automatically',
     warn_blocked: '⚠️ Blocked: {reason}',
+    warn_pay: '💰 Provider balance exhausted (402): top up the provider account and retry',
+    sr_move: 'Move {n} {side} {cn}',
+    log_trimmed: '… {n} earlier moves folded (full game still in the move list / replay)',
     warn_open_first: 'Please start a game first', warn_loading: 'Loading…',
     stats_cached: 'cached', stats_blocked: 'blocked',
     sound_on: '🔊 Sound on', sound_off: '🔇 Sound off',
@@ -184,8 +191,9 @@
     rp_hk_skip5: 'Back / forward 5 moves', rp_hk_capture: 'Next / previous capture',
     rp_hk_wheel: 'Step on board (180ms throttle)', rp_hk_help: 'Show this help (press again or click the backdrop to close)',
     rp_hk_esc: 'Exit replay',
+    rp_bm_title: 'Bookmark (press B to tag/untag the current move)', rp_hk_bm: 'Bookmark: tag/untag the current move (🔖 in the move list, persisted per game)',
     rp_hk_tips: '💡 Click move list / time chart / longest-think @#N to jump',
-    rp_hk_main: 'Main UI keys: M mute · R reset · F fullscreen (replay takes over when open)'
+    rp_hk_main: 'Main UI keys: M mute · R reset · F fullscreen · arrows move the cursor + Enter/Space select & move + Esc cancel (replay takes over when open)'
   };
   var STRINGS = { zh: ZH, en: EN };
   function has(l) { return l && LANGS.indexOf(l) !== -1 ? l : 'zh'; }

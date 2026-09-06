@@ -280,6 +280,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var evN = parseEvalNum(meta && meta.evaluation);
     if (!isNaN(evN)) { evalHist[side].push(evN); if (evalHist[side].length > 60) evalHist[side].shift(); }
     XQ.UI.evalSpark(side, evalHist[side]);
+    var srEl = document.getElementById('sr-move');
+    if (srEl) {
+      var Ts = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TAs = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
+      srEl.textContent = TAs('sr_move', { n: engine.ply(), side: Ts(side === 'red' ? 'status_side_red' : 'status_side_black'), cn: cn || (XQ.Move.sqName(m.from) + '->' + XQ.Move.sqName(m.to)) });   // v1.0.daily a11y: 屏幕阅读器着法播报
+    }
     var fbBadge = entry.summary === '兑底·安全着法' ? ' <span style="color:#e67e22">⚠兜底</span>' : '';   // v2.0 兑底透明化
     XQ.UI.lastMoveBadge('<b>#' + engine.ply() + '</b> ' + (side === 'red' ? '🔴' : '⚫') + ' '
       + XQ.Piece.CHARS[side][m.piece.type] + ' <b>' + esc2(cn) + '</b> <span style="opacity:.65">' + esc2(XQ.Move.sqName(m.from) + '→' + XQ.Move.sqName(m.to)) + '</span>'
@@ -346,8 +351,18 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
 
   function refresh() {
     view.selected = selected;
+    view.kbCursor = kbCursor;   // v1.0.daily a11y: 键盘走子光标随渲染高亮
     view.startTime = startTime;
     XQ.UI.render(engine, view);
+  }
+
+  /* v1.0.daily a11y 键盘走子: 方向键移动光标, Enter/Space 选子/走子, Esc 取消 (人棋玩家无鼠标可玩) */
+  var kbCursor = null;
+  function kbMove(dx, dy) {
+    if (!kbCursor) { kbCursor = { x: 4, y: 5 }; }   // 缺省落在棋盘中央
+    kbCursor.x = Math.max(0, Math.min(8, kbCursor.x + dx));
+    kbCursor.y = Math.max(0, Math.min(9, kbCursor.y + dy));
+    refresh();
   }
 
   /* ── Agent 调度 ── */
@@ -434,6 +449,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             : /503|\u7e41\u5fd9|busy/.test(m) ? '⚠ 上游繁忙 (503)'
             : /REASONING_REQUIRED|\u6df1\u5ea6\u601d\u8003/.test(m) ? '⚠ 模型强制思考, 已自动重试'
             : /UNKNOWN_FIELD|\u672a\u77e5\u5b57\u6bb5/.test(m) ? '⚠ 不支持的思考参数, 已摘掉重试'
+            : /402|insufficient balance|\u4f59\u989d|\u6b20\u8d39|quota/i.test(m) ? (XQ.I18N ? XQ.I18N.t('warn_pay') : '')
             : /401|403|\u9274\u6743|key|Key/.test(m) ? '🔑 API Key 未配或失效'
             : /400/.test(m) ? '❌ 接口返回 400 (格式错误)'
             : /fetch|network|abort|timeout/.test(m) ? '🌐 网络异常'
@@ -890,9 +906,20 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           if (rpCtrl) { if (ev.shiftKey) rpCtrl.stepPrevCapture(); else rpCtrl.stepNextCapture(); }
           ev.preventDefault(); return;
         }   // v3.9.2: 下一手吃子 (C) / 上一手吃子 (Shift+C) — 长局跳过拉扯段快速看子力交换点
+        if (ev.key === 'b' || ev.key === 'B') { rpToggleBookmark(); ev.preventDefault(); return; }   // v1.0.daily: 书签 标注/取消当前手
         if (ev.key === '?' || ev.key === '/') { rpShowHelp(); ev.preventDefault(); return; }
       }
+      /* v1.0.daily a11y 键盘走子: 方向键光标 / Enter·Space 选子走子 / Esc 取消 */
       var k = (ev.key || '').toLowerCase();
+      if (k === 'arrowup' || k === 'arrowdown' || k === 'arrowleft' || k === 'arrowright') {
+        kbMove(k === 'arrowleft' ? -1 : k === 'arrowright' ? 1 : 0, k === 'arrowup' ? -1 : k === 'arrowdown' ? 1 : 0);
+        ev.preventDefault(); return;
+      }
+      if (k === 'enter' || k === ' ') {
+        if (kbCursor && !engine.isOver() && !aiBusy) { onCellClick(kbCursor.x, kbCursor.y); }
+        ev.preventDefault(); return;
+      }
+      if (k === 'escape' && kbCursor) { kbCursor = null; refresh(); ev.preventDefault(); return; }
       if (k === 'm') document.getElementById('snd-toggle').click();
       else if (k === 'r') restartGame();
       else if (k === 'f') toggleFullscreen();   // v2.3 全屏观战 (回放打开时上方分支已接管 F)
@@ -1207,6 +1234,22 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     else if (v.indexOf('ls:') === 0) rec = (XQ.Record && XQ.Record.get(v.slice(3))) || null;
     rpStart(rec);
   }
+  var rpBookmarks = [];   // v1.0.daily 回放书签 (当前棋谱, localStorage 持久按 id 隔离)
+  function rpBookmarkLoad(record) {
+    rpBookmarks = [];
+    try {
+      var raw = JSON.parse(localStorage.getItem(XQ.Replay.bookmarkKey(record.id)) || '[]');
+      if (Array.isArray(raw)) rpBookmarks = raw;
+    } catch (e) {}
+  }
+  function rpToggleBookmark() {
+    if (!rpSession || !rpSession.idx) return;
+    var cur = rpSession.idx();
+    if (cur < 1) return;   // 初始局面无手可标
+    rpBookmarks = XQ.Replay.toggleBookmark(rpBookmarks, cur);
+    try { localStorage.setItem(XQ.Replay.bookmarkKey(rpSession.record.id), JSON.stringify(rpBookmarks)); } catch (e) {}
+    rpPaintMoveList();
+  }
   function rpStart(record) {
     if (!record || !record.moves) {
       rpEl.info.innerHTML = '<span style="color:#e67e22">' + (XQ.I18N ? XQ.I18N.t('rp_no_record') : '⚠ 没有可回放的棋谱数据') + '</span>'; return;
@@ -1218,7 +1261,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     /* v1.6.4 记忆倍速: 恢复上次选择的倍速 (localStorage xq_replay:speed) */
     var sp = parseFloat(rpGetSetting('speed'));
     if (XQ.ReplayController.SPEEDS.indexOf(sp) >= 0) rpCtrl.setSpeed(sp);
-    if (rpGetSetting('loop') === '1') rpCtrl.setLoop(true);   // v2.4 循环播放状态记忆 (与倍速同欥 localStorage)
+    if (rpGetSetting('loop') === '1') rpCtrl.setLoop(true);
+    rpBookmarkLoad(record);   // v1.0.daily 书签恢复   // v2.4 循环播放状态记忆 (与倍速同欥 localStorage)
     rpPaintSpeeds();
     rpPaintLoop();
     rpPaintHead();
@@ -1393,6 +1437,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + row('<kbd>1</kbd>~<kbd>7</kbd>', T('rp_hk_speeds'))
       + row('<kbd>[</kbd> / <kbd>]</kbd>', T('rp_hk_skip5') + ' (v3.9a)')
       + row('<kbd>C</kbd> / <kbd>Shift+C</kbd>', T('rp_hk_capture') + ' (v3.9.2)')
+      + row('<kbd>B</kbd>', T('rp_hk_bm'))
       + row(T('rp_hk_wheel').split(' ')[0] === '棋盘上' ? '滚轮' : 'Wheel', T('rp_hk_wheel'))
       + row('<kbd>?</kbd> / <kbd>/</kbd>', T('rp_hk_help'))
       + row('<kbd>Esc</kbd>', T('rp_hk_esc'))
@@ -1588,12 +1633,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (q && (label + ' ' + m.from + m.to + ' #' + m.n).toLowerCase().indexOf(q) < 0) continue;
       var cls = (i + 1 === cur) ? ' class="active"' : '';
       var sideTag = m.side === 'red' ? '🔴' : '⚫';
+      var bmHtml = rpBookmarks.indexOf(i + 1) >= 0 ? '<span title="' + esc2(T('rp_bm_title')) + '" style="color:#ffd54a">🔖</span> ' : '';   // v1.0.daily 书签标记
       var risky = (risks[i + 1] || 0) >= riskMark ? '<span title="' + esc2(TA('rp_title_risky', { s: (risks[i + 1]).toFixed(1) })) + '" style="color:#e67e22">⚠</span> ' : '';
       var mk = marks[i + 1];   // v1.7.9: 将/杀/困 彩色标记 (杀 > 风险 > 将 > 标签)
       var mkHtml = mk === '杀' ? '<span title="' + esc2(T('rp_title_mate')) + '" style="color:#ff5050;font-weight:bold">杀</span> '
         : mk === '困' ? '<span title="' + esc2(T('rp_title_stuck')) + '" style="color:#ff5050">困</span> '
         : mk === '将' ? '<span title="' + esc2(T('rp_title_check')) + '" style="color:#e0a030">将</span> ' : '';
-      html += '<li' + cls + ' data-ply="' + (i + 1) + '"><span class="rp-ml-side">' + sideTag + '</span><b>' + m.n + '</b><span style="flex:1">' + mkHtml + risky + esc2(label) + '</span></li>';
+      html += '<li' + cls + ' data-ply="' + (i + 1) + '"><span class="rp-ml-side">' + sideTag + '</span><b>' + m.n + '</b><span style="flex:1">' + bmHtml + mkHtml + risky + esc2(label) + '</span></li>';
       visible++;
     }
     rpEl.movelist.innerHTML = html || '<li style="color:#7a5a2a;justify-content:center">' + T('rp_no_match') + '</li>';

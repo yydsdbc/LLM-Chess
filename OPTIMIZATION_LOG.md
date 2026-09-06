@@ -502,3 +502,17 @@
 8. **AGENTS.md**: 入库 (昨夜写于 D:\projects 迁移时, agent 操作手册: 硬门禁/常用命令/发版流程/cron 约定)
 - 验证: npm run check ALL PASS (含新漂移守护) + npm test 并行 9/9 全绿
 - 背景: 项目昨夜迁 D:\projects (junction 兼容); 本轮为迁移后首次 daily 轮
+## 2026-09-06 12:16 第18轮 (v1.0.daily, zcode)
+
+1. **移动端棋盘等比缩放**: index.html 棋盘 432px 定宽 → CSS 变量 --cell 驱动 (格子/棋子/行列标/布局尺寸全走 calc), ≤460px 视口 --cell=(100vw-80px)/9 随视口收缩; SVG 线条走 viewBox 自适应零改动 — 手机上棋盘不再溢出
+2. **键盘走子 (a11y)**: 主界面方向键移动棋盘光标 (renderer 渲染 .kb-cursor 青色描边), Enter/Space 选子/走子, Esc 取消 — 人棋玩家无鼠标可完整对局; 快捷键帮助同步
+3. **屏幕阅读器着法播报**: 新增 #sr-move (sr-only + aria-live=polite), afterMove 播报 第N手+方别+中文记谱 (i18n sr_move) — 状态条 aria-live 只报回合, 着法细节此前无播报
+4. **move-log DOM 裁剪**: renderer.logMove 超 150 条折叠头部为 '… 更早 N 手已折叠' 一行 — 长对局 (100+ 手) 节点增长封顶, 每手 scrollTop 重排成本有界; 全程仍可回放/导出
+5. **欠费错误文案**: errBanner 新增 402/insufficient balance/余额/欠费/quota 分支 → i18n warn_pay (💰 充值指引) — 此前欠费落进兜底 '❌ 原始报错', 用户不知如何处置
+6. **回放书签**: B 键标注/取消当前手; 纯逻辑 toggleBookmark/bookmarkKey 落 replay/replay.js (node 可测), 走法列表 🔖 标记 + 帮助表新增行, localStorage 按棋谱 id 持久 — 复盘长局标关键转折点
+7. **新测试套件 test/_replay_edge.js**: 17 断言 (空棋谱/脏棋谱 skipped 容错/书签纯函数不变式/键隔离/控制器空谱操作) — 挂入 run_all 并行, npm test 9→10 套件
+8. **README 徽章与套件数同步**: tests-9 suites → 10 suites (EN/ZH + Project Layout 注释)
+9. **i18n 新键 6 个**: warn_pay/sr_move/log_trimmed/rp_bm_title/rp_hk_bm + rp_hk_main 扩写键盘走子 (ZH/EN 同步, i18n_check 把关)
+10. **CHANGELOG Unreleased 记录本轮**
+- 边界遵守: server.js 未动 (零重启); ai/llm_agent.js 未动 (system prompt/缓存架构零风险, prompts_dump 新鲜度 PASS); 无新依赖
+- 验证: npm run check ALL PASS (45 文件语法 + prompt 门禁) + npm test 并行 10/10 全绿 (新增 _replay_edge 首跑抓出 skipped 计数断言错误并修正 — 守护先真实跑再挂链纪律再次应验)
