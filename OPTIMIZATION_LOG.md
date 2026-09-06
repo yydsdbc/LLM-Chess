@@ -621,3 +621,25 @@
 - 元素纪律: 零新增 DOM (全部伪元素/CSS 覆盖); 新动画 dThink 自动被 prefers-reduced-motion 全局降级; i18n 零新键; server.js/llm_agent.js/renderer.js 均未动 (本轮纯 index.html)
 - 视觉验收: 浏览器实开随机双 AI 对局 — 16/16 规则加载确认 (cssRules 扫描, 需容错 Chromium 的 rgba 前导零与 box-shadow 色前置序列化) + 6 项实况计算样式 (d-move 等宽/d-more flex/dThink 动画名/徽章字距/status-info 等宽/last-move 内描边) + 终局态实况 (status-draw 渐变发光 + eo-card 16px 双圈) 全过; 截图管线本会话后半段故障 (第20轮尚正常), 以程序化断言为准
 - 门禁: npm run check ALL PASS + npm test 并行 11/11 全绿
+
+## 2026-09-06 17:50 第22轮 (v1.0.daily, zcode — 用户截图报告设置面板显示字面量 `n, 5 项优化)
+
+【`n 是什么】PowerShell 的换行转义序列 (反引号+n, 相当于 Bash 的 
+)。第16轮 (652a770) 改提示词等级下拉时,
+编辑经 PowerShell 写入, 转义序列未被解释而原样落进 HTML 的 label 与 select 之间裸文本流。
+它无 data-i18n 标记 (i18n 只替换有标记元素), 既有守护只查 ID/i18n 键/链接/版本, 不查文本内容
+→ 存活 5 轮 (16/17/18/19/20+21 轮) 未被发现, 直至用户截图报告。
+
+1. **根因修复**: index.html 4 处字面量 `n 删除 (L459/L474 红/黑两列各 2 处) — 中英双语下都显示
+2. **守护挂链 (先跑后挂)**: check_ui.js 新增第9节 HTML 净化扫描 — 剥 <script> 后逐行查
+   PowerShell 转义残留 (`[a-z]) 与双重转义实体 (&amp;amp;); 首跑见红 (L459/L474 各 2 处, exit 1)
+   → 修复后转绿 exit 0, 守护有效性经真实红绿双向验证
+3. **同类全仓排查**: ui/app.js / ui/renderer.js / ui/i18n.js / replay/*.js 反引号扫描零残留
+   (代码库为 ES5 风格无模板字符串, 运行时 HTML 拼接文件里反引号即可疑); index.html 为唯一污染面
+4. **浏览器实机验收**: IAB 实开页面 → 点齿轮开设置 → ZH/EN 双语 innerText 扫描均无 `n
+   (String.fromCharCode(96) 规避注入歧义), label/下拉/快答行渲染正常 + 截图目检通过
+5. **归档与教训**: 门禁盲区定性 — 文本内容此前无任何守护; 本节守护已补; 另记录验证时的两个
+   退出码伪报坑: 管道收尾后 $? 取的是 tail 的退出码 (GUARD_EXIT 误显 0), grep -c 零匹配 exit 1
+   是正常语义 — 判退出码必须去管道直跑
+- 触点: index.html (-4 字符) / test/check_ui.js (+15 行守护) / CHANGELOG; i18n 零新键, server.js/llm_agent.js 未动
+- 验证: node test/check_ui.js 红→绿双向 + npm run check ALL PASS + npm test 并行 11/11 全绿 + 浏览器双语实机扫描

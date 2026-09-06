@@ -72,3 +72,18 @@ const vEn = (tEn.match(/v(\d+\.\d+)/) || [])[1];
 const vZh = (tZh.match(/v(\d+\.\d+)/) || [])[1];
 console.log('README version:', 'EN=' + vEn, 'ZH=' + vZh, 'pkg=' + pkg.version);
 if (!vEn || !vZh || vEn !== vZh || pkg.version.indexOf(vEn) !== 0) process.exit(1);
+
+// 9) v1.0.daily 第22轮 HTML 净化守护: PowerShell 转义残留 (`n/`r/`t 等) 与双重转义实体
+//    根因: 第16轮 PowerShell 编辑把换行转义原样写进 HTML (`652a770`), 静态裸文本无 data-i18n 标记,
+//    既有守护只查 ID/i18n 键/链接/版本, 不查文本内容 → 存活 5 轮。本节补上该盲区。
+//    只扫非 <script> 区 (JS 里反引号/转义合法); index.html 的 <script> 全在文件尾部, 行号不漂移。
+const SCRIPT_RE = new RegExp('<script[^>]*>[\\s\\S]*?</script>', 'gi');
+const htmlText = html.replace(SCRIPT_RE, '');
+const dirty = [];
+htmlText.split('\n').forEach((line, i) => {
+  const esc = line.match(/`[a-z]/gi);
+  if (esc) dirty.push('L' + (i + 1) + ' PowerShell转义残留 ' + esc.join(''));
+  if (/&amp;amp;/i.test(line)) dirty.push('L' + (i + 1) + ' 双重转义');
+});
+console.log('HTML 净化:', dirty.length ? dirty.join(' | ') : 'PASS (无转义残留/双重转义)');
+if (dirty.length) process.exit(1);
