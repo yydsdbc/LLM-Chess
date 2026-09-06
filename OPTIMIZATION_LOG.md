@@ -596,3 +596,28 @@
 - 元素纪律: 全部用伪元素/覆盖实现, 未加任何新 DOM 节点; 新动画 (hudSheen) 自动被既有 prefers-reduced-motion 全局规则降级
 - 视觉验收: IAB 浏览器实开随机双 AI 对局 — 整页 + 局部截图目检 (卡片/徽章/托盘/斑马纹/思考态), 三栏几何无重叠 (红194-394/盘404-877/黑886-1086), 12 项计算样式断言 + 3 个 keyframes 注册断言全过
 - 门禁: npm run check ALL PASS + npm test 并行 11/11 全绿; i18n 零新键 (无文案改动); server.js/llm_agent.js 未动
+
+## 2026-09-06 16:55 第21轮 (v1.0.daily, zcode — 指令「HUD 至少15个优化」)
+
+与第20轮 (面层: 底色/圆角/呼吸/滑入) 互补的细节层, 仍零新增 DOM 元素, 纯 CSS 追加「第21轮 HUD 视觉精修·细节层」块:
+
+1. **K1 决策卡标题等宽化**: .d-move (手号+坐标) Consolas 等宽 + 提亮 #FFE8B0 — 坐标纵向对齐更整齐
+2. **K2 局面评价药丸化**: .d-eval 从裸文字变描边圆角徽章 (蓝系细边, 与原字色同源)
+3. **K3 💭 思考展开区引用化**: 暗底 + 左竖线提亮 + 右侧圆角 — 展开内容与卡体分层
+4. **K4 💭 按钮精修**: 悬浮圆形底环, 展开态金底 — 可供性 (affordance) 更明确
+5. **K5 「更早 N 条决策」双侧 hairline 分隔**: 游离文字变规整分隔线 (::before/::after)
+6. **K6 ⚡思考中卡片脉冲柔化**: 缩放脉冲 (pulse-check) → 金色微光呼吸 (dThink 2s) — 不再抢眼
+7. **K7 滚动条统一**: think-body + move-log 的 webkit 滚动条 6px 暗金圆角 (Chromium 此前用默认宽条)
+8. **K8 等级/快答徽章精修**: 内高光 + 字距; ⚡快答金色渐变底 + 文字投影
+9. **K9 胜利/和棋状态条**: 平涂 → 双色渐变 + 发光 (status-win 绿系 / status-draw 中性系)
+10. **K10 status-info 等宽数字**: tabular-nums + Consolas — 「第N手 · m:ss」每秒跳动不再左右抖动
+11. **K11 思考横幅精修**: 顶缘内高光 + 落影, meta 弱化一档
+12. **K12 走法记录复盘高亮**: 平底 → 金色横向渐变 + 内光 (配合既有左竖线)
+13. **K13 思考耗时小药丸**: ⏱Ns 从裸文字变 chip (随机局 secs=0 不渲染该 span, 规则就绪)
+14. **K14 棋子选中/落点精修**: 蓝色平环 → 青色光环 (对齐 v2 主题青), 合法落点绿点/吃子红环加光晕
+15. **K15 last-move/last-start 格子**: 平涂大底色 → 减淡底 + 2px/1.5px 内描边标记 — 落点位置更锐利
+16. **K16 空面板文案居中 + 折叠指示 hover 提亮**
+
+- 元素纪律: 零新增 DOM (全部伪元素/CSS 覆盖); 新动画 dThink 自动被 prefers-reduced-motion 全局降级; i18n 零新键; server.js/llm_agent.js/renderer.js 均未动 (本轮纯 index.html)
+- 视觉验收: 浏览器实开随机双 AI 对局 — 16/16 规则加载确认 (cssRules 扫描, 需容错 Chromium 的 rgba 前导零与 box-shadow 色前置序列化) + 6 项实况计算样式 (d-move 等宽/d-more flex/dThink 动画名/徽章字距/status-info 等宽/last-move 内描边) + 终局态实况 (status-draw 渐变发光 + eo-card 16px 双圈) 全过; 截图管线本会话后半段故障 (第20轮尚正常), 以程序化断言为准
+- 门禁: npm run check ALL PASS + npm test 并行 11/11 全绿

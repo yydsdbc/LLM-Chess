@@ -322,6 +322,56 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 .think-info{background:rgba(255,255,255,.05);border-color:rgba(240,217,160,.18);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 .think-pager .pg-btn{border-radius:4px}
 .think-pager .pg-btn:hover{background:rgba(240,217,160,.14)}
+
+/* ═══════════ 第21轮 HUD 视觉精修·细节层 (纯 CSS, 零新 DOM; 与第20轮"面"层互补) ═══════════ */
+/* K1 决策卡标题等宽化: 手号+坐标用等宽字体, 提亮一档 */
+.d-move{font-family:Consolas,Monaco,monospace;color:#FFE8B0;letter-spacing:.2px}
+/* K2 局面评价药丸化: .d-eval 从裸文字变成描边徽章 */
+.d-eval{background:rgba(127,184,232,.10);border:1px solid rgba(127,184,232,.28);border-radius:999px;padding:0 6px;font-size:9.5px;font-weight:bold}
+/* K3 💭 思考展开区引用化: 暗底 + 左侧亮竖线 + 右侧圆角 */
+.d-reason{background:rgba(0,0,0,.30);border-left-color:rgba(240,217,160,.55);border-radius:0 7px 7px 0}
+/* K4 💭 按钮精修: 悬浮出现圆形底环, 展开态金色 */
+.d-toggle{border-radius:50%;transition:opacity .15s,background .15s}
+.d-toggle:hover{background:rgba(240,217,160,.12)}
+.d-toggle.on{background:rgba(255,213,74,.18)}
+/* K5 「更早 N 条决策」双侧 hairline 分隔线: 游离文字变成规整分隔 */
+.d-more{display:flex;align-items:center;gap:6px}
+.d-more::before,.d-more::after{content:"";flex:1;height:1px;background:rgba(240,217,160,.14)}
+/* K6 ⚡思考中卡片脉冲柔化: 缩放脉冲 → 金色微光呼吸 */
+@keyframes dThink{50%{box-shadow:0 0 10px rgba(255,213,74,.22)}}
+.dcard.d-thinking{border-color:rgba(241,196,15,.45);animation:dThink 2s ease-in-out infinite;text-shadow:0 0 8px rgba(255,213,74,.35)}
+/* K7 面板/走法记录滚动条统一 (Chromium): 6px 暗金圆角 */
+.think-body::-webkit-scrollbar,#move-log::-webkit-scrollbar{width:6px}
+.think-body::-webkit-scrollbar-thumb,#move-log::-webkit-scrollbar-thumb{background:rgba(240,217,160,.22);border-radius:3px}
+.think-body::-webkit-scrollbar-thumb:hover,#move-log::-webkit-scrollbar-thumb:hover{background:rgba(240,217,160,.38)}
+.think-body::-webkit-scrollbar-track,#move-log::-webkit-scrollbar-track{background:transparent}
+/* K8 等级/快答徽章精修: 内高光 + 字距; 快答金色渐变底 */
+.badge-style{letter-spacing:.4px;box-shadow:inset 0 1px 0 rgba(255,255,255,.14)}
+.badge-quick{background:linear-gradient(180deg,rgba(241,196,15,.30),rgba(241,196,15,.14));border-color:rgba(255,176,0,.6);text-shadow:0 1px 2px rgba(0,0,0,.5)}
+/* K9 胜利/和棋状态条: 平涂 → 渐变 + 发光 */
+#status-bar.status-win{background:linear-gradient(135deg,rgba(92,255,138,.16),rgba(39,174,96,.07));border-color:rgba(92,255,138,.5);box-shadow:0 0 16px rgba(92,255,138,.12),inset 0 1px 0 rgba(255,255,255,.06)}
+#status-bar.status-draw{background:linear-gradient(135deg,rgba(149,165,166,.16),rgba(127,140,141,.07));border-color:rgba(176,192,198,.4);box-shadow:0 0 12px rgba(176,192,198,.08),inset 0 1px 0 rgba(255,255,255,.05)}
+/* K10 status-info 等宽数字: 手数/时钟跳动不再左右抖动 */
+#status-info{font-family:Consolas,Monaco,monospace;font-variant-numeric:tabular-nums;letter-spacing:.2px}
+/* K11 思考横幅精修: 顶缘内高光 + 落影, meta 弱化一档 */
+#ai-banner.busy{box-shadow:inset 0 1px 0 rgba(255,232,163,.08),0 4px 14px rgba(0,0,0,.35)}
+#ai-banner .ab-meta{opacity:.8}
+/* K12 走法记录复盘高亮: 平底 → 金色渐变 + 内光 */
+.log-entry.active{background:linear-gradient(90deg,rgba(241,196,15,.16),rgba(241,196,15,.04));box-shadow:inset 0 0 8px rgba(241,196,15,.08)}
+/* K13 思考耗时小药丸: ⏱Ns 从裸文字变 chip */
+.log-entry .log-secs{background:rgba(95,122,138,.18);border-radius:7px;padding:0 4px;margin-left:2px}
+/* K14 棋子选中/合法落点精修: 蓝色平环 → 青色光环 (主题色对齐) */
+.cell.selected{box-shadow:inset 0 0 0 2px rgba(0,207,255,.5)}
+.cell.selected .piece{box-shadow:0 0 0 2px #00CFFF,0 0 12px rgba(0,207,255,.45)}
+.legal-target::after{width:11px;height:11px;box-shadow:0 0 6px rgba(46,204,113,.55)}
+.legal-capture::after{box-shadow:0 0 9px rgba(231,76,60,.30)}
+/* K15 last-move/last-start 格子: 平涂底 → 细描边标记 (落点更清晰, 底色减淡) */
+.cell.last-move{background:rgba(241,196,15,.12)!important;box-shadow:inset 0 0 0 2px rgba(241,196,15,.45)}
+.cell.last-start{background:rgba(241,196,15,.07)!important;box-shadow:inset 0 0 0 1.5px rgba(241,196,15,.22)}
+/* K16 空面板文案居中 + 折叠指示 hover 提亮 */
+.think-panel.idle .think-body:not(.card-mode){text-align:center}
+.think-head .fold{transition:opacity .15s}
+.think-head:hover .fold{opacity:.9}
 </style>
 </head>
 <body>
