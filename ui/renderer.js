@@ -420,9 +420,16 @@
     var li = arr.length - 1;
     var cx = arr.length === 1 ? w / 2 : xOf(li);
     var cy = h / 2 - clamp(arr[li]) / 3 * (h / 2 - 3);
+    var lineCol = side === 'red' ? '#e78a7a' : '#7fb8e8';
+    /* v1.0.daily 第20轮: 线下渐变面积填充 (SVG 内部装饰, 不加 DOM) — 走势方向一眼可读 */
+    var areaPts = '2,' + (h - 1) + ' ' + pts + ' ' + (arr.length === 1 ? w / 2 : (w - 2)) + ',' + (h - 1);
     el.innerHTML = '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">'
+      + '<defs><linearGradient id="spark-fill-' + side + '" x1="0" y1="0" x2="0" y2="1">'
+      + '<stop offset="0" stop-color="' + lineCol + '" stop-opacity=".30"/>'
+      + '<stop offset="1" stop-color="' + lineCol + '" stop-opacity="0"/></linearGradient></defs>'
+      + '<polygon points="' + areaPts + '" fill="url(#spark-fill-' + side + ')"/>'
       + '<line x1="0" y1="' + h / 2 + '" x2="' + w + '" y2="' + h / 2 + '" stroke="rgba(240,217,160,.25)" stroke-width="1" stroke-dasharray="3,3"/>'
-      + '<polyline points="' + pts + '" fill="none" stroke="' + (side === 'red' ? '#e78a7a' : '#7fb8e8') + '" stroke-width="1.6"/>'
+      + '<polyline points="' + pts + '" fill="none" stroke="' + lineCol + '" stroke-width="1.6"/>'
       + '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="2.4" fill="#ffd54a"><title>最新 ' + arr[li].toFixed(1) + ' (本方视角)</title></circle>'
       + '</svg>';
   }
