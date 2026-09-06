@@ -13,6 +13,7 @@ Format based on Keep a Changelog; versions follow SemVer.
 - CI matrix: Node 24 added
 
 ### Added
+- **Round-19 hardening batch** (2026-09-06, 30+ items): replay bookmarks now support `N`/`P` jump navigation; per-game delete (🗑) in replay; replay board scales on small screens (`--cell`); gameId generation guard stops stale AI callbacks from leaking into a restarted game; end-of-game chime; new `test/_logic_layer.js` suite — npm test is now **11 suites**
 - `AGENTS.md` — AI-agent operating guide (hard test gates, release flow, cron conventions)
 - **Mobile board scaling**: the 432px fixed board shrinks proportionally under 460px viewports (`--cell` CSS variable drives cells, pieces, labels; SVG lines scale via viewBox)
 - **Keyboard play (a11y)**: arrow keys move a board cursor, Enter/Space selects & moves, Esc cancels — the board is playable without a mouse

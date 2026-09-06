@@ -150,6 +150,13 @@
       cls = 'status-thinking-' + (view.aiThinkingSide === 'black' ? 'black' : 'red');
     }
     document.getElementById('status-text').textContent = text;
+    // v1.0.daily a11y: 读屏播报走独立 sr-only 区 (低频回合/将军/胜负/思考开始), 与每秒 tick 解耦;
+    // 仅文本变化才写入 — render() 在键盘光标移动等场景也会触发, 无变化不重复播报
+    var srSt = document.getElementById('sr-status');
+    if (srSt) {
+      var key = text + '|' + cls;
+      if (key !== srSt._last) { srSt._last = key; srSt.textContent = text; }
+    }
     if (view.aiThinking) {
       document.getElementById('status-info').textContent = '';   // 思考中: 由 tick 填充当前思考时间
     } else {
@@ -232,7 +239,12 @@
      流式全文分页展示: 页满自动跳下一页(跟随最新), ‹› 可回看历史页 */
   var thinkState = {};
 
+  var _mfSeq = 0, _fontCache = {};
   function measureFont(body) {
+    var key = body._mfKey || (body._mfKey = 'm' + (++_mfSeq));
+    var curSize = body.clientWidth + 'x' + body.clientHeight;
+    var hit = _fontCache[key];
+    if (hit && hit.size === curSize) return hit.m;   // v1.0.daily 性能: 尺寸未变复用测量 (流式分页不再每段 canvas 测量 + getBoundingClientRect 重排; 折叠/缩放后尺寸变化自动重测)
     var cs = window.getComputedStyle(body);
     var fs = parseFloat(cs.fontSize) || 10.5;
     var cw = fs * 0.62;                          // ASCII 估计
@@ -246,7 +258,9 @@
     var lh = parseFloat(cs.lineHeight);
     // line-height:1.5 (无单位) 的 computed value 是数字 1.5, 必须乘回字号; 否则行数虚高 10 倍致单页容量失控
     if (!lh || isNaN(lh) || lh < fs) lh = fs * 1.5;
-    return { cw: (cw + cwCJK) / 2, lh: lh };     // 中英混合按均值估
+    var m = { cw: (cw + cwCJK) / 2, lh: lh };     // 中英混合按均值估
+    _fontCache[key] = { size: curSize, m: m };
+    return m;
   }
 
   function paginate(body, text) {
@@ -394,15 +408,17 @@
     var el = document.getElementById('think-' + side + '-spark');
     if (!el) return;
     if (!arr || !arr.length) { el.innerHTML = ''; return; }
-    var w = 182, h = 26, n = Math.max(arr.length, 8);
+    var w = 182, h = 26;
     var clamp = function (v) { return Math.max(-3, Math.min(3, v)); };
+    var span = Math.max(1, arr.length - 1);   // v1.0.daily 修复: 采样窗取实际点数 — 原 Math.max(len,8) 让 1~7 点序列挤在左缘细条 (对局早期曲线几乎不可见)
+    var xOf = function (i) { return (i / span) * (w - 4) + 2; };
     var pts = arr.map(function (v, i) {
-      var x = (i / Math.max(1, n - 1)) * (w - 4) + 2;
+      var x = arr.length === 1 ? w / 2 : xOf(i);   // 单点居中
       var y = h / 2 - clamp(v) / 3 * (h / 2 - 3);
       return x.toFixed(1) + ',' + y.toFixed(1);
     }).join(' ');
     var li = arr.length - 1;
-    var cx = (li / Math.max(1, n - 1)) * (w - 4) + 2;
+    var cx = arr.length === 1 ? w / 2 : xOf(li);
     var cy = h / 2 - clamp(arr[li]) / 3 * (h / 2 - 3);
     el.innerHTML = '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">'
       + '<line x1="0" y1="' + h / 2 + '" x2="' + w + '" y2="' + h / 2 + '" stroke="rgba(240,217,160,.25)" stroke-width="1" stroke-dasharray="3,3"/>'

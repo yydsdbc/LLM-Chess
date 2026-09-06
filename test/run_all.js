@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* test/run_all.js — 并行测试运行器 (v1.0.3, 第4项优化)
- * 10 套件并行跑 (串行 33.5s → 并行 ~15s, 2.3x)。
+ * 11 套件并行跑 (串行 33.5s → 并行 ~15s, 2.3x)。
  * 零依赖 (child_process); Windows/Unix 兼容; 任一套件失败即整体失败 (CI 友好)。
  * 原串行链保留: npm run test:serial (test_llm_convo 带 mock 时序, 并行安全已验证)
  */
@@ -9,7 +9,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const os = require('os');
 
-const SUITES = [   // v1.0.daily 第18轮 +1: _replay_edge.js (回放边界+书签守护)
+const SUITES = [   // 第18轮 +_replay_edge / 第19轮 +_logic_layer (纯逻辑层守护)
   'run_tests.js',
   'test_evaluation.js',
   'test_llm_convo.js',
@@ -20,6 +20,7 @@ const SUITES = [   // v1.0.daily 第18轮 +1: _replay_edge.js (回放边界+书�
   'link_check.js',
   'check_ui.js',
   '_replay_edge.js',
+  '_logic_layer.js',
 ];
 
 const root = path.join(__dirname, '..');

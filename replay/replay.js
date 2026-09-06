@@ -200,5 +200,17 @@ function parseEval(s) {
   /* 书签 localStorage 键 (按棋谱 id 隔离) */
   function bookmarkKey(id) { return 'xq_replay:bm:' + (id || 'unknown'); }
 
-  XQ.Replay = { listLocal: listLocal, summarize: summarize, parseEval: parseEval, create: create, moveRisk: moveRisk, RISK_VALS: RISK_VALS, RISK_MARK: RISK_MARK, toggleBookmark: toggleBookmark, bookmarkKey: bookmarkKey };
+  /* v1.0.daily 书签导航 (纯逻辑, node 可测): 找 cur 之后/之前的第一个书签手; 没有则返回 null (调用方原地不动, 不回绕) */
+  function nextBookmark(list, cur) {
+    var a = (list || []).slice().sort(function (x, y) { return x - y; });
+    for (var i = 0; i < a.length; i++) if (a[i] > cur) return a[i];
+    return null;
+  }
+  function prevBookmark(list, cur) {
+    var a = (list || []).slice().sort(function (x, y) { return x - y; });
+    for (var i = a.length - 1; i >= 0; i--) if (a[i] < cur) return a[i];
+    return null;
+  }
+
+  XQ.Replay = { listLocal: listLocal, summarize: summarize, parseEval: parseEval, create: create, moveRisk: moveRisk, RISK_VALS: RISK_VALS, RISK_MARK: RISK_MARK, toggleBookmark: toggleBookmark, bookmarkKey: bookmarkKey, nextBookmark: nextBookmark, prevBookmark: prevBookmark };
 })(typeof window !== 'undefined' ? window : globalThis);

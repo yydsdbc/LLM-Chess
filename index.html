@@ -20,6 +20,8 @@
 <title data-i18n="app_title">🦞 LLM-chess v1.0 · AI 对战直播平台</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
+/* v1.0.daily a11y: 键盘 Tab 焦点可见 (原仅 hover 反馈, 纯键盘用户看不到焦点在哪) */
+:focus-visible{outline:2px solid #ffd54a;outline-offset:2px;border-radius:3px}
 :root{--board-h:504px;--cell:48px}
 body{font-family:"Microsoft YaHei","PingFang SC",sans-serif;text-align:center;background:linear-gradient(135deg,#1a0f08 0%,#2c1810 50%,#1a0f08 100%);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
 h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0,0,.5);letter-spacing:2px}
@@ -112,7 +114,10 @@ h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0
 @media(max-width:600px){.set-cols{flex-direction:column}}
 
 /* v1.0.daily 移动端适配: 棋盘 432px 定宽在小屏等比缩放 (--cell 随视口收缩; SVG 线条走 viewBox 自适应, 列/行标与棋子随动) */
-@media(max-width:460px){:root{--cell:calc((100vw - 80px)/9)}}
+@media(max-width:460px){:root{--cell:calc((100vw - 80px)/9)}
+  /* v1.0.daily 小屏: 设置卡 94%→满宽 (原 540px 定宽卡在 460px 内仍留白多, 双列并排拥挤) */
+  .set-card{width:100%;max-width:100%;padding:14px 12px}}
+.btn:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
 
 /* ── 竞技场: 左红思考 | 棋盘 | 右黑思考 ── */
 #arena{display:flex;align-items:stretch;justify-content:center;gap:10px;width:100%;max-width:960px;margin:0 auto}
@@ -370,9 +375,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                     <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-black-quick"> <span data-i18n="quick_mode">快答模式 (关闭深度思考, 直出决策+原因)</span></label></div>
                 </div>
             </div>
-            <div id="server-warn" style="display:none;margin:2px 0 12px;padding:8px 10px;border-radius:6px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.35);font-size:11px;color:#f0b8b0;">
-                ⚠️ 未检测到本地服务 — LLM 对手需要 <b>node server.js</b> 启动 (浏览器 → 本地服务 → LLM API，密钥永不出服务器)。随机AI无需服务。
-            </div>
+            <div id="server-warn" style="display:none;margin:2px 0 12px;padding:8px 10px;border-radius:6px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.35);font-size:11px;color:#f0b8b0;"></div>
             <div class="set-note">密钥仅保存在服务端 config/keys.json，前端永不接触。双方可各配不同类型/服务商。</div>
             <div class="set-foot">
                 <div class="set-row" style="margin-bottom:8px"><label data-i18n="language_label">语言</label><select id="ui-lang"><option value="zh">中文</option><option value="en">English</option></select></div>
@@ -403,15 +406,16 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
   </div>
 </div><!-- /arena -->
 
-<div id="status-bar" class="status-red-turn" role="status" aria-live="polite">
+<div id="status-bar" class="status-red-turn">   <!-- v1.0.daily a11y: live 播报分离到 #sr-status — 思考中 #status-info 每秒 tick 若留在 aria-live 区会触发读屏每秒刷屏 -->
     <span id="status-text">当前回合：红方</span>
     <span id="status-info"></span>
 </div>
+<div id="sr-status" class="sr-only" aria-live="polite"></div>
 <div id="ai-banner"></div>
 <div id="sr-move" class="sr-only" aria-live="polite"></div>
 <div id="btn-row"><button class="btn" id="btn-restart" data-i18n="btn_reset">🔄 重新开始</button><button class="btn" id="btn-replay-watch" data-i18n-title="nav_replay" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" data-i18n-title="btn_fullscreen" title="全屏观战 (F 键)">⛶ 全屏</button></div>
 <div id="archive-row">
-    <button class="btn" id="btn-save" data-i18n-title="btn_save" title="导出棋谱JSON">💾 存棋谱</button>
+    <button class="btn" id="btn-save" data-i18n-title="btn_save" title="导出棋谱JSON" disabled>💾 存棋谱</button>
     <button class="btn" id="btn-load" data-i18n-title="btn_load" title="导入棋谱JSON并重放">📂 载入棋谱</button>
 </div>
 <div id="move-log"></div>

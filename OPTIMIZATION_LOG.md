@@ -522,3 +522,54 @@
 2. [ui/renderer.js] 修复折叠计数: logTrimmed 模块级不复位, 重开对局后 '更早 N 手已折叠' 数字累积错; 现 move-log 清空后首条重置
 - 复核确认: 672bd99 其余各项与报告一致 (SVG viewBox 缩放/输入框守卫/回放键位 gating/i18n zh-en 对齐/徽章 10 suites/_replay_edge 纯函数); server.js 与 ai/llm_agent.js 确未动
 - 验证: node --check ✓ + npm run check ALL PASS + npm test 10/10
+
+## 2026-09-06 15:10 第19轮 (v1.0.daily, zcode — 指令「做30个优化」)
+
+【server.js (4项, 需重启生效)】
+1. **畸形 URL 防崩**: serveStatic 的 decodeURIComponent 对 /% 等畸形百分号编码抛 URIError → 整请求崩溃; try/catch 回 400
+2. **限流补秒窗**: /api/chat 每 IP 30次/分 外新增 8次/秒 双窗 — 原仅分钟窗, 脚本可单秒连击打空整分钟预算
+3. **错误响应带 ACAO**: relay 与 relayAnthropic 的 502/错误分支补 Access-Control-Allow-Origin — file:// 调试/异源才能读到上游错误明细 (此前被 CORS 挡成空响应)
+4. **EADDRINUSE 友好提示**: listen 失败给出可操作文案 (已有实例? 换端口命令), 不再裸抛堆栈
+
+【renderer.js / index.html a11y (5项)】
+5. **evalSpark 短序列采样修复**: 原 x 轴按 Math.max(len,8) 采样 → 1~7 点序列挤在左缘一条 (对局早期曲线不可见); 改按实际点数铺满, 单点居中
+6. **measureFont 记忆化**: 字体/行高 canvas 测量按 body 尺寸缓存 — 流式分页每段原都 canvas 测量 + getBoundingClientRect 重排; 折叠/缩放自动重测
+7. **读屏每秒刷屏修复**: status-bar role=status aria-live 包裹的 #status-info 思考中每秒 tick → 读屏每秒播报; live 播报分离到独立 sr-only #sr-status (仅文本变化才写, 低频回合/将军/胜负/思考开始), status-bar 去 aria-live
+8. **键盘焦点可见**: :focus-visible 全局描边 — 纯键盘 Tab 用户此前看不到焦点位置
+9. **禁用按钮样式**: .btn:disabled 降透明度 + pointer-events; 存棋谱按钮初始 disabled (HTML 同步)
+
+【主界面 UX/防错 (10项)】
+10. **重开确认**: R 键/重开按钮 → 对局已走且未终局时 confirm (防误触丢进度; i18n btn_restart_confirm)
+11. **存棋谱动态禁用**: 无棋谱/空谱时按钮禁用, 首手落子启用, 导入回放保持禁用 (防导出空文件)
+12. **Esc 关设置**: 主 keydown (已含 kb 光标清除) + 独立监听 (输入框内 Esc 也生效)
+13. **设置遮罩点击关闭 + 焦点入面板**: 点 backdrop 关闭; 打开时焦点落首个控件 (a11y)
+14. **终局卡遮罩点击关闭**: 终局后关卡可自由回看走子/复盘 (再来一局 不受影响)
+15. **ai-banner 点击关闭**: 15s 常驻错误/警告不再挡后续信息 (含取消残留定时器)
+16. **复盘/还原横幅 i18n**: replayTo/replayRestore 文案走 tArgs + 复盘后活动走法条目滚入视区 (长对局)
+17. **思考面板折叠持久化**: xq_fold_red/black localStorage — 刷新保留折叠态
+18. **xq:i18n 主界面热切**: 语言切换现在刷新状态条/面板名/决策卡 (原仅回放层)
+19. **gameId 世代守卫**: startRecord 自增; scheduleAgent 捕获世代, 迟到 agent 回调/兑底延时在重开后作废 — 修复旧分析结果串入新局的真实竞态
+20. **终局提示音**: playEnd 红胜上行分解和弦/黑胜下行/和棋单音 (遵循静音开关, Web Audio 合成)
+
+【回放层 (8项)】
+21. **回放棋盘移动端缩放**: rp-board/labels/线条行内 432px 定宽 → var(--cell) (round18 主棋盘缩放的遗漏面)
+22. **回放空态 i18n 引导**: 无棋谱时文案带操作指引 (rp_pick_empty, 原硬编码中文)
+23. **谱内备注回放可见**: record.note (兑底原因/异常注记) 在回放头部显示
+24. **回放删除按钮**: 🗑 删除当前棋谱 + 清理其进度/书签 localStorage; 删光后引导导入
+25. **N/P 书签跳转**: nextBookmark/prevBookmark 纯函数落 replay.js (node 可测) + 键盘接线 + 帮助表行
+26. **走法列表空谱区分**: 0 手谱显示 0手 而非误导的「无匹配走法」(过滤无命中仍显示原文案)
+27. **body 滚动锁定**: 回放打开时背景滚动锁定 (移动端双滚动条/误触), 关闭还原
+28. **回放层无头回归**: 空/单/双手谱控制器全操作不炸 (并入 _logic_layer)
+
+【i18n / 服务提示 (4项)】
+29. **缺服务/警告动态端口**: applyAgents 与 server-warn 的 http://localhost:8788 硬编码 → location.host (server.js 支持任意端口), 文案 i18n 化 (warn_llm_no_server 去端口 + 新键 server_warn)
+30. **新 i18n 键 9 个**: btn_restart_confirm/server_warn/rp_pick_empty/rp_replay_toast/rp_restored/rp_delete_title/rp_delete_confirm/rp_note/rp_hk_bm_go (ZH/EN 同步, i18n_check 183 键 6/6 PASS)
+
+【测试/文档 (4项)】
+31. **新测试套件 _logic_layer.js**: 17 断言 (书签导航纯函数/record 空谱·import 池/控制器边界) — npm test 10→11 套件
+32. **run_all.js + README 双语徽章**: suites 10→11
+33. **server.js 冒烟实测**: 起实例验证 /%→400、第二实例 EADDRINUSE 文案 exit 1
+34. **无头 Chrome DOM 冒烟**: 主界面 10 断言 + 回放深链 5 断言 + sr-status 分离 5 断言全过 (90 cell/32 子/禁用态/focus-visible/css 变量/空态 i18n)
+
+- 边界: systemPrompt 未动 (缓存架构零风险, dump PASS); 零新依赖; server.js 改动需重启 (已在 LOG 标注)
+- 验证: npm run check ALL PASS (48 文件语法 + prompt 门禁) + npm test 并行 11/11 全绿 + Chrome headless DOM 冒烟 ALL PASS

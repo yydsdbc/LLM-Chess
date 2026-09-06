@@ -69,7 +69,8 @@ const MIME = {
   '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8'
 };
 function serveStatic(req, res, urlPath) {
-  let p = decodeURIComponent(urlPath.split('?')[0]);
+  let p;
+  try { p = decodeURIComponent(urlPath.split('?')[0]); } catch (eU) { res.writeHead(400); return res.end('bad request'); }   // v1.0.daily: 畸形百分号编码 (/% etc) 抛 URIError → 回 400 而非连接崩溃
   if (p === '/' || p === '') p = '/index.html';
   const full = path.normalize(path.join(ROOT, p));
   if (!full.startsWith(ROOT)) { res.writeHead(403); return res.end('forbidden'); }
@@ -139,7 +140,7 @@ function relay(providerCfg, payload, res) {
   res.on('close', () => { try { upReq.destroy(new Error('client closed')); } catch (e2) {} });   // v3.4: 浏览器断开即销毁上游请求 (免浪费 token)
   upReq.on('error', e => {
     if (!res.headersSent) {
-      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });   // v1.0.daily: 错误响应也带 ACAO — file:// 调试/异源页才能读到错误明细
     }
     res.end(JSON.stringify({ error: 'relay upstream error: ' + e.message }));
   });
@@ -205,7 +206,7 @@ function relayAnthropic(providerCfg, payload, res) {
         }
       } catch (eP) { httpErr = 'anthropic 响应解析失败'; }
       if (httpErr) {
-        res.writeHead(upRes.statusCode || 502, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.writeHead(upRes.statusCode || 502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });   // v1.0.daily: 同上, anthropic 错误响应带 ACAO
         return res.end(JSON.stringify({ error: httpErr }));
       }
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': req_origin_safe(req) });
@@ -235,16 +236,21 @@ function req_origin_safe(req) {
   return '*';
 }
 
-// v1.0.3: /api/chat 轻量限流 (每 IP 30 次/分, 内存滑动窗, 零依赖)
+// v1.0.3: /api/chat 轻量限流 (每 IP 30 次/分 + 8 次/秒 双窗, 内存滑动, 零依赖)
+// v1.0.daily: 补秒窗 — 原仅分钟窗, 脚本可单秒连击打空整分钟预算再等下一窗; 人机/双 agent 每手 ≤2 请求远低于秒窗上限
 const _rlMap = new Map();
 function chatRateLimit(req) {
   const ip = (req.socket && req.socket.remoteAddress) || 'unknown';
   const now = Date.now();
+  const sec = Math.floor(now / 1000);
   let entry = _rlMap.get(ip);
-  if (!entry || now - entry.start >= 60000) { entry = { start: now, count: 0 }; _rlMap.set(ip, entry); }
+  if (!entry || now - entry.start >= 60000) { entry = { start: now, count: 0, sec: sec, secCount: 0 }; _rlMap.set(ip, entry); }
+  if (entry.sec !== sec) { entry.sec = sec; entry.secCount = 0; }
+  entry.secCount++;
   entry.count++;
+  if (entry.count > 30 || entry.secCount > 8) return false;
   if (_rlMap.size > 1000) { for (const [k, v] of _rlMap) { if (now - v.start >= 60000) _rlMap.delete(k); } }
-  return entry.count <= 30;
+  return true;
 }
 
 function readBody(req) {
@@ -331,6 +337,14 @@ const server = http.createServer(async (req, res) => {
 });
 
 const HOST = process.env.LLMCHESS_HOST || '127.0.0.1';   // v3.4: 默认仅本机可访问 (API Key 安全); 局域网访问设 LLMCHESS_HOST=0.0.0.0
+server.on('error', e => {   // v1.0.daily: 端口占用等启动错误给可操作提示, 不再裸抛堆栈
+  if (e && e.code === 'EADDRINUSE') {
+    console.error('端口 ' + PORT + ' 已被占用 — 可能已有 LLM-chess 实例在跑 (Start.cmd/npm start 重复启动?) 或改用: node server.js ' + (PORT + 1));
+  } else {
+    console.error('服务器启动失败: ' + (e && e.message || e));
+  }
+  process.exit(1);
+});
 server.listen(PORT, HOST, () => {
   loadKeys();
   console.log('');
