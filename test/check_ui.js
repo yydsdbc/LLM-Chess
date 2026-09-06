@@ -87,3 +87,24 @@ htmlText.split('\n').forEach((line, i) => {
 });
 console.log('HTML 净化:', dirty.length ? dirty.join(' | ') : 'PASS (无转义残留/双重转义)');
 if (dirty.length) process.exit(1);
+
+// 10) v1.0.daily 第23轮 PWA manifest 守护: link 存在 + JSON 合法 + 字段齐 + 图标文件在盘 + theme-color 在页
+const manLink = (html.match(/<link rel="manifest" href="([^"]+)"/) || [])[1];
+if (!manLink) { console.log('PWA manifest: index.html 缺 <link rel="manifest">'); process.exit(1); }
+const manPath = __dirname + '/../' + manLink;
+if (!fs.existsSync(manPath)) { console.log('PWA manifest: 文件缺失 ' + manLink); process.exit(1); }
+let man = null;
+try { man = JSON.parse(fs.readFileSync(manPath, 'utf8')); } catch (eM) { console.log('PWA manifest: JSON 解析失败 ' + eM.message); process.exit(1); }
+const manIssues = [];
+if (!man.name || !man.short_name) manIssues.push('缺 name/short_name');
+if (man.display !== 'standalone') manIssues.push('display != standalone');
+if (!man.start_url) manIssues.push('缺 start_url');
+if (!man.theme_color || !man.background_color) manIssues.push('缺 theme_color/background_color');
+for (const ic of (man.icons || [])) {
+  if (!fs.existsSync(__dirname + '/../' + ic.src)) manIssues.push('图标不在盘: ' + ic.src);
+}
+if (!(man.icons || []).length) manIssues.push('缺 icons');
+const themeMeta = /<meta name="theme-color" content="([^"]+)"/.test(html);
+if (!themeMeta) manIssues.push('index.html 缺 theme-color meta');
+console.log('PWA manifest:', manIssues.length ? manIssues.join(' | ') : 'OK (' + manLink + ', icons ' + (man.icons || []).length + ')');
+if (manIssues.length) process.exit(1);

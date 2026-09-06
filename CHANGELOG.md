@@ -13,6 +13,7 @@ Format based on Keep a Changelog; versions follow SemVer.
 - CI matrix: Node 24 added
 
 ### Added
+- **Round-23 batch** (2026-09-07, 10 items): PWA installable (manifest.json + SVG icon + theme-color — server untouched, `application/json` MIME reused); new `test/_server_http.js` suite — server.js HTTP behavior (spawns a real server: ETag/304, path-traversal 403, rate-limit 429, …) — npm test is now **12 suites**; a11y round 2 (settings card is a real `role=dialog` with focus return to the gear, sound toggle `aria-pressed`, hidden overlays no longer Tab-focusable via `visibility`); renderer keeps the 90 board cells persistent (no full teardown per keystroke/move); i18n static-text gap guard (`i18n_check` I7) + 6 missed `data-i18n` hooks; suite-count docs re-aligned (README EN/ZH badges + trees, AGENTS.md, ARCHITECTURE.md, stale `test:serial` chain)
 - **Round-19 hardening batch** (2026-09-06, 30+ items): replay bookmarks now support `N`/`P` jump navigation; per-game delete (🗑) in replay; replay board scales on small screens (`--cell`); gameId generation guard stops stale AI callbacks from leaking into a restarted game; end-of-game chime; new `test/_logic_layer.js` suite — npm test is now **11 suites**
 - **Round-22 settings-panel text fix + guard**: 4 stray PowerShell escape artifacts (`n) in the settings panel (introduced in round 16) removed; `check_ui.js` now scans the HTML for escape leftovers / double-escaped entities — a blind spot where static text had no guard
 - **Round-21 HUD detail polish** (2026-09-06, 16 items, pure CSS, zero new DOM): decision-card mono headers + eval pill + quote-style reasoning + hairline dividers, calmer thinking-card pulse, unified scrollbars, badge inner highlights, win/draw status gradients with glow, tabular-num status clock, move-log active highlight + time chips, cyan selection ring + target glows, last-move outline markers, idle-text centering
@@ -30,6 +31,8 @@ Format based on Keep a Changelog; versions follow SemVer.
 - Keyboard-shortcut help and i18n dictionaries updated for all new keys (zh/en parity guarded)
 
 ### Fixed
+- **i18n `init()` was never called** — users with saved `en` saw a full Chinese first paint and `<html lang>` stayed zh-CN until they toggled the language (caught by round-23 live acceptance)
+- Six static texts missed `data-i18n` (keys note, play-again, watch-replay, fullscreen, save, load) — now localized in both languages
 - Keyboard: Enter/Space no longer swallow native button activation when no keyboard cursor is active (round-18 regression caught in review)
 - Move-log: folded-moves counter resets on new game (stale "N earlier moves" count after restart)
 

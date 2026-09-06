@@ -72,6 +72,24 @@ var sentinels = ['status_thinking', 'status_win_red', 'rp_eta', 'rp_help_title_h
 var sMissing = sentinels.filter(function (k) { return ZH[k] == null || EN[k] == null; });
 ok(sMissing.length === 0, 'I6 哨兵键双语齐全' + (sMissing.length ? ' (缺: ' + sMissing.join(',') + ')' : ''));
 
-console.log('i18n_check: ' + (6 - fails.length) + '/6 groups PASS, ' + zk.length + ' keys');
+// I7 第23轮: 静态 CJK 裸文本漏挂守护 — 非脚本区元素文本含中文必须有 data-i18n/-aria 标记
+//   (data-i18n-title 只译 title 属性, 不算文本标记 — 第22轮 `n 事故同源盲区: 静态文本此前无守护)
+//   豁免: option (服务商品牌名/语言名; provider 列表还由 /api/providers 动态覆盖)、
+//         meta (SEO description 有意中文)、#status-text (renderer.renderStatus 按对局状态动态管理, 静态键会在语言切换时误覆盖)
+var htmlNoScript = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<!--[\s\S]*?-->/g, '');
+var tagRe7 = /<(\w+)([^>]*)>([^<]*)/g;
+var miss7 = [], mm7;
+var CJK7 = /[\u4e00-\u9fff]/;
+while ((mm7 = tagRe7.exec(htmlNoScript)) != null) {
+  var tag7 = mm7[1], attrs7 = mm7[2] || '', text7 = mm7[3] || '';
+  if (tag7 === 'style' || tag7 === 'option' || tag7 === 'meta') continue;
+  if (/(?:^|\s)id="status-text"/.test(attrs7)) continue;
+  if (!CJK7.test(text7)) continue;
+  if (/data-i18n=/.test(attrs7) || /data-i18n-aria/.test(attrs7)) continue;
+  miss7.push('<' + tag7 + '> "' + text7.trim().slice(0, 30) + '"');
+}
+ok(miss7.length === 0, 'I7 静态 CJK 文本 data-i18n 挂载' + (miss7.length ? ' (漏挂: ' + miss7.join(' ; ') + ')' : ' (0 漏挂)'));
+
+console.log('i18n_check: ' + (7 - fails.length) + '/7 groups PASS, ' + zk.length + ' keys');
 if (fails.length) { process.exit(1); }
 process.exit(0);

@@ -1,0 +1,15 @@
+{
+  "name": "LLM-chess · AI Battle & Spectating Platform",
+  "short_name": "LLM-chess",
+  "description": "Watch two LLMs play Chinese Chess (Xiangqi) with live thinking streams, decision cards and replays.",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#080607",
+  "theme_color": "#080607",
+  "icons": [
+    { "src": "ui/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "ui/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

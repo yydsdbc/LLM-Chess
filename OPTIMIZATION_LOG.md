@@ -643,3 +643,55 @@
    是正常语义 — 判退出码必须去管道直跑
 - 触点: index.html (-4 字符) / test/check_ui.js (+15 行守护) / CHANGELOG; i18n 零新键, server.js/llm_agent.js 未动
 - 验证: node test/check_ui.js 红→绿双向 + npm run check ALL PASS + npm test 并行 11/11 全绿 + 浏览器双语实机扫描
+
+## 2026-09-07 02:33 第23轮 (v1.0.daily, zcode — 指令「优化, 方向参考 a11y 二期/PWA/渲染性能/服务端行为测试/文档对齐/i18n 漏挂」)
+
+【i18n 漏挂 (第22轮同源盲区: 静态文本无守护)】
+1. **裸文本回补 x6**: set-note 密钥说明 / 终局卡 再来一局 / 观看回放 / 全屏 / 存棋谱 / 载入棋谱 —
+   均无 data-i18n (其中 3 处只有 data-i18n-title, 只译 title 不译文本); 新增 keys_note/btn_again/
+   btn_watch_replay/btn_save_short 4 键 (zh/en 同步), 复用既有 btn_fullscreen/btn_load
+2. **i18n_check 新增 I7 组**: 非脚本区元素含 CJK 裸文本必须挂 data-i18n/-aria (option 品牌与语言名 /
+   meta SEO / #status-text 动态管理豁免); 红绿双向验证: 摘掉 set-note 挂载 → exit 1 点名漏挂, 还原 → exit 0
+3. **init() 从未被调用 (既有 bug, 本轮实测抓到)**: XQ.I18N.init() 全仓零调用 → 存 en 的用户首屏
+   静态文案全中文且 <html lang> 停在 zh-CN (第13轮「初始加载即生效」实际未生效); app.js 顶部补调
+   (i18n.js 先于 app.js 加载, 注册顺序保证 apply 先于 app 初始化跑)
+
+【a11y 二期】
+4. **遮罩焦点逃逸修复**: settings/end-overlay 原 opacity:0+pointer-events:none, 隐藏态内部按钮仍可
+   Tab 聚焦进看不见的层; 补 visibility:hidden (.show 为 visible, transition 联动, 淡入淡出视觉不变)
+5. **设置卡对话框语义**: role=dialog + aria-modal=true + aria-labelledby=settings-title (新 id);
+   关闭出口统一 closeAISettings() (原 4 处各自 remove('show'): 取消按钮 inline onclick/保存/Esc×2/
+   遮罩点击), 关闭后焦点归还齿轮 — Tab 不落回隐藏层
+6. **焦点入面板修复 (本轮引入→当轮实测修复)**: visibility 过渡起帧前元素仍按 hidden 计算,
+   同步 focus 被静默忽略 (强制 reflow 也不够 — 过渡在重算后才起帧); 改双 rAF 后落焦, CDP 实测生效
+7. **音效开关 aria-pressed**: paint() 同步开/关状态, 读屏可感知静音态
+
+【PWA】
+8. **可安装 manifest**: manifest.json (standalone/主题色 #080607/图标 ui/icon.svg any+maskable) +
+   index.html link rel=manifest + theme-color meta; ui/icon.svg 暗金底金环红「弈」棋子 (与 HUD 主题一致);
+   server.js 零改动 (manifest.json 走既有 application/json MIME); check_ui 新增第10节守护
+   (link 存在/JSON 合法/字段齐/图标在盘/theme-color), 红绿双向验证 (删文件 → exit 1)
+
+【服务端行为测试 (server.js 此前零自动化覆盖)】
+9. **新套件 _server_http.js (第12套件)**: 真实 spawn server.js 随机端口, 11 断言: health 200 /
+   静态托管+ETag → If-None-Match 304 / 404 / 路径穿越 403 / 畸形百分号 400 不崩连接 / OPTIONS 204+ACAO /
+   非法 JSON 400 / 未知服务商 400 / 限流单秒 12 连发出 429 (8/s 窗); 全走 relay 之前可判定路径, 不触上游;
+   一次通过 11/11; 套件数 11→12 三处同步 (run_all SUITES + README 双语徽章 + 目录树) + test:serial
+   顺带补齐 _replay_edge/_logic_layer 历史漏挂 + AGENTS.md 9→12 ×2 + ARCHITECTURE.md 7→12 + 双语测试表新行
+
+【渲染性能】
+10. **render() 90 格持久化**: 原每次 render 全拆全建 90 节点 (键盘光标每移一格/每手棋都触发);
+    改建池常驻 + 差量更新 — className 逐项 toggle (无变化类零操作), 棋子 glyph(色+种) 变更才重建子元素
+    (重建即重放 just-placed/滑入动画), 吃子 ghost animationend 自清 (不再靠全拆带走);
+    附带收益: .cell 的 background 过渡在光标移动/选中切换时真正生效 (原新节点无过渡起点)
+    — CDP 实测: 格子打标记跨 2 次 render 存活 (节点身份保持), 节点数恒 90, 对局照常推进
+
+- 验收: CDP 无头 Edge 实机 21/21 (manifest 真实 HTTP 可达/EN 首屏文案/遮罩 visibility 双态/dialog 语义/
+  焦点入+归还/aria-pressed/预置 xq_v1_settings 双 random 自动开局 13 手/键盘光标/32 子) +
+  截图目检 2 张 (对局全景 + 设置面板, 无 `n 残留); 截图管线正常未动用计算样式兜底
+- 退出码坑再确认: 管道收尾 $? 取 tail/grep 的退出码 (本轮红绿验证一度误读 exit 0) — 判退出码去管道直跑
+- 触点: index.html / ui/i18n.js / ui/app.js / ui/renderer.js / manifest.json (新) / ui/icon.svg (新) /
+  test/i18n_check.js (+I7) / test/check_ui.js (+第10节) / test/_server_http.js (新) / test/run_all.js /
+  package.json / README.md / README.zh-CN.md / docs/ARCHITECTURE.md / AGENTS.md / CHANGELOG;
+  server.js / ai/llm_agent.js 未动 (llm_agent 未动 → prompts_dump 无需重生成); i18n 净增 4 键
+- 门禁: 改动 js node --check 全过 + npm run check ALL PASS + npm test 并行 12/12 全绿 (10.2s)

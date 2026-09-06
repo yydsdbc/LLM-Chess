@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   var XQ = window.XQ;
+  if (XQ.I18N) XQ.I18N.init();   // 第23轮修复: init 从未被任何人调用 — 存了 en 的用户首屏静态文案与 <html lang> 停在中文 (实测抓到的既有 bug; i18n.js 先于本文件加载, 此处注册的 DOMContentLoaded apply 先于下方 app 初始化跑)
 
   /* ── 音效 (Web Audio 合成) ── */
   var actx = null, mBus = null, _noise = null;
@@ -699,7 +700,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   function saveAISettings() {
     var s = readSettings();
     try { localStorage.setItem(CFG_KEY, JSON.stringify(s)); } catch (e) {}
-    document.getElementById('settings-overlay').classList.remove('show');
+    closeAISettings();   // 第23轮: 走统一出口 (焦点归还齿轮)
     applyAgents(s);
     engine.newGame();
     startRecord();
@@ -737,6 +738,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     document.getElementById('gear-toggle').classList.toggle('on', any);
   }
 
+  function closeAISettings() {   // 第23轮 a11y: 统一关闭出口 (原 4 处各自 remove('show')); 关闭后焦点还给齿轮, Tab 不落回隐藏层
+    document.getElementById('settings-overlay').classList.remove('show');
+    var g = document.getElementById('gear-toggle');
+    try { g.focus({ preventScroll: true }); } catch (eF) { g.focus(); }
+  }
+
   function openAISettings() {
     var saved;
     try { saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); } catch (e) { saved = {}; }
@@ -751,7 +758,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       swEl.innerHTML = (XQ.I18N ? XQ.I18N.t('server_warn') : '') + '<b>http://' + location.host + '</b>';   // v1.0.daily: 动态端口 (替换原硬编码 8788)
     }
     document.getElementById('settings-overlay').classList.add('show');
-    var fEl = document.getElementById('ai-red-enabled'); if (fEl) { try { fEl.focus({ preventScroll: true }); } catch (eF) { fEl.focus(); } }   // v1.0.daily a11y: 打开焦点入面板
+    // 第23轮 a11y: focus 延到下一渲染帧 — visibility 过渡起帧前元素仍按 hidden 计算, 同步/强制 reflow 的 focus 都被静默忽略 (实测定位)
+    var fEl = document.getElementById('ai-red-enabled');
+    var doFocus = function () { if (fEl) { try { fEl.focus({ preventScroll: true }); } catch (eF) { fEl.focus(); } } };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { requestAnimationFrame(doFocus); });
+    else setTimeout(doFocus, 0);   // v1.0.daily a11y: 打开焦点入面板
   }
 
   /* ── 记录/存档 ── */
@@ -840,7 +851,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   /* ── 音效开关 ── */
   function initSoundToggle() {
     var b = document.getElementById('snd-toggle');
-    function paint() { b.textContent = sndMuted ? '🔇' : '🔊'; }
+    function paint() { b.textContent = sndMuted ? '🔇' : '🔊'; b.setAttribute('aria-pressed', sndMuted ? 'false' : 'true'); }   // 第23轮 a11y: 开关态读屏可感知
     b.onclick = function (e) {
       e.stopPropagation();
       sndMuted = !sndMuted;
@@ -913,7 +924,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var soEl = document.getElementById('settings-overlay');
     if (soEl && !soEl._backdropBound) {
       soEl._backdropBound = true;
-      soEl.addEventListener('click', function (ev) { if (ev.target === soEl) soEl.classList.remove('show'); });   // v1.0.daily: 点遮罩关闭设置
+      soEl.addEventListener('click', function (ev) { if (ev.target === soEl) closeAISettings(); });   // v1.0.daily: 点遮罩关闭设置; 第23轮: 统一出口
     }
     document.getElementById('btn-save').onclick = function () {
       if (currentRecord && currentRecord.moves.length) XQ.Record.downloadFile(currentRecord);
@@ -955,7 +966,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (ev.key !== 'Escape') return;
       var so3 = document.getElementById('settings-overlay');
       if (so3 && so3.classList.contains('show')) {
-        so3.classList.remove('show');
+        closeAISettings();
         if (kbCursor) { kbCursor = null; refresh(); }
       }
     });
@@ -1006,7 +1017,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       }
       if (k === 'escape') {
         var so2 = document.getElementById('settings-overlay');
-        if (so2 && so2.classList.contains('show')) { so2.classList.remove('show'); if (kbCursor) { kbCursor = null; refresh(); } ev.preventDefault(); return; }   // v1.0.daily: Esc 关设置
+        if (so2 && so2.classList.contains('show')) { closeAISettings(); if (kbCursor) { kbCursor = null; refresh(); } ev.preventDefault(); return; }   // v1.0.daily: Esc 关设置; 第23轮: 统一出口
         if (kbCursor) { kbCursor = null; refresh(); ev.preventDefault(); return; }
       }
       if (k === 'm') document.getElementById('snd-toggle').click();
@@ -1826,6 +1837,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     engine: function () { return engine; },
     restart: restartGame,
     saveAISettings: saveAISettings,
+    closeAISettings: closeAISettings,   // 第23轮: 取消按钮 inline onclick 走统一出口
     isRelay: function () { return relayAvailable; },
     replayOpen: rpOpen,
     replayWatchRecord: rpWatchRecord   // v2.4 终局回放本局 (调试句柄)

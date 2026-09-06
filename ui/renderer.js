@@ -52,11 +52,28 @@
     svgEl.innerHTML = lines;
   }
 
-  /* ── 主渲染: 依据快照重建格子 ── */
+  /* ── 主渲染: 依据快照更新格子 ──
+     第23轮 性能: 90 格持久化复用 — 原实现每次 render 全拆全建 90 节点 (键盘光标每移一格 / 每手棋都触发),
+     改为创建一次常驻, 之后只差量更新 className 与棋子子元素; DOM 节点身份跨渲染保持,
+     .cell 的 background 过渡在键盘光标/选中切换时真正生效; ghost 播完自清 (不再靠全拆带走) */
+  var _cellPool = null;   // {owner, list[90]} 行主序 y*9+x, 与棋盘 grid 排布一致
+  function cellPool(boardEl) {
+    if (_cellPool && _cellPool.owner === boardEl) return _cellPool.list;
+    boardEl.querySelectorAll('.cell').forEach(function (c) { c.remove(); });   // 兜底: 清掉旧实现遗留节点
+    var list = [];
+    for (var i = 0; i < 90; i++) {
+      var c = document.createElement('div');
+      c.className = 'cell';
+      boardEl.appendChild(c);
+      list.push(c);
+    }
+    _cellPool = { owner: boardEl, list: list };
+    return list;
+  }
   function render(engine, view) {
     var snap = engine.snapshot();
     var boardEl = view.boardEl;
-    boardEl.querySelectorAll('.cell').forEach(function (c) { c.remove(); });
+    var cells = cellPool(boardEl);
 
     var selected = view.selected;
     var legal = (selected && !engine.isOver()) ? engine.legalTargets(selected.x, selected.y) : [];
@@ -67,55 +84,62 @@
 
     for (var y = 0; y < 10; y++) {
       for (var x = 0; x < 9; x++) {
-        var c = document.createElement('div');
-        c.className = 'cell';
+        var c = cells[y * 9 + x];
         var p = snap.cells[y][x];
+        // 棋子差量更新: glyph(色+种) 未变复用现节点, 变则重建 (重建即重放 just-placed/滑入动画)
+        var wantKey = p ? (p.color + ':' + p.type) : null;
+        if (c._glyph !== wantKey) {
+          c.textContent = '';   // 清旧棋子 + 残留 ghost (animationend 未及时的兜底)
+          if (p) {
+            var pe0 = document.createElement('div');
+            pe0.className = 'piece ' + p.color;
+            pe0.textContent = pieceGlyph(p);
+            c.appendChild(pe0);
+          }
+          c._glyph = wantKey;
+        }
+        var pe = c.firstChild;
         if (p) {
-          var pe = document.createElement('div');
-          pe.className = 'piece ' + p.color;
-          pe.textContent = pieceGlyph(p);
-          if (snap.lastMove && x === snap.lastMove.to.x && y === snap.lastMove.to.y) pe.classList.add('just-placed');
-          c.appendChild(pe);
-        }
-        // v1.5 观战动画: 棋子滑动入位 + 被吃子淡出 ghost (由 app 在 afterMove 时设置 pendingAnim)
-        if (view.pendingAnim && snap.lastMove && x === snap.lastMove.to.x && y === snap.lastMove.to.y && p) {
-          var m0 = snap.lastMove;
-          var dx = (m0.from.x - m0.to.x) * 100, dy = (m0.from.y - m0.to.y) * 100;   // piece 与 cell 同尺寸 → 百分比即一格
-          if (dx || dy) {
-            pe.style.transform = 'translate(' + dx + '%,' + dy + '%)';
-            pe.style.transition = 'none';
-            (function (el) {
-              requestAnimationFrame(function () {
+          var justIt = !!(snap.lastMove && x === snap.lastMove.to.x && y === snap.lastMove.to.y);
+          pe.classList.toggle('just-placed', justIt);
+          // v1.5 观战动画: 棋子滑动入位 + 被吃子淡出 ghost (由 app 在 afterMove 时设置 pendingAnim)
+          if (view.pendingAnim && snap.lastMove && justIt) {
+            var m0 = snap.lastMove;
+            var dx = (m0.from.x - m0.to.x) * 100, dy = (m0.from.y - m0.to.y) * 100;   // piece 与 cell 同尺寸 → 百分比即一格
+            if (dx || dy) {
+              pe.style.transform = 'translate(' + dx + '%,' + dy + '%)';
+              pe.style.transition = 'none';
+              (function (el) {
                 requestAnimationFrame(function () {
-                  el.style.transition = 'transform .28s cubic-bezier(.2,.8,.3,1)';
-                  el.style.transform = 'translate(0,0)';
+                  requestAnimationFrame(function () {
+                    el.style.transition = 'transform .28s cubic-bezier(.2,.8,.3,1)';
+                    el.style.transform = 'translate(0,0)';
+                  });
                 });
-              });
-            })(pe);
+              })(pe);
+            }
+            if (m0.captured) {
+              var gh = document.createElement('div');
+              gh.className = 'piece ghost-out ' + m0.captured.color;
+              gh.textContent = pieceGlyph(m0.captured);
+              gh.addEventListener('animationend', function () { if (this.parentNode) this.parentNode.removeChild(this); });   // 第23轮: ghost 淡出即自清
+              c.insertBefore(gh, pe);   // ghost 在新子下方淡出
+            }
+            view.pendingAnim = null;
           }
-          if (m0.captured) {
-            var gh = document.createElement('div');
-            gh.className = 'piece ghost-out ' + m0.captured.color;
-            gh.textContent = pieceGlyph(m0.captured);
-            c.insertBefore(gh, pe);   // ghost 在新子下方淡出
-          }
-          view.pendingAnim = null;
         }
-        if (selected && selected.x === x && selected.y === y) c.classList.add('selected');
+        // 状态类逐格开关 (toggle 对无变化类零操作, 样式失效面最小)
+        c.classList.toggle('selected', !!(selected && selected.x === x && selected.y === y));
         // v1.0.daily a11y: 键盘走子光标 (app 键盘事件维护 view.kbCursor, 方向键移动 + Enter 选子走子)
-        if (view.kbCursor && view.kbCursor.x === x && view.kbCursor.y === y) c.classList.add('kb-cursor');
+        c.classList.toggle('kb-cursor', !!(view.kbCursor && view.kbCursor.x === x && view.kbCursor.y === y));
         var hit = legal.find(function (t) { return t.x === x && t.y === y; });
-        if (hit) c.classList.add(hit.isCapture ? 'legal-capture' : 'legal-target');
-        else if (danger[x + ',' + y]) c.classList.add('illegal-target');
-        if (snap.lastMove) {
-          if (x === snap.lastMove.from.x && y === snap.lastMove.from.y) c.classList.add('last-start');
-          if (x === snap.lastMove.to.x && y === snap.lastMove.to.y) c.classList.add('last-move');
-        }
-        if (!engine.isOver() && p && p.type === 'king' && p.color === snap.turn && engine.inCheck(snap.turn)) {
-          c.classList.add('in-check');
-        }
+        c.classList.toggle('legal-capture', !!(hit && hit.isCapture));
+        c.classList.toggle('legal-target', !!(hit && !hit.isCapture));
+        c.classList.toggle('illegal-target', !hit && !!danger[x + ',' + y]);
+        c.classList.toggle('last-start', !!(snap.lastMove && x === snap.lastMove.from.x && y === snap.lastMove.from.y));
+        c.classList.toggle('last-move', !!(snap.lastMove && x === snap.lastMove.to.x && y === snap.lastMove.to.y));
+        c.classList.toggle('in-check', !engine.isOver() && !!p && p.type === 'king' && p.color === snap.turn && engine.inCheck(snap.turn));
         (function (rx, ry) { c.onclick = function () { view.onCellClick(rx, ry); }; })(x, y);
-        boardEl.appendChild(c);
       }
     }
     renderStatus(engine, view);
