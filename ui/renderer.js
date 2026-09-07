@@ -139,7 +139,10 @@
         c.classList.toggle('last-start', !!(snap.lastMove && x === snap.lastMove.from.x && y === snap.lastMove.from.y));
         c.classList.toggle('last-move', !!(snap.lastMove && x === snap.lastMove.to.x && y === snap.lastMove.to.y));
         c.classList.toggle('in-check', !engine.isOver() && !!p && p.type === 'king' && p.color === snap.turn && engine.inCheck(snap.turn));
-        (function (rx, ry) { c.onclick = function () { view.onCellClick(rx, ry); }; })(x, y);
+        if (!c._clickBound) {   // 第24轮: 池化后 onclick 只绑一次 (原每帧重建 90 个闭包; 坐标恒定, 重复绑定是纯浪费)
+          c._clickBound = true;
+          (function (rx, ry) { c.onclick = function () { view.onCellClick(rx, ry); }; })(x, y);
+        }
       }
     }
     renderStatus(engine, view);
@@ -204,8 +207,17 @@
       document.getElementById('eo-title').textContent = r.winner === 'red' ? (XQ.I18N ? XQ.I18N.t('status_win_red') : '🏆 红方胜利') : r.winner === 'black' ? (XQ.I18N ? XQ.I18N.t('status_win_black') : '🏆 黑方胜利') : (XQ.I18N ? XQ.I18N.t('status_draw') : '和棋');
       document.getElementById('eo-sub').textContent = reason;
       overlay.classList.add('show');
+      // 第24轮 a11y: 终局卡焦点入卡 (仅 隐藏→显示 转换沿触发一次; 双 rAF 等 visibility 过渡起帧 — 同第23轮设置面板教训)
+      if (!overlay._wasShown) {
+        overlay._wasShown = true;
+        var eoBtn = overlay.querySelector('.eo-btn');
+        var eoFocus = function () { if (eoBtn && document.getElementById('end-overlay').classList.contains('show')) { try { eoBtn.focus({ preventScroll: true }); } catch (eF) { eoBtn.focus(); } } };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { requestAnimationFrame(eoFocus); });
+        else setTimeout(eoFocus, 0);
+      }
     } else {
       overlay.classList.remove('show');
+      overlay._wasShown = false;   // 复位: 下一局终局再次焦点入卡
     }
   }
 
@@ -304,7 +316,7 @@
     if (!pg) {
       pg = document.createElement('div');
       pg.className = 'think-pager';
-      pg.innerHTML = '<span class="pg-btn pg-prev">‹</span><span class="pg-info"></span><span class="pg-btn pg-next">›</span>';
+      pg.innerHTML = '<button type="button" class="pg-btn pg-prev">‹</button><span class="pg-info"></span><button type="button" class="pg-btn pg-next">›</button>';   // 第24轮: span→button — 翻页器键盘可达 (Tab 聚焦 + Enter 原生触发)
       root.appendChild(pg);
       pg.querySelector('.pg-prev').onclick = function (e) {
         e.stopPropagation();

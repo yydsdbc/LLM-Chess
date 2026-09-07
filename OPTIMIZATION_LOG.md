@@ -695,3 +695,59 @@
   package.json / README.md / README.zh-CN.md / docs/ARCHITECTURE.md / AGENTS.md / CHANGELOG;
   server.js / ai/llm_agent.js 未动 (llm_agent 未动 → prompts_dump 无需重生成); i18n 净增 4 键
 - 门禁: 改动 js node --check 全过 + npm run check ALL PASS + npm test 并行 12/12 全绿 (10.2s)
+
+## 2026-09-08 02:41 第24轮 (v1.0.daily, zcode — 指令「优化, 方向参考 a11y 二期/PWA/渲染性能/服务端行为测试/文档对齐/i18n 漏挂」)
+
+【a11y 三期 (第23轮 设置面板语义的收尾)】
+1. **end-overlay 终局卡对话语义**: .eo-card role=dialog + aria-labelledby=eo-title; 有意不加 aria-modal —
+   层外 btn-row (重开/回放/全屏) 对键盘用户仍需可达, 陷阱会把它锁死; renderOverlay 仅在 隐藏→显示 转换沿
+   (_wasShown) 双 rAF 焦点入「再来一局」主按钮, 重开时复位支持多局 (焦点时序同第23轮 visibility 起帧教训)
+2. **设置面板 Tab 焦点陷阱**: 第23轮 aria-modal=true 一直缺配套 — Tab 可逃出面板落到被遮住的棋盘;
+   现 Esc/Tab 监听扩展: Tab/Shift+Tab 在层内可见可聚焦元素 (offsetParent/disabled 过滤) 间循环,
+   焦点在层外时强制拉回; end-overlay 不陷阱 (同 1 的理由)
+3. **键盘不可达可点击元素键盘化**: think-head 折叠头 (原仅鼠标可点) tabindex=0 + role=button +
+   aria-expanded 双向同步 (含折叠持久化恢复路径) + Enter/Space 切换; 回放/思考分页器 pg-btn span→button
+   (CSS 原生按钮样式复位, Tab 聚焦 + Enter 原生触发)
+
+【i18n 漏挂 二期 (I7 的属性面姊妹盲区)】
+4. **title 错挂修复 x2**: btn-replay-watch 的 data-i18n-title 误挂 nav_replay (值='🎬') — 描述性
+   title「不调用LLM, 回放已保存棋谱」首次 apply 即被抹成图标; btn-fullscreen 同类 (F 键提示丢失);
+   新增 btn_watch_replay_title / btn_fullscreen_title 双语 2 键
+5. **i18n_check 新增 I8 组**: 静态属性 CJK 扫描 — title=/aria-label=/placeholder= 含中文必须挂
+   data-i18n-title/-aria/-i18n 标记 (I7 只查文本节点; apply() 仅挂标记才译属性); option 豁免同 I7;
+   红绿双向验证: 摘掉 think-captured 的 data-i18n-title → exit 1 点名 <div> title="红方吃掉的子力",
+   还原 → exit 0; 汇总行 7→8 组 (189 键)
+
+【PWA 二期 (第23轮 manifest 的下一步)】
+6. **service worker 离线壳**: 根级 sw.js (作用域=/) 网络优先 — 在线行为与无 SW 完全一致 (server 的
+   no-cache+ETag 语义不受影响), 网络失败才回退缓存; /api/* 永不缓存 (计费/动态), 非同源与非 GET 放行,
+   activate 清理旧版本缓存, 缓存按需填充 (改资源无需动 SW); app.js 注册 (http/https 守卫, file:// 静默跳过)
+7. **离线实测**: 停 server.js → 刷新 → 壳由 SW 缓存完整渲染 (90 格/棋盘线/引擎活/window.onerror 零异常)
+   → 红人点击走子 → 黑随机AI 无服务应答 (ply 0→2) — 「断网/未起服务也能玩随机AI」实证;
+   SW 注册态 activated + 壳缓存 20 项资源 (index+全部脚本); check_ui 新增第11节守护 (sw.js 在盘 +
+   fetch/activate 事件 + /api/ 排除 + app.js 注册调用), 随套件绿
+8. **favicon 品牌统一**: ♟ 西洋棋子 data-URI 占位 → ui/icon.svg (第23轮 暗金「弈」标; .svg MIME 既有映射)
+
+【服务端行为测试 二期 (不动 server.js)】
+9. **_server_http 11→17 断言**: /api/providers 形状 (200+非空数组) + 无 apiKey 字段泄漏 (仅 hasKey 布尔,
+   密钥永不出服务器的行为锁) / HEAD / → 200+ETag+空 body (Node HEAD 抑制) / GET /manifest.json →
+   application/json (PWA 托管) / GET /ui/icon.svg → image/svg+xml / GET /api/chat → 404 (非 POST 落静态
+   分支的方法守卫, 且不耗限流窗口); 全部插在限流爆发断言之前避免窗口互扰
+
+【渲染性能 + 文档对齐】
+10. **池化格子 onclick 单绑**: 第23轮 90 格池化遗留 — onclick 仍每次 render 重建 90 个闭包; 现 _clickBound
+    标记建池后只绑一次 (坐标恒定, 重复绑定纯浪费); 实测选子路径无回归 (selected 1 + 合法落点 2)
+11. **文档对齐**: README 双语 +「PWA (v1.0.daily)」特性段 (离线壳语义) + 目录树 +sw.js 行 + check_ui 测试行
+    (manifest+SW); ARCHITECTURE check_ui 行同步; CHANGELOG Round-24 里程碑
+
+- 验收: IAB 实机 — 预置 xq_v1_settings 双 random 自动开局 (ply 流动/32 子/思考状态条) + 上述全部特性断言;
+  **环境伪象两例 (记录防误判)**: ① IAB 后台标签页 document.visibilityState=hidden — rAF/过渡全冻结,
+  双 rAF 焦点在后台页观察不到 (前台模式第23轮 CDP 已验证同款), 冻结的 visibility 起始值还会让 focus()
+  静默失败 — 本轮曾据此误判陷阱失效, 以 preventDefault 返回值 + 禁过渡补丁复核后确认陷阱双向工作
+  (Shift+Tab 首元素→绕末, Tab 末元素→绕首); ② 截图管线 capture failed → 计算样式兜底 (9 列 grid/
+  暗金渐变盘/格过渡 0.15s/体色 #080607/h1 渐变字) 全过
+- server.js 未动 (零重启); ai/llm_agent.js 未动 (prompts_dump 无需重生成); i18n 净增 2 键 (zh/en 同步);
+  套件数不变 (12); 触点: index.html / sw.js (新) / ui/app.js / ui/renderer.js / ui/i18n.js /
+  test/i18n_check.js (+I8) / test/check_ui.js (+第11节) / test/_server_http.js (+6 断言) / README×2 /
+  docs/ARCHITECTURE.md / CHANGELOG
+- 门禁: 改动 js node --check 全过 + npm run check ALL PASS + npm test 并行 12/12 全绿

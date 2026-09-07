@@ -108,3 +108,15 @@ const themeMeta = /<meta name="theme-color" content="([^"]+)"/.test(html);
 if (!themeMeta) manIssues.push('index.html 缺 theme-color meta');
 console.log('PWA manifest:', manIssues.length ? manIssues.join(' | ') : 'OK (' + manLink + ', icons ' + (man.icons || []).length + ')');
 if (manIssues.length) process.exit(1);
+
+// 11) 第24轮 PWA service worker 守护: 根级 sw.js 在盘 (作用域=/) + 三事件/API排除 + app.js 有注册调用
+const swPath = __dirname + '/../sw.js';
+if (!fs.existsSync(swPath)) { console.log('SW: 根级 sw.js 缺失'); process.exit(1); }
+const swSrc = fs.readFileSync(swPath, 'utf8');
+const appSrc = fs.readFileSync(__dirname + '/../ui/app.js', 'utf8');
+const swIssues = [];
+if (!/addEventListener\('fetch'/.test(swSrc) || !/addEventListener\('activate'/.test(swSrc)) swIssues.push('sw.js 缺 fetch/activate 事件');
+if (!/\/api\//.test(swSrc)) swIssues.push('sw.js 未排除 /api/ (中继请求不得缓存)');
+if (!/serviceWorker\.register\(\s*'sw\.js'\s*\)/.test(appSrc)) swIssues.push('app.js 缺 sw.js 注册调用');
+console.log('SW:', swIssues.length ? swIssues.join(' | ') : 'OK (fetch+activate 事件, /api/ 排除, app.js 注册)');
+if (swIssues.length) process.exit(1);

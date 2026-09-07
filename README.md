@@ -40,6 +40,7 @@ LLM-chess/
 ├── index.html          # page shell (loads scripts only)
 ├── server.js           # local server: static hosting + /api/chat key relay
 ├── Start.cmd / Stop.cmd  # one-click background start/stop (port 8788)
+├── sw.js               # service worker: network-first offline shell (API never cached)
 ├── OPTIMIZATION_LOG.md # per-round optimization log (human + auto agent)
 ├── config/
 │   └── keys.json       # provider API keys (server-side only; auto-generated template on first run)
@@ -84,6 +85,9 @@ Re-drive saved games on the board **without calling the LLM** (localStorage reco
 
 ### HUD Dashboard & Cyber Theme (v1.7 / v2)
 Captured tray, latest-move badge (4s fade), Chinese notation (炮八平五 / 砲8平5), evaluation sparkline (±3, own perspective), 60s think reminder, check banner + board pulse, endgame summary card, collapsible think panels. Obsidian × dark-gold full reskin.
+
+### PWA (v1.0.daily)
+Installable (manifest + themed icon → standalone window / home-screen), plus a **network-first service worker**: online behavior is unchanged; offline (or with the server stopped) the shell keeps working for Random-AI play. `/api/*` responses are never cached.
 
 ### Rule Closures (Asian rules, engine-level)
 - **Perpetual check loses**: 6 consecutive checks without changing the move → `result='perpetual'`, checker loses (`ruleEnforce:false` to disable for analysis/replay).
@@ -157,7 +161,7 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 | `node test/cn_notation_check.js` | Chinese notation, 25 checks (classic anchors / file-disambiguation 前中后 / legacy-key sentinel) |
 | `node test/i18n_check.js` | i18n guards (zh/en key parity, placeholder parity, data-i18n / t() coverage) |
 | `node test/link_check.js` | docs link guard — relative links in all `.md` files must resolve to real files |
-| `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest |
+| `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest + SW guard |
 | `node test/_server_http.js` | server.js HTTP behavior, 11 checks (spawns a real server: health / static+ETag/304 / 404 / path-traversal 403 / malformed-encoding 400 / OPTIONS / bad-json 400 / unknown provider 400 / 429 rate limit) |
 | `node test/analyze_blunders.js <log.json>` | blunder detector (hanging moves, missed mates, shuffling; `--top=N --type=...`) |
 | `node test/match_headless.js <provider> <model> [n]` | headless LLM game, n moves |

@@ -7,6 +7,8 @@
  *  I4 index.html data-i18n / -title / -aria 引用的键全部存在于字典
  *  I5 ui/ + replay/ JS 里 t('key') / tArgs('key') 字面量键全部存在
  *  I6 关键哨兵键 (状态条/回放动态面板) 双语齐全
+ *  I7 静态 CJK 裸文本必须挂 data-i18n/-aria (第23轮)
+ *  I8 静态 CJK 属性 (title/aria-label/placeholder) 必须挂对应 data-i18n 标记 (第24轮)
  * 用法: node test/i18n_check.js
  */
 'use strict';
@@ -90,6 +92,22 @@ while ((mm7 = tagRe7.exec(htmlNoScript)) != null) {
 }
 ok(miss7.length === 0, 'I7 静态 CJK 文本 data-i18n 挂载' + (miss7.length ? ' (漏挂: ' + miss7.join(' ; ') + ')' : ' (0 漏挂)'));
 
-console.log('i18n_check: ' + (7 - fails.length) + '/7 groups PASS, ' + zk.length + ' keys');
+// I8 第24轮: 静态属性 CJK 漏挂守护 — title=/aria-label=/placeholder= 含中文必须挂对应 data-i18n 标记
+//   (I7 只查文本节点; 属性是同源盲区的另一半 — apply() 仅在挂了 data-i18n-title/-aria/-i18n 时才翻译对应属性)
+var tagRe8 = /<(\w+)([^>]*)>/g;
+var miss8 = [], mm8;
+while ((mm8 = tagRe8.exec(htmlNoScript)) != null) {
+  var tag8 = mm8[1], attrs8 = mm8[2] || '';
+  if (tag8 === 'script' || tag8 === 'style' || tag8 === 'option') continue;   // option 同 I7 豁免 (品牌名/语言名)
+  var mT8 = attrs8.match(/(?:^|\s)title="([^"]*)"/);
+  if (mT8 && CJK7.test(mT8[1]) && !/data-i18n-title=/.test(attrs8)) miss8.push('<' + tag8 + '> title="' + mT8[1].trim().slice(0, 20) + '"');
+  var mA8 = attrs8.match(/(?:^|\s)aria-label="([^"]*)"/);
+  if (mA8 && CJK7.test(mA8[1]) && !/data-i18n-aria=/.test(attrs8)) miss8.push('<' + tag8 + '> aria-label="' + mA8[1].trim().slice(0, 20) + '"');
+  var mP8 = attrs8.match(/(?:^|\s)placeholder="([^"]*)"/);
+  if (mP8 && CJK7.test(mP8[1]) && !/data-i18n=/.test(attrs8)) miss8.push('<' + tag8 + '> placeholder="' + mP8[1].trim().slice(0, 20) + '"');
+}
+ok(miss8.length === 0, 'I8 静态 CJK 属性 data-i18n 挂载' + (miss8.length ? ' (漏挂: ' + miss8.join(' ; ') + ')' : ' (0 漏挂)'));
+
+console.log('i18n_check: ' + (8 - fails.length) + '/8 groups PASS, ' + zk.length + ' keys');
 if (fails.length) { process.exit(1); }
 process.exit(0);

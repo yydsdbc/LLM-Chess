@@ -38,6 +38,7 @@ LLM-chess/
 ├── index.html          # 页面壳 (仅加载脚本, 无逻辑)
 ├── server.js           # 本地服务器: 静态托管 + /api/chat 密钥中继
 ├── Start.cmd / Stop.cmd  # 一键后台启停 (端口 8788)
+├── sw.js               # service worker: 网络优先离线壳 (/api 永不缓存)
 ├── OPTIMIZATION_LOG.md # 优化日志 (人工 + 自动优化代理逐轮追加, 防重复)
 ├── config/
 │   └── keys.json       # 各服务商 API Key (服务端持有, 首次运行自动生成模板)
@@ -110,6 +111,7 @@ LLM-chess/
 - **v3.7 对局质量与观战小改 (未入日志轮, 从代码注释回补)**：①评价层将门/肋道控制检测（己方大子/过河兵占对方 d/f 路 → 双向点名“压将门可谋杀势/九宫吃紧”，仅提醒不评分）；②HUD 阶段徽章（状态条显示 开局/中局/残局）；③合法列表排序（杀/困→将→吃→普通→危/亏，首因偏置）+ 标注跨 attempt 缓存；④HIST_CAP 裁剪后手数由引擎步数推导（原 convo.length+1 裁剪后错显）；⑤analyze_blunders 开局三任务检测 + --selftest 回归；test_evaluation 64→70 / test_llm_convo 120→124
 - **v3.8 自动优化轮 (cron 第7轮)**：①自然限着判和规则闭环 — 连续 120 半回合 (60 回合, 亚洲棋规) 无吃子 → 自动终局 result="natural" 和棋（naturalCap 可配/0 关，吃子重置，将军着法不计入，ruleEnforce:false 不判，兜住换序拉锯不精确重复可无限延续的盲区）；②retryWaitMs 模块级纯函数导出，退避覆盖 429/50[234]/gateway（旧版 504 仅等 0.4s 重打）；③PGN 导出和棋标准记号 1/2-1/2；④兵临九宫知识（过河兵入对方九宫区 子力 ×1.2 + 双向摘要点名，与底线老兵互斥）；⑤回放 URL 深链 #rp=ls:<id>（刷新/分享续看）；run_tests 42→44 / test_evaluation 70→78 / test_llm_convo 124→130
 - **v3.9 三方并行大轮 (第8轮, 30 项)**：core 真 bug 双修（undoPly genesis 板重算 + naturalClock 将军不计入口径落地，新增 XQ.Engine.replayStats）+ snapshot 增量（ply/naturalClock/repetitionCount）+ E18-E22/make-unmake 对账/E1 永真修复/loadSerialized 失败重置；ai 解析健壮性（全角救回文案保原文 origTextField/confidenceRaw/裸键容错/attempts 计数/opts.signal 外部中止/retryBlock 自查）；ui 与回放（parseEval 迁 replay.js 方向修复/导入落库深链/Record.summarize 一行战绩/沉底炮知识/cnNotation 同列前中后消歧/键盘 [ ] ±5/match_headless 原子写/analyze_blunders --top --type/check_ui src+LS 守护/模型表同步 kimi-k2.6·MiniMax-M3·qwen3.5-plus）
+- **v1.0.daily PWA 可安装**：manifest.json (独立窗口/主屏图标, 暗金「弈」标) + 根级 service worker 网络优先离线壳 — 在线行为不变, 断网/server 未启动时随机AI 对战壳仍可用, /api/* 永不缓存；check_ui 第10/11节守护。
 - **自动优化代理**：cron 每 30 分钟自动实施不重复优化并追加 `OPTIMIZATION_LOG.md`（全套测试守护）。
 
 ## 运行
@@ -169,7 +171,7 @@ LLM-chess/
 | `node test/cn_notation_check.js` | 中文记谱 25 项 (经典谱锚点/同列多兵前中后消歧/同列多车马边界/旧键哨兵) |
 | `node test/i18n_check.js` | i18n 守护 7 组 (zh/en 键集一致/键值非空/占位符一致/静态与动态键覆盖/哨兵键/静态CJK文本漏挂) |
 | `node test/link_check.js` | 文档链接守护 (全仓 .md 相对链接指向的文件必须存在) |
-| `node test/check_ui.js` | 语法 (17 文件) + getElementById/HTML 交叉核查 + script src/localStorage 前缀/发布文件/HTML 净化/PWA manifest 守护 |
+| `node test/check_ui.js` | 语法 (17 文件) + getElementById/HTML 交叉核查 + script src/localStorage 前缀/发布文件/HTML 净化/PWA manifest+SW 守护 |
 | `node test/_server_http.js` | server.js HTTP 行为 11 项 (真实起服务: 健康检查/静态+ETag/304/404/路径穿越403/畸形编码400/OPTIONS/非法JSON 400/未知服务商400/限流429) |
 | `node test/analyze_blunders.js <log.json>` | 瞎走检测 (送吃/免费吃/漏吃/拉锯/错失必杀, 静态交换评估) |
 | `node test/smoke_relay.js` | 真实中继单发 (需 key) |

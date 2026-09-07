@@ -32,6 +32,7 @@
     btn_skip_back5: '⏪ -5', btn_skip_fwd5: '⏪ +5',
     btn_fullscreen: '⛶ 全屏', btn_help: '? 帮助', btn_close: '关闭',
     btn_again: '🔁 再来一局', btn_watch_replay: '🎬 观看回放', btn_save_short: '💾 存棋谱',   // 第23轮 i18n 漏挂回补 (原静态文本无 data-i18n)
+    btn_watch_replay_title: '不调用LLM, 回放已保存棋谱', btn_fullscreen_title: '全屏观战 (F 键)',   // 第24轮: title 错挂修复 — 原挂 nav_replay('🎬')/btn_fullscreen('⛶ 全屏') 会把描述性提示抹成图标
     keys_note: '密钥仅保存在服务端 config/keys.json，前端永不接触。双方可各配不同类型/服务商。',
     btn_import: '📂 导入JSON', btn_export: '💾 导出PGN',
     btn_keyboard_help: '键盘快捷键',
@@ -132,6 +133,7 @@
     btn_skip_back5: '⏪ -5', btn_skip_fwd5: '⏩ +5',
     btn_fullscreen: '⛶ Fullscreen', btn_help: '? Help', btn_close: 'Close',
     btn_again: '🔁 Play again', btn_watch_replay: '🎬 Watch replay', btn_save_short: '💾 Save',   // round-23 i18n gap fix (was static text without data-i18n)
+    btn_watch_replay_title: 'No LLM calls — replays a saved game', btn_fullscreen_title: 'Fullscreen spectating (F)',   // round-24: title key fix — nav_replay/btn_fullscreen glyphs were erasing the descriptive tooltip
     keys_note: 'API keys live only in server-side config/keys.json — the browser never sees them. Each side can use a different type/provider.',
     btn_import: '📂 Import JSON', btn_export: '💾 Export PGN',
     btn_keyboard_help: 'Keyboard Shortcuts',

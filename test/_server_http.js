@@ -3,6 +3,7 @@
  * 真实 spawn server.js (随机高位端口), 断言此前零自动化覆盖的服务端行为:
  *   健康检查 / 静态托管+ETag/304 / 404 / 路径穿越 403 / 畸形百分号 400 /
  *   OPTIONS 预检 / bad json 400 / 未知服务商 400 / 限流 429 (8次/秒窗)
+ *   第24轮二期: providers 形状+无 apiKey 泄漏 / HEAD+ETag / manifest.json+icon.svg MIME / GET /api/chat 方法守卫
  * 零依赖 (http + child_process); 不打上游 — 全部走本地可判定路径。
  * 用法: node test/_server_http.js
  */
@@ -79,6 +80,22 @@ async function main() {
   ok(badJson.status === 400, 'POST /api/chat 非法 JSON → 400');
   const noProv = await postChat({ model: 'x', messages: [] });
   ok(noProv.status === 400, '未知服务商 → 400');
+
+  // 第24轮 二期: providers 形状+无密钥泄漏 / HEAD / 静态 MIME (manifest+icon) / GET 方法守卫
+  const prov = await req('GET', '/api/providers');
+  let provList = null;
+  try { provList = (JSON.parse(prov.body) || {}).providers; } catch (eP) {}
+  ok(prov.status === 200 && Array.isArray(provList) && provList.length > 0, 'GET /api/providers → 200 + 非空 providers 数组');
+  ok(Array.isArray(provList) && provList.every(function (p) { return !('apiKey' in p); }) && !/"apiKey"/.test(prov.body),
+    'providers 响应体无 apiKey 字段泄漏 (仅 hasKey 布尔)');
+  const head = await req('HEAD', '/');
+  ok(head.status === 200 && !!head.headers.etag && head.body === '', 'HEAD / → 200 + ETag + 空 body (Node HEAD 抑制)');
+  const man = await req('GET', '/manifest.json');
+  ok(man.status === 200 && /application\/json/.test(man.headers['content-type'] || ''), 'GET /manifest.json → 200 application/json (PWA)');
+  const icon = await req('GET', '/ui/icon.svg');
+  ok(icon.status === 200 && /image\/svg\+xml/.test(icon.headers['content-type'] || ''), 'GET /ui/icon.svg → 200 image/svg+xml (favicon/manifest 图标)');
+  const getChat = await req('GET', '/api/chat');
+  ok(getChat.status === 404, 'GET /api/chat (非 POST) → 404 (方法守卫落到静态分支, 且不耗限流窗口)');
 
   // 限流秒窗: 连发 12 个请求 (8/s 上限), 至少一个 429
   // (前 8 个可能 400/429 交错, 只断言出现 429 — 限流先于业务校验执行)

@@ -864,6 +864,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   /* ── 初始化 ── */
   document.addEventListener('DOMContentLoaded', function () {
     XQ.UI.drawBoard(document.getElementById('board-lines'));
+    // 第24轮 PWA 二期: service worker (网络优先离线壳, 见根级 sw.js) — file:// 等非安全上下文静默跳过
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      try { navigator.serviceWorker.register('sw.js'); } catch (eSW) {}
+    }
     initSoundToggle();
     // v3.9c 语言切换 (ui-lang 下拉: zh/en, localStorage xq_lang 持久化, 切换即刷新全部 data-i18n)
     var langSel = document.getElementById('ui-lang');
@@ -905,13 +909,21 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (head && !head._foldBound) {
         head._foldBound = true;
         head.insertAdjacentHTML('beforeend', '<span class="fold">▾</span>');
+        head.setAttribute('tabindex', '0');   // 第24轮 a11y: 折叠头键盘可达 (原仅鼠标可点)
+        head.setAttribute('role', 'button');
+        var syncExp = function () { head.setAttribute('aria-expanded', root.classList.contains('collapsed') ? 'false' : 'true'); };
+        syncExp();
         head.addEventListener('click', function () {
           root.classList.toggle('collapsed');
           var f = head.querySelector('.fold');
           if (f) f.textContent = root.classList.contains('collapsed') ? '▸' : '▾';
+          syncExp();
           try { localStorage.setItem('xq_fold_' + (id === 'think-red' ? 'red' : 'black'), root.classList.contains('collapsed') ? '1' : '0'); } catch (eF) {}   // v1.0.daily: 折叠态持久化
         });
-        try { if (localStorage.getItem('xq_fold_' + (id === 'think-red' ? 'red' : 'black')) === '1') { root.classList.add('collapsed'); var f0 = head.querySelector('.fold'); if (f0) f0.textContent = '▸'; } } catch (eF2) {}
+        head.addEventListener('keydown', function (ev) {   // 第24轮: Enter/Space 切换折叠
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); head.click(); }
+        });
+        try { if (localStorage.getItem('xq_fold_' + (id === 'think-red' ? 'red' : 'black')) === '1') { root.classList.add('collapsed'); var f0 = head.querySelector('.fold'); if (f0) f0.textContent = '▸'; syncExp(); } } catch (eF2) {}
       }
     });
     document.getElementById('gear-toggle').onclick = openAISettings;
@@ -961,13 +973,28 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       document.addEventListener(ev, function () { ensureAudio(); }, { once: false, passive: true });
     });
 
-    // 设置层 Esc 独立监听 (输入框内也生效; 主 keydown 对 INPUT 早退, 管不到这里)
+    // 设置层独立监听 (输入框内也生效; 主 keydown 对 INPUT 早退, 管不到这里)
     document.addEventListener('keydown', function (ev) {
-      if (ev.key !== 'Escape') return;
       var so3 = document.getElementById('settings-overlay');
-      if (so3 && so3.classList.contains('show')) {
+      if (!so3 || !so3.classList.contains('show')) return;
+      if (ev.key === 'Escape') {
         closeAISettings();
         if (kbCursor) { kbCursor = null; refresh(); }
+        return;
+      }
+      // 第24轮 a11y: aria-modal=true 的配套 Tab 焦点陷阱 — 焦点在层内循环 (原 Tab 可逃出面板落到被遮住的棋盘)
+      if (ev.key === 'Tab') {
+        var fables = Array.prototype.filter.call(
+          so3.querySelectorAll('button, input, select, [tabindex="0"]'),
+          function (el) { return el.offsetParent !== null && !el.disabled; }
+        );
+        if (!fables.length) return;
+        var act = document.activeElement;
+        if (ev.shiftKey) {
+          if (act === fables[0] || !so3.contains(act)) { fables[fables.length - 1].focus(); ev.preventDefault(); }
+        } else {
+          if (act === fables[fables.length - 1] || !so3.contains(act)) { fables[0].focus(); ev.preventDefault(); }
+        }
       }
     });
     // 快捷键: M 静音 / R 重开
