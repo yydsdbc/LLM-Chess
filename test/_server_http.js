@@ -97,6 +97,20 @@ async function main() {
   const getChat = await req('GET', '/api/chat');
   ok(getChat.status === 404, 'GET /api/chat (非 POST) → 404 (方法守卫落到静态分支, 且不耗限流窗口)');
 
+  // 第26轮 三期: 根级 sw.js 托管 / POST 方法守卫对称 / 空体 400 / health 形状 / 2MB 请求体上限
+  const swResp = await req('GET', '/sw.js');
+  ok(swResp.status === 200 && /javascript/.test(swResp.headers['content-type'] || ''), 'GET /sw.js → 200 + JS MIME (PWA 离线壳根级托管)');
+  const postProv = await req('POST', '/api/providers', '{}', { 'Content-Type': 'application/json' });
+  ok(postProv.status === 404, 'POST /api/providers (非 GET) → 404 (与 GET /api/chat 方法守卫对称)');
+  const emptyBody = await req('POST', '/api/chat', '', { 'Content-Type': 'application/json' });
+  ok(emptyBody.status === 400, 'POST /api/chat 空请求体 → 400');
+  const health = await req('GET', '/api/health');
+  let healthShape = false;
+  try { const hj = JSON.parse(health.body) || {}; healthShape = hj.ok === true && hj.relay === true && !!hj.version; } catch (eH) {}
+  ok(health.status === 200 && healthShape, 'GET /api/health → 形状 {ok,relay,version} (前端 relayAvailable 探测依赖)');
+  const huge = await req('POST', '/api/chat', Buffer.alloc(2 * 1024 * 1024 + 1024, 97).toString('utf8'), { 'Content-Type': 'application/json' });
+  ok(huge.status === 0, 'POST /api/chat 请求体 >2MB → 连接中断 (readBody 上限防 OOM)');
+
   // 限流秒窗: 连发 12 个请求 (8/s 上限), 至少一个 429
   // (前 8 个可能 400/429 交错, 只断言出现 429 — 限流先于业务校验执行)
   const burst = [];

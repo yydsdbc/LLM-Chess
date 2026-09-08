@@ -97,6 +97,8 @@
             c.appendChild(pe0);
           }
           c._glyph = wantKey;
+          // 第26轮 a11y: 棋子变更时同步 aria-label (坐标+棋子, 读屏可逐格探索盘面; 字符随 xq_pieces 语言偏好, 坐标语言中立)
+          try { c.setAttribute('aria-label', XQ.Move.sqName({ x: x, y: y }) + (p ? ' ' + pieceGlyph(p) : '')); } catch (eA) {}
         }
         var pe = c.firstChild;
         if (p) {

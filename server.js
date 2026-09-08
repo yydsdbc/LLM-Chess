@@ -287,7 +287,7 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({ ok: true, relay: true, version: VERSION }));
   }
 
-  if (u === '/api/providers') {
+  if (u === '/api/providers' && req.method === 'GET') {   // 第26轮: 加 GET 门禁 (原任意方法都返回列表; 非 GET 落静态分支 404, 与 /api/chat 的方法守卫同款) — 需重启生效
     const keys = loadKeys();
     const list = Object.keys(keys.providers || {}).map(id => ({
       id, name: keys.providers[id].name, baseUrl: keys.providers[id].baseUrl,

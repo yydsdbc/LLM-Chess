@@ -162,7 +162,7 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 | `node test/i18n_check.js` | i18n guards (zh/en key parity, placeholder parity, data-i18n / t() coverage) |
 | `node test/link_check.js` | docs link guard — relative links in all `.md` files must resolve to real files |
 | `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest + SW guard |
-| `node test/_server_http.js` | server.js HTTP behavior, 11 checks (spawns a real server: health / static+ETag/304 / 404 / path-traversal 403 / malformed-encoding 400 / OPTIONS / bad-json 400 / unknown provider 400 / 429 rate limit) |
+| `node test/_server_http.js` | server.js HTTP behavior, 22 checks (spawns a real server: health shape / static+ETag/304 / 404 / path-traversal 403 / malformed-encoding 400 / OPTIONS / bad-json 400 / empty body 400 / >2MB abort / unknown provider 400 / providers shape + no-key-leak / HEAD+ETag / manifest+icon+sw MIME / method guards / 429 rate limit) |
 | `node test/analyze_blunders.js <log.json>` | blunder detector (hanging moves, missed mates, shuffling; `--top=N --type=...`) |
 | `node test/match_headless.js <provider> <model> [n]` | headless LLM game, n moves |
 

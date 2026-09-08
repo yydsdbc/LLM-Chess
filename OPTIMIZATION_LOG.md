@@ -775,3 +775,54 @@
   黑炮 h8→e8 慢动作 1.6s 目检中间帧无穿层伪影; 结束态: 棋子类名干净 (piece black) / 抬层移除 /
   ghost 自清 / 无残留 slide-in; node --check + npm run check + npm test 12/12 全绿
 - 触点: index.html (关键帧+2类) / ui/renderer.js (差量渲染内滑动分支) / ui/app.js (rpPaintBoard) / CHANGELOG
+
+## 2026-09-09 02:51 第26轮 (v1.0.daily, zcode — 指令「优化, 方向参考 a11y 二期/PWA/渲染性能/服务端行为测试/文档对齐/i18n 漏挂」)
+
+【i18n 漏挂 三期 (I7/I8 静态面之外的第三盲区: JS 动态拼装串)】
+1. **对局横幅 x6**: 将军 (硬编码却已有字典键 status_check, 直接复用) / 二次重复 / 重复判和 / 长将警告 /
+   思考超时 / 走法被拒 → warn_repetition_2 · warn_repetition_draw · warn_long_check · warn_think_slow ·
+   warn_move_rejected 5 新键; 兑底徽章 ⚠兜底 → fb_badge
+2. **终局卡统计块**: eo.innerHTML 整段硬编码中文 (共X手/红方/黑方/均Xs/吃X子/缓存/拦截/未上报/🎬回放本局)
+   → eo_stats_total + eo_stats_side (红黑两行共用一键, 方别走 status_side_*) + eo_cache_na + eo_replay_btn;
+   回放工具条 ⟲还原 → rp_restore
+3. **实机抓漏 (预置双 random 自动开局 EN 面现场)**: 状态条每秒 ticker 第X手·Xs·重试X次 → status_ticker +
+   status_retry (占位符嵌套 rt 键); ⚡思考中… → think_busy; 思考面板表头 红方/等待对局开始… → 复用
+   status_side_* + think_wait; 随机AI(红) 标签 → agent_random (侧别词走 rp_red_short); 失败: → agent_fail;
+   errBanner 7 分类横幅 (限流/繁忙/强制思考/未知字段/未配Key/400/网络) → err_* 7 键 — 本轮净增 24 键 (189→213)
+
+【a11y 四期】
+4. **90 格 aria-label**: 差量渲染器在棋子变更分支 (c._glyph !== wantKey) 同步 aria-label =
+   坐标(XQ.Move.sqName) + 棋子字符(pieceGlyph, 随 xq_pieces 语言偏好) — 读屏可逐格探索盘面;
+   空格仅坐标; 语言中立无键值同步负担; 实机 90/90 全覆盖 (样例 "a10 车", 空格 "b10")
+
+【PWA 三期】
+5. **manifest id + shortcuts**: id "./" (PWA 身份, 卸载重装/多入口下存储归属一致) + shortcuts 新对局
+   快捷入口; check_ui 第10节扩 id/shortcuts 缺失即 exit 1; 实机 fetch /manifest.json 字段确认
+
+【服务端行为测试 三期 (17→22 断言, 捞到真缺口)】
+6. **server.js 一行修复 (需重启生效)**: 新断言暴露 /api/providers 无方法门禁 — 任意方法 (POST/PUT) 都返回
+   列表, 与 /api/chat 的 POST 门禁不对称; `if (u === '/api/providers')` → 加 `&& req.method === 'GET'`,
+   非 GET 落静态分支 404 (同款守卫模式); 实机冒烟: POST → 404 命中
+7. **+5 断言**: GET /sw.js → 200 + JS MIME (第24轮离线壳的托管面此前无测试) / POST /api/providers → 404 /
+   POST /api/chat 空请求体 → 400 / GET /api/health 形状 {ok,relay,version} (前端 relayAvailable 探测依赖) /
+   请求体 >2MB → 连接中断 (readBody 上限防 OOM, status 0)
+
+【守护自身升级 + 文档对齐】
+8. **i18n_check I5 拓宽**: 原正则只认 \bt\(/tArgs\( 字面 — 本地别名 (T/TA/Ts/TAs/TwE/TI… T 家族) 的字典调用
+   从未被守护 (68 处 T( 历史盲区, 23 处/22 键); 拓宽为 [tT][A-Za-z0-9]* 被调名捕获 + 排除名单
+   (toggle/thinkPanel/rpToggleBookmark 同形误报) → 146 处/113 键; 红绿验证: 排除名单误置键名时 exit 1 逐键点名
+9. **文档对齐**: README 双语 _server_http 行 11 项→22 项 (第24轮断言数 11→17 时未同步的双语测试表历史漂移);
+   zh i18n 行 7 组→8 组 (第24轮 I8 起即 8 组) + I5 别名覆盖注记
+
+- 验证: 改动 js node --check 全过 + npm run check ALL PASS + npm test 并行 12/12 全绿 + IAB 实机 —
+  预置 xq_v1_settings 双 random 自动开局 (ply 流动/32 子) + 90/90 格 aria-label + EN 切换 lang=en +
+  EN ticker "Move 0 · 0s · 开局" + 面板名 Red + ⚡ Thinking… + manifest id/shortcuts 真实 fetch +
+  POST providers 404 实机命中; 截图管线 capture failed (第24轮同款环境伪象) → 计算样式兜底全过
+  (9 列 grid/体色 #080607/90 格/32 子/全部带 aria-label)
+- 既有观察 (非本轮引入, 留待后续): status_thinking 模型标签已含方别, 再拼 side → EN "(Red) (Red)" 重复
+  (zh 同样 "随机AI(红)（红方）"); #status-text 首帧静态中文 (豁免区, 首渲染 ~100ms 内被覆盖, 设计如此)
+- 触点: ui/i18n.js (+24 键) / ui/app.js (13 处调用点) / ui/renderer.js (aria-label 分支) / manifest.json /
+  server.js (一行 GET 门禁, **需重启**) / test/_server_http.js (+5) / test/check_ui.js (+id/shortcuts) /
+  test/i18n_check.js (I5 拓宽) / README×2 / CHANGELOG; ai/llm_agent.js 未动 (prompts_dump 新鲜度 PASS);
+  server.js 改动 → 用户需重启进程生效
+- 门禁: npm run check ALL PASS + npm test 并行 12/12 全绿 (套件数不变 12); i18n 净增 24 键 (zh/en 同步)

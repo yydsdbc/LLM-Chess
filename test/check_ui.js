@@ -99,6 +99,8 @@ const manIssues = [];
 if (!man.name || !man.short_name) manIssues.push('缺 name/short_name');
 if (man.display !== 'standalone') manIssues.push('display != standalone');
 if (!man.start_url) manIssues.push('缺 start_url');
+if (!man.id) manIssues.push('缺 id (第26轮: PWA 身份, 卸载重装/多 start_url 下缓存与存储归属一致)');
+if (!(man.shortcuts || []).length) manIssues.push('缺 shortcuts (第26轮: 系统级快捷入口)');
 if (!man.theme_color || !man.background_color) manIssues.push('缺 theme_color/background_color');
 for (const ic of (man.icons || [])) {
   if (!fs.existsSync(__dirname + '/../' + ic.src)) manIssues.push('图标不在盘: ' + ic.src);

@@ -169,10 +169,10 @@ LLM-chess/
 | `node test/replay_smoke.js` | 回放系统 45 项 (数据层/控制层/倍速/循环/跳转/容错/杀标注/parseEval方向/导入落库/战绩汇总) |
 | `node test/_clean_reason_check.js` | 思考流清洗 10 项 (垃圾压缩/记谱保留/复述删改) |
 | `node test/cn_notation_check.js` | 中文记谱 25 项 (经典谱锚点/同列多兵前中后消歧/同列多车马边界/旧键哨兵) |
-| `node test/i18n_check.js` | i18n 守护 7 组 (zh/en 键集一致/键值非空/占位符一致/静态与动态键覆盖/哨兵键/静态CJK文本漏挂) |
+| `node test/i18n_check.js` | i18n 守护 8 组 (zh/en 键集一致/键值非空/占位符一致/静态与动态键覆盖(含T家族别名)/哨兵键/静态CJK文本漏挂/静态CJK属性漏挂) |
 | `node test/link_check.js` | 文档链接守护 (全仓 .md 相对链接指向的文件必须存在) |
 | `node test/check_ui.js` | 语法 (17 文件) + getElementById/HTML 交叉核查 + script src/localStorage 前缀/发布文件/HTML 净化/PWA manifest+SW 守护 |
-| `node test/_server_http.js` | server.js HTTP 行为 11 项 (真实起服务: 健康检查/静态+ETag/304/404/路径穿越403/畸形编码400/OPTIONS/非法JSON 400/未知服务商400/限流429) |
+| `node test/_server_http.js` | server.js HTTP 行为 22 项 (真实起服务: 健康形状/静态+ETag/304/404/路径穿越403/畸形编码400/OPTIONS/非法JSON 400/空体400/超2MB中断/未知服务商400/providers形状+无密钥泄漏/HEAD+ETag/manifest+icon+sw MIME/方法守卫/限流429) |
 | `node test/analyze_blunders.js <log.json>` | 瞎走检测 (送吃/免费吃/漏吃/拉锯/错失必杀, 静态交换评估) |
 | `node test/smoke_relay.js` | 真实中继单发 (需 key) |
 | `node test/smoke_ui.js [model]` | 无头 Edge 冒烟 13 项 (自动开局/决策日志/分页哨兵/截图) |

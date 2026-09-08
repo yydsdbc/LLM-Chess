@@ -219,7 +219,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (log.length && XQ.UI.decisionCards) {
       return { cards: XQ.UI.decisionCards(log.slice(-4), log.length), active: false };
     }
-    return { text: logTextFor(side) || '等待对局开始…', active: false };
+    var Tw0 = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    return { text: logTextFor(side) || Tw0('think_wait'), active: false };   // 第26轮 i18n
   }
   function afterMove(res, secs, meta) {
     var m = res.move;
@@ -288,7 +289,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var Ts = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TAs = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
       srEl.textContent = TAs('sr_move', { n: engine.ply(), side: Ts(side === 'red' ? 'status_side_red' : 'status_side_black'), cn: cn || (XQ.Move.sqName(m.from) + '->' + XQ.Move.sqName(m.to)) });   // v1.0.daily a11y: 屏幕阅读器着法播报
     }
-    var fbBadge = entry.summary === '兑底·安全着法' ? ' <span style="color:#e67e22">⚠兜底</span>' : '';   // v2.0 兑底透明化
+    var fbBadge = entry.summary === '兑底·安全着法' ? ' <span style="color:#e67e22">' + Ts('fb_badge') + '</span>' : '';   // v2.0 兑底透明化; 第26轮 i18n (兑底徽章双语)
     XQ.UI.lastMoveBadge('<b>#' + engine.ply() + '</b> ' + (side === 'red' ? '🔴' : '⚫') + ' '
       + XQ.Piece.CHARS[side][m.piece.type] + ' <b>' + esc2(cn) + '</b> <span style="opacity:.65">' + esc2(XQ.Move.sqName(m.from) + '→' + XQ.Move.sqName(m.to)) + '</span>'
       + (m.captured ? ' <span style="color:#e67e22">✕' + XQ.Piece.CHARS[m.captured.color][m.captured.type] + '</span>' : '') + fbBadge);
@@ -296,7 +297,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     lastBadgeTimer = setTimeout(function () { XQ.UI.lastMoveBadge(null); }, 4000);
     if (engine.inCheck(engine.turn()) && !engine.isOver()) {
       checkFlashUntil = Date.now() + 2500;
-      warnBanner('⚠️ 将军！', side);
+      warnBanner(Ts('status_check'), side);   // 第26轮: 复用字典 status_check (原硬编码中文, EN 用户不可读)
       var bd = document.getElementById('board');
       if (bd) {
         bd.classList.remove('check-pulse'); void bd.offsetWidth; bd.classList.add('check-pulse');
@@ -309,7 +310,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var repN = engine.repetitionCount();
       if (repN >= 2 && repN > repWarnedN) {
         repWarnedN = repN;
-        warnBanner(repN >= 3 ? '⚠️ 已' + repN + '次重复局面 — 引擎已自动判和' : '⚠️ 局面第二次重复 — 再重复一次将自动判和, 优势方须变招', side);
+        warnBanner(repN >= 3 ? TAs('warn_repetition_draw', { n: repN }) : TAs('warn_repetition_2'), side);   // 第26轮 i18n
       }
     }
     // v1.7.8 长将告警: 一方连续将军 4 手以上 → 横幅提示长将判负风险 (引擎 checkStreak)
@@ -317,7 +318,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var csN = engine.checkStreak(side);
       if (csN >= 4 && csN > chWarnedN) {
         chWarnedN = csN;
-        warnBanner('⚠️ ' + (side === 'red' ? '🔴 红方' : '⚫ 黑方') + '已连续将军 ' + csN + ' 手 — 长将判负风险, 需换攻', side);
+        warnBanner(TAs('warn_long_check', { side: (side === 'red' ? '🔴 ' + Ts('status_side_red') : '⚫ ' + Ts('status_side_black')), n: csN }), side);   // 第26轮 i18n
       }
     }
     if (currentRecord) {
@@ -335,17 +336,22 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         // v1.7 终局结算数据
         var eo = document.getElementById('eo-stats');
         if (eo) {
+          var Te = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TAe = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };   // 第26轮 i18n
           var rAvg = thinkStat.red.moves ? (thinkStat.red.total / thinkStat.red.moves).toFixed(1) : '-';
           var bAvg = thinkStat.black.moves ? (thinkStat.black.total / thinkStat.black.moves).toFixed(1) : '-';
           var fmtT = function (x) { return x ? (x > 999 ? (x / 1000).toFixed(1) + 'k' : x) : '-'; };
           var tk = currentRecord.tokens || {};
-          var cachePct = function (t2) { return t2 && t2.cacheHit && t2.prompt ? Math.round(100 * t2.cacheHit / t2.prompt) + '%' : '未上报'; };   // v3.4 终局卡缓存命中
+          var cachePct = function (t2) { return t2 && t2.cacheHit && t2.prompt ? Math.round(100 * t2.cacheHit / t2.prompt) + '%' : Te('eo_cache_na'); };   // v3.4 终局卡缓存命中; 第26轮 i18n
           var blkCnt = function (t2) { return t2 && t2.blocked ? t2.blocked : 0; };   // v3.4 系统拦截计数
-          eo.innerHTML = '共 <b>' + engine.ply() + '</b> 手 · 用时 <b>' + Math.round((Date.now() - startTime) / 1000) + 's</b>'
-            + '<br>🔴 红方 均 <b>' + rAvg + 's</b>/手 · ' + fmtT(tk.red && tk.red.total) + ' tok · 吃 ' + capturedBy.red.length + ' 子 · 缓存 ' + cachePct(tk.red) + ' · 拦截 ' + blkCnt(tk.red)
-            + '<br>⚫ 黑方 均 <b>' + bAvg + 's</b>/手 · ' + fmtT(tk.black && tk.black.total) + ' tok · 吃 ' + capturedBy.black.length + ' 子 · 缓存 ' + cachePct(tk.black) + ' · 拦截 ' + blkCnt(tk.black);
+          var eoLine = function (dot, sd) {   // 第26轮: 红黑统计行共用一键 eo_stats_side (原两行硬编码中文)
+            return dot + ' ' + Te(sd === 'red' ? 'status_side_red' : 'status_side_black') + ' '
+              + TAe('eo_stats_side', { a: sd === 'red' ? rAvg : bAvg, t: fmtT(tk[sd] && tk[sd].total), c: capturedBy[sd].length, p: cachePct(tk[sd]), b: blkCnt(tk[sd]) });
+          };
+          eo.innerHTML = TAe('eo_stats_total', { n: engine.ply(), s: Math.round((Date.now() - startTime) / 1000) })
+            + '<br>' + eoLine('🔴', 'red')
+            + '<br>' + eoLine('⚫', 'black');
           // v2.4 终局一键回放本局 (对局→录像闭环, 免去回放选择器翻找; Record 已在上方落 localStorage)
-          eo.insertAdjacentHTML('beforeend', '<div style="margin-top:8px"><button class="btn" id="eo-replay">🎬 回放本局</button></div>');
+          eo.insertAdjacentHTML('beforeend', '<div style="margin-top:8px"><button class="btn" id="eo-replay">' + Te('eo_replay_btn') + '</button></div>');   // 第26轮 i18n
           var eob = eo.querySelector('#eo-replay');
           if (eob) eob.onclick = function () { rpWatchRecord(); };
         }
@@ -417,12 +423,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     view.aiRetries = view.aiRetries || {}; view.aiRetries[side] = 0;   // v2.5: 每手重试计数归零
     thinkWarned = false;
     if (thinkTimer) clearInterval(thinkTimer);
+    var TI = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };   // 第26轮 i18n (ticker/慢思考横幅)
     var tick = function () {
       var s = Math.floor((Date.now() - start) / 1000);           // 当前思考时间 → 顶部状态条
       var g = Math.floor((Date.now() - startTime) / 1000);       // 全局时间
       var info = document.getElementById('status-info');
-      if (info && view.aiThinking) { var rcR = view.aiRetries ? view.aiRetries[view.aiThinkingSide] : 0; var phT = ''; try { var pht = XQ.XiangqiKnowledge && XQ.XiangqiKnowledge.detectPhase(engine); phT = (XQ.XiangqiKnowledge.PHASE_CN && XQ.XiangqiKnowledge.PHASE_CN[pht]) || ''; } catch (eP) {} info.textContent = '第' + engine.ply() + '手 · ' + s + 's' + (phT ? ' · ' + phT : '') + (rcR ? ' · 重试' + rcR + '次' : ''); }   // v1.7.4 全局时间只在下方横幅; v2.5 重试可见; v3.7 阶段徽章
-      if (s >= 60 && !thinkWarned) { thinkWarned = true; warnBanner('⚠ ' + modelName + ' 已思考 ' + s + 's (排队/网络波动?)', side); }
+      if (info && view.aiThinking) { var rcR = view.aiRetries ? view.aiRetries[view.aiThinkingSide] : 0; var phT = ''; try { var pht = XQ.XiangqiKnowledge && XQ.XiangqiKnowledge.detectPhase(engine); phT = (XQ.XiangqiKnowledge.PHASE_CN && XQ.XiangqiKnowledge.PHASE_CN[pht]) || ''; } catch (eP) {} info.textContent = TI('status_ticker', { n: engine.ply(), s: s, ph: phT ? ' · ' + phT : '', rt: rcR ? TI('status_retry', { n: rcR }) : '' }); }   // v1.7.4 全局时间只在下方横幅; v2.5 重试可见; v3.7 阶段徽章; 第26轮 i18n
+      if (s >= 60 && !thinkWarned) { thinkWarned = true; warnBanner(TI('warn_think_slow', { m: modelName, n: s }), side); }   // 第26轮 i18n
       if (Date.now() >= checkFlashUntil) {   // 将军横幅闪屏期不被 tick 覆盖
         XQ.UI.aiBanner('busy', '全局 ' + (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2), side);   // v1.7.4: 下方横幅只显示全局时间 (上方已含模型/方别/手数)
       }
@@ -447,17 +454,18 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     clearTimeout(warnTimer);
     warnTimer = setTimeout(function () { XQ.UI.aiBanner('', ''); }, 6000);   // 警告 6s 后自动消失
   }
-  // v1.5.5: LLM 错误分类提示 (常驻 15s, 区分网络/鉴权/格式/上游限流)
+  // v1.5.5: LLM 错误分类提示 (常驻 15s, 区分网络/鉴权/格式/上游限流) — 第26轮: 分类文案全部走字典
   function errBanner(model, errMsg, side) {
     var m = String(errMsg || '').slice(0, 80);
-    var tag = /429|\u9650\u6d41|rate/.test(m) ? '⚠ 上游限流 (429)'
-            : /503|\u7e41\u5fd9|busy/.test(m) ? '⚠ 上游繁忙 (503)'
-            : /REASONING_REQUIRED|\u6df1\u5ea6\u601d\u8003/.test(m) ? '⚠ 模型强制思考, 已自动重试'
-            : /UNKNOWN_FIELD|\u672a\u77e5\u5b57\u6bb5/.test(m) ? '⚠ 不支持的思考参数, 已摘掉重试'
-            : /402|insufficient balance|\u4f59\u989d|\u6b20\u8d39|quota/i.test(m) ? (XQ.I18N ? XQ.I18N.t('warn_pay') : '')
-            : /401|403|\u9274\u6743|key|Key/.test(m) ? '🔑 API Key 未配或失效'
-            : /400/.test(m) ? '❌ 接口返回 400 (格式错误)'
-            : /fetch|network|abort|timeout/.test(m) ? '🌐 网络异常'
+    var TwE = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    var tag = /429|\u9650\u6d41|rate/.test(m) ? TwE('err_rate_limited')
+            : /503|\u7e41\u5fd9|busy/.test(m) ? TwE('err_busy')
+            : /REASONING_REQUIRED|\u6df1\u5ea6\u601d\u8003/.test(m) ? TwE('err_think_required')
+            : /UNKNOWN_FIELD|\u672a\u77e5\u5b57\u6bb5/.test(m) ? TwE('err_unknown_field')
+            : /402|insufficient balance|\u4f59\u989d|\u6b20\u8d39|quota/i.test(m) ? TwE('warn_pay')
+            : /401|403|\u9274\u6743|key|Key/.test(m) ? TwE('err_bad_key')
+            : /400/.test(m) ? TwE('err_bad_request')
+            : /fetch|network|abort|timeout/.test(m) ? TwE('err_network')
             : '❌ ' + m;
     XQ.UI.aiBanner('warn', tag, side);
     var abEl = document.getElementById('ai-banner');
@@ -510,7 +518,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       bar = document.createElement('div');
       bar.id = 'replay-bar';
       bar.style.cssText = 'position:absolute;left:50%;top:6px;transform:translateX(-50%);z-index:55;display:none;gap:6px';
-      bar.innerHTML = '<button id="replay-restore" style="background:#f1c40f;color:#1a0e08;border:1px solid #a08040;border-radius:8px;padding:4px 12px;cursor:pointer;font-size:12px;font-weight:bold">⟲ 还原</button>';
+      bar.innerHTML = '<button id="replay-restore" style="background:#f1c40f;color:#1a0e08;border:1px solid #a08040;border-radius:8px;padding:4px 12px;cursor:pointer;font-size:12px;font-weight:bold">' + (XQ.I18N ? XQ.I18N.t('rp_restore') : '⟲ 还原') + '</button>';   // 第26轮 i18n
       document.body.appendChild(bar);
       bar.querySelector('#replay-restore').onclick = replayRestore;
     }
@@ -536,11 +544,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     // 对方面板: 保留决策卡片 (v1.5), 无卡片时退回日志文本
     var oppSide = side === 'red' ? 'black' : 'red';
     XQ.UI.thinkPanel(oppSide, decisionPanelOpts(oppSide));
+    var Tw = XQ.I18N ? XQ.I18N.t : function (k) { return k; };   // 第26轮 i18n (思考中提示)
     var thinkCards = decisionLog[side] && decisionLog[side].length ? XQ.UI.decisionCards(decisionLog[side].slice(-4), decisionLog[side].length) : null;
-        if (thinkCards) thinkCards.push('<div class="dcard d-thinking">⚡ 思考中…</div>');   // v1.7.3: 保留决策卡+思考中提示
+        if (thinkCards) thinkCards.push('<div class="dcard d-thinking">' + Tw('think_busy') + '</div>');   // v1.7.3: 保留决策卡+思考中提示; 第26轮 i18n
         XQ.UI.thinkPanel(side, thinkCards
-          ? { cards: thinkCards, active: true, info: infoHTML(side, holder, '') + ' <span class="info-thinking">⚡ 思考中…</span>' }
-          : { text: '思考中…', active: true, info: infoHTML(side, holder, '') + ' <span class="info-thinking">⚡ 思考中…</span>' });
+          ? { cards: thinkCards, active: true, info: infoHTML(side, holder, '') + ' <span class="info-thinking">' + Tw('think_busy') + '</span>' }
+          : { text: Tw('think_busy'), active: true, info: infoHTML(side, holder, '') + ' <span class="info-thinking">' + Tw('think_busy') + '</span>' });
     refresh();                       // 先渲染顶部状态条 (方色/文案)
     bannerThinking(holder.model, side);   // 再启动 tick: 顶部思考时间 + 底部全局时间
     setTimeout(function () {
@@ -557,7 +566,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         thinkStart[side] = 0;
         bannerClear();
         if (res.ok) { selected = null; afterMove(res, secs, mv.meta); }
-        else { warnBanner('⚠️ ' + holder.model + ' 走法被拒: ' + res.reason, side); }
+        else { warnBanner((XQ.I18N ? XQ.I18N.tArgs('warn_move_rejected', { m: holder.model, r: res.reason }) : '⚠️ ' + holder.model + ' 走法被拒: ' + res.reason), side); }   // 第26轮 i18n
         refresh();
       }).catch(function (err) {
         var secs = thinkStart[side] ? Math.round((Date.now() - thinkStart[side]) / 1000) : 0;
@@ -579,7 +588,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             refresh();
           }, 1200);
         } else {
-          XQ.UI.thinkPanel(side, { text: '失败: ' + String(err && err.message || err).slice(0, 80), active: false });
+          XQ.UI.thinkPanel(side, { text: (XQ.I18N ? XQ.I18N.tArgs('agent_fail', { m: String(err && err.message || err).slice(0, 80) }) : '失败: ' + String(err && err.message || err).slice(0, 80)), active: false });   // 第26轮 i18n
           errBanner(holder.model, err && err.message || err, side);
           refresh();
         }
@@ -715,7 +724,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var v = s[side] || { type: 'human' };
       if (!v.enabled || !v.type || v.type === 'human') { agents[side] = null; return; }
       if (v.type === 'random') {
-        agents[side] = { kind: 'random', label: '随机AI(' + (side === 'red' ? '红' : '黑') + ')', agent: XQ.RandomAgent.create({ side: side, name: 'Random-' + side }) };
+        var Ts7 = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };   // 第26轮 i18n
+        agents[side] = { kind: 'random', label: Ts7('agent_random', { side: (XQ.I18N ? XQ.I18N.t(side === 'red' ? 'rp_red_short' : 'rp_black_short') : (side === 'red' ? '红' : '黑')) }), agent: XQ.RandomAgent.create({ side: side, name: 'Random-' + side }) };
       } else if (v.type === 'llm') {
         if (!relayAvailable) {
           warnBanner((XQ.I18N ? XQ.I18N.t('warn_llm_no_server') : '⚠️ LLM 需要本地服务: 请运行 node server.js 后访问本页地址') + ' <b>http://' + location.host + '</b>');   // v1.0.daily: 端口随实际服务端口 (server.js 支持 argv 端口)
@@ -788,9 +798,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     thinkStat.black = { total: 0, moves: 0 };
     decisionLog.red = [];
     decisionLog.black = [];
-    XQ.UI.thinkPanel('red', { name: '红方', title: currentRecord.red.name, stat: '', text: '等待对局开始…', active: false,
+    var TwR = XQ.I18N ? XQ.I18N.t : function (k) { return k; };   // 第26轮 i18n (面板表头/等待文案)
+    XQ.UI.thinkPanel('red', { name: TwR('status_side_red'), title: currentRecord.red.name, stat: '', text: TwR('think_wait'), active: false,
       info: modelCardHTML('red') + (currentRecord.red.style ? '<span class="badge-style ' + levelClass(currentRecord.red.style) + '">' + levelCN(currentRecord.red.style) + '</span>' : '') });
-    XQ.UI.thinkPanel('black', { name: '黑方', title: currentRecord.black.name, stat: '', text: '等待对局开始…', active: false,
+    XQ.UI.thinkPanel('black', { name: TwR('status_side_black'), title: currentRecord.black.name, stat: '', text: TwR('think_wait'), active: false,
       info: modelCardHTML('black') + (currentRecord.black.style ? '<span class="badge-style ' + levelClass(currentRecord.black.style) + '">' + levelCN(currentRecord.black.style) + '</span>' : '') });
   }
   /* v1.0.daily 存档按钮可用性 (无棋谱/空谱禁用, 防误点导出空文件) */

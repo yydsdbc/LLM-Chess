@@ -53,16 +53,16 @@ var attrMissing = attrList.filter(function (k) { return ZH[k] == null; });
 ok(attrList.length >= 30 && attrMissing.length === 0,
   'I4 index.html 引用键覆盖 (' + attrList.length + ' 键)' + (attrMissing.length ? ' (缺失: ' + attrMissing.join(',') + ')' : ''));
 
-// I5 JS 字面量 t()/tArgs() 覆盖
+// I5 JS 字面量 t()/tArgs() 覆盖 — 第26轮拓宽: 本地别名 (T/TA/Ts/TAs/TwE/TI… 大小写 T 家族) 同样是字典调用,
+//   原正则只认 \bt\(/tArgs\( 时别名调用从未被守护 (68 处 T( 历史盲区)。T 家族 + 排除名单。
 var jsFiles = ['ui/app.js', 'ui/renderer.js', 'replay/replay.js', 'replay/replay_controller.js'];
-var reT = /\bt\(\s*'([a-z0-9_]+)'\s*[,)]/g;
-var reTArgs = /\btArgs\(\s*'([a-z0-9_]+)'/g;
+var reT = /\b([tT][A-Za-z0-9]*)\(\s*'([a-z0-9_]+)'\s*[,)]/g;
+var I5_DENY = { toggle: 1, thinkPanel: 1, rpToggleBookmark: 1 };   // classList.toggle('类名') / XQ.UI.thinkPanel(方别) / 书签切换 同形误报 (非字典调用)
 var jsKeys = {}, jsCount = 0;
 jsFiles.forEach(function (f) {
   var src = fs.readFileSync(path.join(ROOT, f), 'utf8');
   var mm;
-  while ((mm = reT.exec(src)) != null) { jsKeys[mm[1]] = true; jsCount++; }
-  while ((mm = reTArgs.exec(src)) != null) { jsKeys[mm[1]] = true; jsCount++; }
+  while ((mm = reT.exec(src)) != null) { if (I5_DENY[mm[1]]) continue; jsKeys[mm[2]] = true; jsCount++; }
 });
 var jsList = Object.keys(jsKeys);
 var jsMissing = jsList.filter(function (k) { return ZH[k] == null; });
