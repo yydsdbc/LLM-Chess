@@ -101,22 +101,26 @@
         var pe = c.firstChild;
         if (p) {
           var justIt = !!(snap.lastMove && x === snap.lastMove.to.x && y === snap.lastMove.to.y);
-          pe.classList.toggle('just-placed', justIt);
-          // v1.5 观战动画: 棋子滑动入位 + 被吃子淡出 ghost (由 app 在 afterMove 时设置 pendingAnim)
-          if (view.pendingAnim && snap.lastMove && justIt) {
+          // 第25轮: 滑动期间压制 just-placed — scale 关键帧与滑动 transform 同元素冲突 (旧版僵硬根因);
+          // contains('slide-in') 兜 mid-slide 重渲染 (pendingAnim 已清但动画未完)
+          var sliding = !!(justIt && (view.pendingAnim || pe.classList.contains('slide-in')));
+          pe.classList.toggle('just-placed', justIt && !sliding);
+          // v1.5 观战动画 → 第25轮重制: CSS 关键帧真滑动 (--dx/--dy 变量位移, 距离定时长 0.22s~0.38s,
+          // 72% 落位 + 86% 轻微压定); ghost 滞后 0.07s 淡出; 途中整格抬层防穿子; 结束摘类恢复 hover 缩放
+          if (sliding && view.pendingAnim) {
             var m0 = snap.lastMove;
             var dx = (m0.from.x - m0.to.x) * 100, dy = (m0.from.y - m0.to.y) * 100;   // piece 与 cell 同尺寸 → 百分比即一格
             if (dx || dy) {
-              pe.style.transform = 'translate(' + dx + '%,' + dy + '%)';
-              pe.style.transition = 'none';
-              (function (el) {
-                requestAnimationFrame(function () {
-                  requestAnimationFrame(function () {
-                    el.style.transition = 'transform .28s cubic-bezier(.2,.8,.3,1)';
-                    el.style.transform = 'translate(0,0)';
-                  });
-                });
-              })(pe);
+              var dist = Math.max(Math.abs(m0.from.x - m0.to.x), Math.abs(m0.from.y - m0.to.y));
+              pe.style.setProperty('--dx', dx + '%');
+              pe.style.setProperty('--dy', dy + '%');
+              pe.style.setProperty('--slide-dur', (0.2 + Math.min(dist, 8) * 0.022).toFixed(3) + 's');
+              pe.classList.add('slide-in');
+              c.classList.add('sliding-cell');
+              pe.addEventListener('animationend', function () {
+                this.classList.remove('slide-in', 'just-placed');
+                this.parentNode.classList.remove('sliding-cell');
+              }, { once: true });
             }
             if (m0.captured) {
               var gh = document.createElement('div');

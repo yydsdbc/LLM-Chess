@@ -1648,21 +1648,22 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           var pe = document.createElement('div');
           pe.className = 'piece ' + p.color;
           pe.textContent = XQ.Piece.CHARS[p.color][p.type];
-          if (last && x === last.to.x && y === last.to.y) pe.classList.add('just-placed');
+          var isLanding = last && x === last.to.x && y === last.to.y;
+          if (isLanding && !animate) pe.classList.add('just-placed');   // 手动步进的落地 pop; 自动播放走真滑动 (第25轮重制, 与主棋盘同款关键帧)
           c.appendChild(pe);
-          if (animate && last && x === last.to.x && y === last.to.y) {
+          if (animate && isLanding) {
             var dx = (last.from.x - last.to.x) * 100, dy = (last.from.y - last.to.y) * 100;
             if (dx || dy) {
-              pe.style.transform = 'translate(' + dx + '%,' + dy + '%)';
-              pe.style.transition = 'none';
-              (function (el) {
-                requestAnimationFrame(function () {
-                  requestAnimationFrame(function () {
-                    el.style.transition = 'transform .28s cubic-bezier(.2,.8,.3,1)';
-                    el.style.transform = 'translate(0,0)';
-                  });
-                });
-              })(pe);
+              var dist = Math.max(Math.abs(last.from.x - last.to.x), Math.abs(last.from.y - last.to.y));
+              pe.style.setProperty('--dx', dx + '%');
+              pe.style.setProperty('--dy', dy + '%');
+              pe.style.setProperty('--slide-dur', (0.2 + Math.min(dist, 8) * 0.022).toFixed(3) + 's');
+              pe.classList.add('slide-in');
+              c.classList.add('sliding-cell');
+              pe.addEventListener('animationend', function () {
+                this.classList.remove('slide-in');
+                this.parentNode.classList.remove('sliding-cell');
+              }, { once: true });
             }
             if (last.captured) {
               var gh = document.createElement('div');

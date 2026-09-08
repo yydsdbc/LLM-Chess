@@ -751,3 +751,27 @@
   test/i18n_check.js (+I8) / test/check_ui.js (+第11节) / test/_server_http.js (+6 断言) / README×2 /
   docs/ARCHITECTURE.md / CHANGELOG
 - 门禁: 改动 js node --check 全过 + npm run check ALL PASS + npm test 并行 12/12 全绿
+
+## 2026-09-06 18:55 第25轮 (v1.0.daily, zcode — 指令「制作棋子移动动画, 流畅不僵硬」)
+
+【根因】旧版滑动僵硬不是参数问题, 是 transform 冲突: 落地 pop (.just-placed 的 piece-place scale 关键帧)
+与滑动 inline transform 挂在同一棋子元素上, CSS 动画级联优先级高于 inline 样式 → 0.25s 内 transform
+被 pop 的 scale 全权接管, 滑动位移完全不可见, 实际观感 = 原地瞬移弹出。该缺陷自 v1.5 引入滑动起就存在。
+
+1. **真滑动关键帧**: 新增 piece-slide (@0% translate(var(--dx),var(--dy)) → 72% 落位 → 86% scale 1.045
+   轻微压定 → 100% 回弹), .slide-in 类挂载, backwards 填充防首帧闪烁; JS 只设 --dx/--dy/--slide-dur
+   三个变量 + 摘除 pop, 不再写 inline transform/transition (无双 rAF 舞蹈)
+2. **距离定时长**: 0.2s + 距离(1~8格)×0.022s → 0.222s~0.378s — 车长线转移比马短步更久, 运动更自然
+3. **pop 与滑动互斥**: 差量渲染器里 sliding = landing && (pendingAnim || 含 slide-in) (后者兜 mid-slide
+   重渲染), 滑动时 toggle 摘掉 just-placed; 仅复盘回退/载入棋谱等无滑动场景保留 pop;
+   animationend 摘 slide-in+just-placed → hover 缩放恢复 (旧版 inline transform 残留导致刚走的子 hover 失效)
+4. **滑动途中整格抬层**: .sliding-cell z-index 5 — 上移/左移时落点格 DOM 序在前, 不抬层会从后行棋子下方穿过
+5. **被吃子 ghost 滞后 0.07s**: 先看清落子到达, 再看被吃子淡出 (animation-delay 覆盖, 自清逻辑沿用第23轮)
+6. **回放棋盘同款**: rpPaintBoard 自动播放走同款关键帧滑动 (手动步进保留 pop), 与主棋盘观感一致
+- 并行协作适配: 本轮动工时发现 renderer.js 已被第23/24轮重写为 90 格池化差量更新 — 改造点适配差量结构
+  (差量复用节点下 slide-in/animationend 照常工作, 状态类 toggle 不触碰动画类); CSS 块轮号 23→25 避让
+- 验证: 确定性人局 (清 xq_v1_settings) 红炮 h3→e3 — 滑动中间态抓取: animName=piece-slide /
+  dur=0.266s(=0.2+3×0.022 距离公式命中) / transform matrix 插值中 (tx=119.5px) / noPop ✓ / 抬层 ✓;
+  黑炮 h8→e8 慢动作 1.6s 目检中间帧无穿层伪影; 结束态: 棋子类名干净 (piece black) / 抬层移除 /
+  ghost 自清 / 无残留 slide-in; node --check + npm run check + npm test 12/12 全绿
+- 触点: index.html (关键帧+2类) / ui/renderer.js (差量渲染内滑动分支) / ui/app.js (rpPaintBoard) / CHANGELOG

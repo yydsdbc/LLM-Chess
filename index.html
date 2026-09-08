@@ -374,6 +374,21 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 .think-panel.idle .think-body:not(.card-mode){text-align:center}
 .think-head .fold{transition:opacity .15s}
 .think-head:hover .fold{opacity:.9}
+
+/* ═══════════ 第25轮 棋子移动动画重制: 真滑动 + 柔和落定 ═══════════ */
+/* 旧版僵硬根因: 落地 pop (.just-placed 的 scale 关键帧) 与滑动 inline transform 同元素冲突,
+   CSS 动画级联优先级高于 inline 样式 → 滑动全程被 scale 覆盖, 实际观感是原地瞬移弹出。
+   新版: --dx/--dy 变量驱动专用关键帧; 距离决定时长 (0.22s~0.38s); 72% 落位 + 86% 轻微压定 (1.045);
+   backwards 填充防首帧闪烁; animationend 摘类恢复 hover 缩放; 滑动途中整格抬层防穿子。 */
+@keyframes piece-slide{
+  0%{transform:translate(var(--dx,0%),var(--dy,0%))}
+  72%{transform:translate(0,0) scale(1)}
+  86%{transform:translate(0,0) scale(1.045)}
+  100%{transform:translate(0,0) scale(1)}
+}
+.piece.slide-in{animation:piece-slide var(--slide-dur,.3s) cubic-bezier(.3,.86,.32,1) backwards;z-index:6}
+.cell.sliding-cell{z-index:5}
+.piece.ghost-out{animation-delay:.07s}
 </style>
 </head>
 <body>
