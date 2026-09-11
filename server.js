@@ -73,7 +73,8 @@ function serveStatic(req, res, urlPath) {
   try { p = decodeURIComponent(urlPath.split('?')[0]); } catch (eU) { res.writeHead(400); return res.end('bad request'); }   // v1.0.daily: 畸形百分号编码 (/% etc) 抛 URIError → 回 400 而非连接崩溃
   if (p === '/' || p === '') p = '/index.html';
   const full = path.normalize(path.join(ROOT, p));
-  if (!full.startsWith(ROOT)) { res.writeHead(403); return res.end('forbidden'); }
+  // 第27轮: 前缀穿越加固 — 裸 startsWith(ROOT) 会放行同名前缀兄弟目录 (…/LLM-chess-backup/…), 必须按路径段比对
+  if (full !== ROOT && !full.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end('forbidden'); }
   fs.readFile(full, (err, buf) => {
     if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('404 Not Found'); }
     // v1.0.3: ETag/304 — 文件未变时浏览器用本地副本 (对局中 F5 秒开, 省带宽); api/keys 动态路径不走这里

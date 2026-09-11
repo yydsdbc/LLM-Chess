@@ -62,7 +62,7 @@ flowchart LR
 | `test/_replay_edge.js` | replay edge cases + bookmark pure logic |
 | `test/_logic_layer.js` | pure logic layer guards (notation, HUD helpers) |
 | `test/_server_http.js` | server.js HTTP behavior (spawns a real server: ETag/304, traversal 403, rate-limit 429, …) |
-| `test/check_ui.js` | syntax sweep, ID cross-check, localStorage prefix, release files, README version parity, HTML hygiene, PWA manifest + SW guard |
+| `test/check_ui.js` | syntax sweep, ID cross-check, localStorage prefix, release files, README version parity, HTML hygiene, PWA manifest + SW guard, replay-dialog semantics |
 | `npm run check` | syntax sweep of every JS file + prompt hard gate |
 
 Run everything with `npm test` (12 suites) — CI runs `npm run check` + `npm test` on Node 18/20/22 (ubuntu) and Node 22 (windows).

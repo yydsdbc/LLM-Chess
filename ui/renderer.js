@@ -3,6 +3,8 @@
   'use strict';
   var XQ = root.XQ = root.XQ || {};
   var CS = 48, W = 432, H = 480, HC = CS / 2;
+  function T(k) { return XQ.I18N ? XQ.I18N.t(k) : k; }   // 第27轮 i18n: 模块级别名 (thinkPanel/capturedTray 空态与俘字翻译; 原仅 renderStatus 函数局部有 T; 函数形式免加载顺序/语言热切问题)
+  function TA(k, a) { return XQ.I18N ? XQ.I18N.tArgs(k, a) : k; }   // 第27轮 i18n: tArgs 模块级别名 (d-more 折叠行等)
 
   // v1.0.daily 棋子记谱切换: localStorage xq_pieces = 'cn' 汉字 (默认) | 'en' 西文字母 — 仅棋盘显示层
   function pieceGlyph(p) {
@@ -243,7 +245,8 @@
     var e = document.createElement('div');
     e.className = 'log-entry';
     e.dataset.ply = n;   // v1.5.5: 点击复盘 — 点击该手跳到该局面
-    e.title = '点击回到第 ' + n + ' 手局面' + (cn ? ' · ' + cn : '');   // v1.7: 中文记谱
+    var Tl = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return 'Click to jump to move ' + a.n; };   // 第27轮 i18n: 条目 title 原硬编码中文 (I9 守护点)
+    e.title = Tl('log_entry_title', { n: n }) + (cn ? ' · ' + cn : '');   // v1.7: 中文记谱
     e.innerHTML = '<span class="log-dot ' + side + '">●</span><span class="log-num">' + n + '. </span><span class="' + (side === 'red' ? 'log-red' : 'log-black') + '">'
       + pieceChar + '</span> ' + name + (capturedChar ? ' ×' + capturedChar : '')
       + (secs ? '<span class="log-secs"> ⏱' + secs + 's</span>' : '');
@@ -368,7 +371,7 @@
       // v1.5 决策卡片模式: 结构化信息 (策略/候选/评价) 替代长文本; 分页器隐藏
       st.cards = opts.cards;
       body.classList.add('card-mode');
-      body.innerHTML = opts.cards.length ? opts.cards.join('') : '<div class="d-empty">等待对局开始…</div>';
+      body.innerHTML = opts.cards.length ? opts.cards.join('') : '<div class="d-empty">' + T('think_wait') + '</div>';   // 第27轮 i18n: 空态原硬编码中文 (复用 think_wait)
       body.scrollTop = body.scrollHeight;   // v1.7.1: 卡片模式自动滚到底部 (最新决策可见)
     } else if (body) {
       body.classList.remove('card-mode');
@@ -407,13 +410,13 @@
         + (hasReason ? '<button class="d-toggle" data-ply="' + e.n + '">💭</button>' : '')
         + '</div>'
         + (e.plan ? '<div class="d-plan">📌 ' + esc(e.plan) + '</div>' : '')
-        + (e.summary ? '<div class="d-sum">' + esc(e.summary) + '</div>' : '')
+        + (e.summary ? '<div class="d-sum">' + esc(e.summary === '兑底·安全着法' ? T('fb_summary') : e.summary) + '</div>' : '')   // 第27轮 i18n: 兑底摘要是数据标记 (app.js:295 按 zh 串比对), 渲染层按标记本地化, 数据不动
         + (cands ? '<div class="d-cands">' + cands + '</div>' : '')
-        + '<div class="d-meta">' + (e.confidence != null ? '信' + esc(e.confidence) + ' · ' : '') + (e.secs ? esc(e.secs) + 's' : '') + '</div>'
-        + (hasReason ? '<div class="d-reason" data-ply="' + e.n + '" style="display:none">' + esc(e.reasoning) + '</div>' : '')
+        + '<div class="d-meta">' + (e.confidence != null ? T('d_conf') + esc(e.confidence) + ' · ' : '') + (e.secs ? esc(e.secs) + 's' : '') + '</div>'   // 第27轮 i18n: 信 角标原硬编码
+        + (hasReason ? '<div class="d-reason" data-ply="' + e.n + '" style="display:none">' + esc(e.reasoning.indexOf('【兑底】') === 0 ? T('fb_reason') : e.reasoning) + '</div>' : '')   // 第27轮 i18n: 兑底推理同上 (标记前缀比对)
         + '</div>';
     });
-    if (total > entries.length) cards.push('<div class="d-more">…更早 ' + (total - entries.length) + ' 条决策</div>');
+    if (total > entries.length) cards.push('<div class="d-more">' + TA('d_more', { n: total - entries.length }) + '</div>');   // 第27轮 i18n: 折叠行原硬编码中文 (EN 实机截图抓漏)
     return cards;
   }
   // v1.5.5: 卡片 💭 按钮折叠/展开思考过程
@@ -435,7 +438,7 @@
   /* 被吃子力托盘: chars = 该方吃掉的对方子力字符数组 */
   function capturedTray(side, chars) {
     var el = document.getElementById('think-' + side + '-captured');
-    if (el) el.innerHTML = (chars && chars.length) ? '<b>俘</b>' + chars.join('') : '';
+    if (el) el.innerHTML = (chars && chars.length) ? '<b>' + T('tray_captured') + '</b>' + chars.join('') : '';   // 第27轮 i18n: 俘 字原硬编码
   }
   /* 最新着法大字徽章: html 传入, null 隐藏 (app 侧 4s 定时淡出) */
   function lastMoveBadge(html) {

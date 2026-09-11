@@ -826,3 +826,63 @@
   test/i18n_check.js (I5 拓宽) / README×2 / CHANGELOG; ai/llm_agent.js 未动 (prompts_dump 新鲜度 PASS);
   server.js 改动 → 用户需重启进程生效
 - 门禁: npm run check ALL PASS + npm test 并行 12/12 全绿 (套件数不变 12); i18n 净增 24 键 (zh/en 同步)
+
+## 2026-09-12 02:37 第27轮 (v1.0.daily, zcode — 指令「优化, 方向参考 a11y 二期/PWA/渲染性能/服务端行为测试/文档对齐/i18n 漏挂」)
+
+【a11y 五期 (第23/24轮 弹层语义的最后一块: 回放层)】
+1. **回放层对话框语义+焦点管理**: rpEnsure 模板内层 div 补 role=dialog + aria-modal=true + aria-labelledby=rp-title
+   (标题 <b> 加 id); rpOpen 记录打开者 (rpOpener) 并焦点入层 rp-pick (display:none→block 无过渡, 同步 focus 生效,
+   不需要第23轮 visibility 双 rAF); rpClose 焦点归还打开者; Tab 焦点陷阱独立监听 (模式同第24轮设置面板,
+   不早退 INPUT — 走法过滤框/跳转输入框内 Tab 也拦); 回放层全屏遮蔽+body 滚动锁定, 陷阱合理 (区别于
+   end-overlay 有意不陷阱)
+2. **check_ui 新增第12节守护**: rpEnsure 是 JS 构建 DOM, I7/I8 够不到 — 以 app.js 源串为对象断言 dialog 语义
+   四件套 + rpOpener 记录/归还; 红绿双向验证 (抹掉 role=dialog 三属性 → exit 1 点名, 还原 → OK)
+
+【i18n 漏挂 四期 (I5/I7/I8 之外的第三盲区: JS 构建侧, EN 实机截图现场抓漏)】
+3. **回放层图表标题首帧**: 模板硬编码中文只是残留 — rpPaint* 本就每手 tArgs 重绘 (带色 span 版); 空态
+   (无棋谱, rpPaint 未跑) 下 EN 用户恒见中文 → 模板清空 + rpEnsure 时按既有 rp_timechart_caption/
+   rp_evalchart_caption 键 tArgs 填充首帧 (复用 4 个既有键, 零新增)
+4. **决策卡三处**: d-more 折叠行 '…更早 N 条决策' (截图抓漏) → d_more 键; '信' 角标 → d_conf;
+   兑底摘要 '兑底·安全着法' / 推理 '【兑底】…' 是 record 数据标记 (app.js 按 zh 串比对出徽章), 渲染层
+   按标记本地化 (fb_summary/fb_reason 2 键) — 数据不动, 回放层 rp_fallback_summary 既有路径不受影响
+5. **杂面四处**: 走法条目 title '点击回到第 N 手局面' → log_entry_title (tArgs); 被吃托盘 '俘' → tray_captured;
+   模型卡 '总思考 Ns' → think_total; '⚡快答' 徽章 → badge_quick; 档位徽章 无/低/中/高 (levelCN 3 调用点)
+   → lvl_none/low/mid/high 4 键; 思考面板空态 '等待对局开始…' (renderer 侧) → 复用 think_wait
+6. **i18n_check 新增 I9 组 (a/b/c 三规则, 逐行)**: a) JS 模板串 title=/placeholder=/aria-label= 含 CJK 必须
+   同行挂 data-i18n 标记; b) .title = '…CJK…' 赋值必须走 t/T 家族; c) 模板串 >…CJK…< 文本节点必须走 t() 或
+   挂标记 — 豁免盘面装饰 楚河/汉界 (语言中立, 有意中文)。红绿双向: 还原 d-more 硬编码 → exit 1 点名
+   renderer.js:419, 还原走法 title → exit 1, 修复后 9/9 PASS; 净增 13 键 (213→226, zh/en 同步)
+
+【第26轮遗留修复】
+7. **status_thinking 双方别重复**: 随机AI label ('随机AI(红)'/'Random AI (Red)') 已含方别, 模板再拼 {side}
+   → EN "(Red) (Red)" / zh "随机AI(红)（红方）"; 修复走 agent_random_name 无方别新键 (app.js:543 按
+   holder.kind 分流; 不给 random holder 加 model 字段 — 那会泄漏进 record 的 redModel/replay [model] 显示)。
+   实机双验证: 运行时直驱真实 render() — 新值 "🤖 Random AI (Red) thinking…" 恰一个方别, 旧值复现
+   "(Red) (Red)" 命中重复正则 (旧 bug 实锤)
+
+【服务端行为测试 四期 (22→26 断言, 捞到真缺口)】
+8. **server.js 一行加固 (需重启生效)**: serveStatic 的 full.startsWith(ROOT) 会放行同名前缀兄弟目录
+   (path.normalize 后 '/%2e%2e/LLM-chess-backup/x' → 'D:\...\LLM-chess-backup\x' 前缀命中) → 改按路径段
+   比对 full === ROOT || startsWith(ROOT + path.sep)。新断言真实构造兄弟目录 + secret 文件请求 → 403
+   (红: 旧代码 200 泄密实锤; 绿: 修复后 403), 测试自清理
+9. **+3 断言 (不动 server.js)**: If-None-Match 不命中 → 200 全量 / If-None-Match 命中 /sw.js → 304
+   (SW 更新检查省带宽) / OPTIONS / (静态路径) → 204+ACAO (预检处理器全局, 不限 /api); 全部插在限流爆发前
+   避免窗口互扰
+
+【文档对齐】
+10. README 双语测试表: _server_http 行 22 项→26 项 (含新断言面) / i18n_check 行 8 组→9 组 / check_ui 行
+    +replay-dialog semantics; ARCHITECTURE check_ui 行同步; CHANGELOG Round-27 里程碑
+
+- 验证: 改动 js node --check 全过 + npm run check ALL PASS + npm test 并行 12/12 全绿 (套件数不变 12,
+  徽章/树无需动) + 无头 Edge CDP 实机 23/23 — 预置 xq_v1_settings 双 random 自动开局 (EN 面, ply 流动至
+  51 手截图目检: 状态条 "Random AI (Black) thinking…" 单方别 / Cap 托盘 / Mid 档位徽章 / "…22 earlier
+  decisions" 折叠行 / 楚河汉界盘面装饰保留) + 回放层 role=dialog/焦点入层/Tab 60 连击不出层/关闭归还
+  btn-replay-watch + 图表标题 EN 首帧 + 走法 title EN + 90/90 格 aria-label 回归; i18n_check 9/9 (226 键)
+- 边界: ai/llm_agent.js 未动 (prompts_dump 新鲜度 PASS, system 2399 字); PWA 本轮未动 — SW 预缓存与第24轮
+  「按需填充」设计相悖, manifest 三期已齐; 渲染性能本轮无可为 — 90 格池化/measureFont 记忆化/池化单绑
+  (第23/24轮) 之后无用户可感热点, 不凑数; server.js 一行改动 → **用户需重启进程生效** (实测: 套件真实
+  spawn 实例 26/26 + 验收脚本实会长驻实例双冒烟)
+- 触点: ui/app.js / ui/renderer.js / ui/i18n.js (+13 键) / server.js (一行, 需重启) / test/i18n_check.js
+  (+I9) / test/check_ui.js (+第12节) / test/_server_http.js (+4) / README.md / README.zh-CN.md /
+  docs/ARCHITECTURE.md / CHANGELOG
+- 门禁: npm run check ALL PASS + npm test 并行 12/12 全绿

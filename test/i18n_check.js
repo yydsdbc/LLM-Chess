@@ -9,6 +9,8 @@
  *  I6 关键哨兵键 (状态条/回放动态面板) 双语齐全
  *  I7 静态 CJK 裸文本必须挂 data-i18n/-aria (第23轮)
  *  I8 静态 CJK 属性 (title/aria-label/placeholder) 必须挂对应 data-i18n 标记 (第24轮)
+ *  I9 JS 侧动态属性 CJK 守护 — JS 模板串里的 title=/placeholder=/aria-label= 含中文必须同串挂 data-i18n* 标记,
+ *     .title = '…中文…' 赋值必须走 t/tArgs 家族 (第27轮; I8 只扫 index.html, JS 构建的 DOM 是第三盲区)
  * 用法: node test/i18n_check.js
  */
 'use strict';
@@ -108,6 +110,32 @@ while ((mm8 = tagRe8.exec(htmlNoScript)) != null) {
 }
 ok(miss8.length === 0, 'I8 静态 CJK 属性 data-i18n 挂载' + (miss8.length ? ' (漏挂: ' + miss8.join(' ; ') + ')' : ' (0 漏挂)'));
 
-console.log('i18n_check: ' + (8 - fails.length) + '/8 groups PASS, ' + zk.length + ' keys');
+// I9 第27轮: JS 侧动态属性/文本 CJK 守护 — I8 只扫 index.html 静态区, JS 构建的 DOM (rpEnsure 模板/动态节点)
+//   是同源盲区另一半: 回放工具条 title 曾靠 I5 间接覆盖, 而 .title='中文' 赋值 (走法条目) 与 JS 模板
+//   placeholder/文本节点完全无守护 (EN 实机截图抓漏 d-more 折叠行)。规则 (逐行, 模板串每行自带闭合引号):
+//   a) 行内 title="/placeholder="/aria-label=" 含 CJK → 同行必须出现 data-i18n 标记 (apply() 才会翻译);
+//   b) 行内 .title = '…CJK…' 直接赋值 → 同行必须走 t/tArgs 家族调用 (T 家族别名均计);
+//   c) 行内模板串 >…CJK…< 文本节点 → 同行必须走 t() 家族或挂 data-i18n 标记; 豁免盘面装饰 (楚河/汉界)。
+var miss9 = [];
+var I9_DENY_TEXT = ['>楚 河<', '>汉 界<'];   // 盘面中央装饰字 — 语言中立, 有意中文 (象棋盘传统)
+jsFiles.forEach(function (f) {
+  fs.readFileSync(path.join(ROOT, f), 'utf8').split(/\r?\n/).forEach(function (line, i) {
+    if (!CJK7.test(line)) return;
+    var ln = f + ':' + (i + 1);
+    var attrRe9 = /(?:title|placeholder|aria-label)="([^"]*)"/g, am9;
+    while ((am9 = attrRe9.exec(line)) != null) {
+      if (CJK7.test(am9[1]) && !/data-i18n/.test(line)) miss9.push(ln + ' ' + am9[0].slice(0, 40));
+    }
+    var dm9 = line.match(/\.title\s*=\s*(['"])((?:(?!\1).)*)\1/);   // 只看赋值右侧首段字面量 — 行尾中文注释不计 (防误报)
+    if (dm9 && CJK7.test(dm9[2]) && !/[tT][A-Za-z0-9]*\(/.test(line)) miss9.push(ln + ' .title="' + dm9[2].slice(0, 30) + '"');
+    if (!/[tT][A-Za-z0-9]*\(/.test(line) && !/data-i18n/.test(line) && !I9_DENY_TEXT.some(function (d) { return line.indexOf(d) >= 0; })) {
+      var tm9 = line.match(/['"`][^'"`]*>[^<>{}]*[\u4e00-\u9fff][^<>]*</);
+      if (tm9) miss9.push(ln + ' 模板文本 ' + JSON.stringify(tm9[0].slice(0, 36)));
+    }
+  });
+});
+ok(miss9.length === 0, 'I9 JS 侧属性/文本 CJK 挂载/走 t()' + (miss9.length ? ' (漏挂: ' + miss9.join(' ; ') + ')' : ' (0 漏挂)'));
+
+console.log('i18n_check: ' + (9 - fails.length) + '/9 groups PASS, ' + zk.length + ' keys');
 if (fails.length) { process.exit(1); }
 process.exit(0);

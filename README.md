@@ -159,10 +159,10 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 | `node test/replay_smoke.js` | replay, 53 checks (data/control layers, speeds, seek, tolerance, parseEval direction, imported records, capture-jump) |
 | `node test/_clean_reason_check.js` | reasoning-stream cleaner, 10 checks |
 | `node test/cn_notation_check.js` | Chinese notation, 25 checks (classic anchors / file-disambiguation 前中后 / legacy-key sentinel) |
-| `node test/i18n_check.js` | i18n guards (zh/en key parity, placeholder parity, data-i18n / t() coverage) |
+| `node test/i18n_check.js` | i18n guards, 9 groups (zh/en key parity, placeholder parity, data-i18n / t() coverage, static & JS-side CJK attribute hooks) |
 | `node test/link_check.js` | docs link guard — relative links in all `.md` files must resolve to real files |
-| `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest + SW guard |
-| `node test/_server_http.js` | server.js HTTP behavior, 22 checks (spawns a real server: health shape / static+ETag/304 / 404 / path-traversal 403 / malformed-encoding 400 / OPTIONS / bad-json 400 / empty body 400 / >2MB abort / unknown provider 400 / providers shape + no-key-leak / HEAD+ETag / manifest+icon+sw MIME / method guards / 429 rate limit) |
+| `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest + SW guard + replay-dialog semantics |
+| `node test/_server_http.js` | server.js HTTP behavior, 26 checks (spawns a real server: health shape / static+ETag/304 incl. sw.js / 404 / path-traversal 403 incl. sibling-prefix dir / malformed-encoding 400 / OPTIONS on api+static / bad-json 400 / empty body 400 / >2MB abort / unknown provider 400 / providers shape + no-key-leak / HEAD+ETag / manifest+icon+sw MIME / method guards / wrong-ETag 200 / 429 rate limit) |
 | `node test/analyze_blunders.js <log.json>` | blunder detector (hanging moves, missed mates, shuffling; `--top=N --type=...`) |
 | `node test/match_headless.js <provider> <model> [n]` | headless LLM game, n moves |
 

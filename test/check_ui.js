@@ -122,3 +122,19 @@ if (!/\/api\//.test(swSrc)) swIssues.push('sw.js 未排除 /api/ (中继请求�
 if (!/serviceWorker\.register\(\s*'sw\.js'\s*\)/.test(appSrc)) swIssues.push('app.js 缺 sw.js 注册调用');
 console.log('SW:', swIssues.length ? swIssues.join(' | ') : 'OK (fetch+activate 事件, /api/ 排除, app.js 注册)');
 if (swIssues.length) process.exit(1);
+
+// 12) 第27轮 a11y 守护: 回放层对话框语义 (rpEnsure 是 JS 构建的 DOM, I7/I8 只扫 index.html 够不到 —
+//    守护以 app.js 源串为对象): role=dialog + aria-modal + aria-labelledby 指到 rp-title + 焦点入层/归还
+const rpIssues = [];
+const rpEnsureSrc = (appSrc.match(/function rpEnsure\(\)[\s\S]*?\n  \}/) || [''])[0];
+if (!rpEnsureSrc) rpIssues.push('app.js 找不到 rpEnsure');
+else {
+  if (!/role="dialog"/.test(rpEnsureSrc)) rpIssues.push('rpEnsure 模板缺 role="dialog"');
+  if (!/aria-modal="true"/.test(rpEnsureSrc)) rpIssues.push('rpEnsure 模板缺 aria-modal="true"');
+  if (!/aria-labelledby="rp-title"/.test(rpEnsureSrc)) rpIssues.push('rpEnsure 模板缺 aria-labelledby="rp-title"');
+  if (!/id="rp-title"/.test(rpEnsureSrc)) rpIssues.push('rpEnsure 模板缺 id="rp-title"');
+}
+if (!/rpOpener\s*=\s*document\.activeElement/.test(appSrc)) rpIssues.push('app.js 缺焦点宿主记录 (rpOpener)');
+if (!/function rpClose[\s\S]*?rpOpener\.focus/.test(appSrc)) rpIssues.push('rpClose 缺焦点归还');
+console.log('回放层对话框:', rpIssues.length ? rpIssues.join(' | ') : 'OK (dialog 语义 + 焦点入层/归还)');
+if (rpIssues.length) process.exit(1);

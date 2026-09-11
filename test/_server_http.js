@@ -4,6 +4,8 @@
  *   健康检查 / 静态托管+ETag/304 / 404 / 路径穿越 403 / 畸形百分号 400 /
  *   OPTIONS 预检 / bad json 400 / 未知服务商 400 / 限流 429 (8次/秒窗)
  *   第24轮二期: providers 形状+无 apiKey 泄漏 / HEAD+ETag / manifest.json+icon.svg MIME / GET /api/chat 方法守卫
+ *   第26轮三期: sw.js 托管 / POST providers 守卫 / 空体 400 / health 形状 / 2MB 上限
+ *   第27轮四期: 前缀穿越 (兄弟同名前缀目录) 403 / 错误 ETag 200 / sw.js 304 / OPTIONS 静态路径 204
  * 零依赖 (http + child_process); 不打上游 — 全部走本地可判定路径。
  * 用法: node test/_server_http.js
  */
@@ -110,6 +112,25 @@ async function main() {
   ok(health.status === 200 && healthShape, 'GET /api/health → 形状 {ok,relay,version} (前端 relayAvailable 探测依赖)');
   const huge = await req('POST', '/api/chat', Buffer.alloc(2 * 1024 * 1024 + 1024, 97).toString('utf8'), { 'Content-Type': 'application/json' });
   ok(huge.status === 0, 'POST /api/chat 请求体 >2MB → 连接中断 (readBody 上限防 OOM)');
+
+  // 第27轮 四期: 前缀穿越加固 / 错误 ETag / sw.js 304 / 静态路径预检
+  const fs = require('fs');
+  const sibDir = path.join(ROOT, '..', 'LLM-chess-guard-' + process.pid);   // 同名前缀兄弟目录 — 裸 startsWith(ROOT) 会放行
+  let trav2 = null;
+  try {
+    fs.mkdirSync(sibDir, { recursive: true });
+    fs.writeFileSync(path.join(sibDir, 'secret.txt'), 'TOP-SECRET');
+    trav2 = await req('GET', '/' + encodeURIComponent('../') + 'LLM-chess-guard-' + process.pid + '/secret.txt');
+  } finally {
+    try { fs.rmSync(sibDir, { recursive: true, force: true }); } catch (eRm) {}
+  }
+  ok(trav2 && trav2.status === 403, '前缀穿越 (兄弟同名前缀目录 …/LLM-chess-guard-N/secret.txt) → 403 (按路径段比对)');
+  const wrongEtag = await req('GET', '/', null, { 'If-None-Match': '"bogus-etag"' });
+  ok(wrongEtag.status === 200, 'If-None-Match 不命中 → 200 全量响应');
+  const sw304 = await req('GET', '/sw.js', null, { 'If-None-Match': swResp.headers.etag });
+  ok(sw304.status === 304, 'If-None-Match 命中 /sw.js → 304 (SW 更新检查省带宽)');
+  const optStatic = await req('OPTIONS', '/');
+  ok(optStatic.status === 204 && !!optStatic.headers['access-control-allow-origin'], 'OPTIONS / (静态路径) → 204 + ACAO (预检处理器全局, 不限 /api)');
 
   // 限流秒窗: 连发 12 个请求 (8/s 上限), 至少一个 429
   // (前 8 个可能 400/429 交错, 只断言出现 429 — 限流先于业务校验执行)
