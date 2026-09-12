@@ -82,13 +82,21 @@
       var votes = [];   // 第31轮: 结构化投票明细 [{model, from, to, conf, ms, ok|fail}]
       var t0 = Date.now();
       var vstate = agents.map(function () { return 'pending'; });   // 第32轮: 每选民实时状态
-      function liveTally() {   // 第32轮: 已应答选民的实时票型
+      function weightOf(name) {   // 第36轮: Elo 加权 — 高分选民话语权更大 (0.6~1.4), 无天梯回退 1
+        if (!opts.weightByElo || !XQ.Elo || !XQ.Elo.ratingOf) return 1;
+        var w = XQ.Elo.ratingOf(name.replace(/^[^:]*:/, '')) / 1500;
+        return Math.max(0.6, Math.min(1.4, w));
+      }
+      function liveTally() {   // 第32轮: 已应答选民的实时票型 (第36轮: 权重化)
         var t = {};
-        votes.forEach(function (v) { if (v.ok) t[v.to] = (t[v.to] || 0) + 1; });
+        votes.forEach(function (v) { if (v.ok) t[v.to] = Math.round(((t[v.to] || 0) + weightOf(v.model)) * 100) / 100; });
         return t;
       }
-      var calls = agents.map(function (a, idx) {
-        return new Promise(function (res) {
+      var maxP = typeof opts.maxParallel === 'number' && opts.maxParallel > 0 ? opts.maxParallel : agents.length;   // 第36轮: 并发上限 (分批发车, 防限流秒窗)
+      var calls = [];
+      agents.forEach(function (a, idx) {
+        var batch = Math.floor(idx / maxP);
+        calls.push(new Promise(function (res) {
           var settled = false;
           var done = function (v) {
             if (settled) return;
@@ -98,7 +106,7 @@
             streams[idx] = '✓ 已应答';   // 第34轮: 应答完成的选民折叠为一行 (合并视图聚焦仍在思考的选民)
             if (opts.onThinking) { try { opts.onThinking(side, agents.map(function (a2, j2) { return '【' + a2.name + '】' + (streams[j2] != null && streams[j2] !== '' ? streams[j2] : '…'); }).join('\n\n')); } catch (eT) {} }
             votes.push(v.mv   // 第32轮修正: 即时收集 (原在 Promise.all 后统一收, 进度回调时 tally 恒空)
-              ? { model: a.name, from: XQ.Move.sqName(v.mv.from), to: XQ.Move.sqName(v.mv.to), conf: confOf(v.mv), ms: Date.now() - t0, ok: true }
+              ? { model: a.name, from: XQ.Move.sqName(v.mv.from), to: XQ.Move.sqName(v.mv.to), conf: confOf(v.mv), ms: Date.now() - t0, ok: true, weight: weightOf(a.name) }
               : { model: a.name, fail: String((v.err && v.err.message) || v.err || 'failed').slice(0, 60), ok: false });
             if (opts.onProgress) {
               try {
@@ -117,8 +125,8 @@
             a.agent.next(engine, history)
               .then(function (mv) { done({ mv: mv, name: a.name }); })
               .catch(function (err) { done({ err: err, name: a.name }); });
-          }, idx * 300);
-        });
+          }, batch * 300 + (idx % maxP) * 60);
+          }));
       });
       return Promise.all(calls).then(function (rs) {
         var good = rs.filter(function (r) { return r.mv; });
@@ -126,14 +134,15 @@
         var tally = {};
         good.forEach(function (r) {
           var sq = XQ.Move.sqName(r.mv.to);
-          if (!tally[sq]) tally[sq] = { sq: sq, votes: 0, conf: 0, first: r };
+          if (!tally[sq]) tally[sq] = { sq: sq, votes: 0, weight: 0, conf: 0, first: r };
           tally[sq].votes++;
+          tally[sq].weight += weightOf(r.name);   // 第36轮: Elo 加权决胜 (默认权重 1, 行为不变)
           tally[sq].conf += confOf(r.mv);
         });
         var best = null;
         Object.keys(tally).forEach(function (k) {
           var t = tally[k];
-          if (!best || t.votes > best.votes || (t.votes === best.votes && t.conf > best.conf)) best = t;
+          if (!best || t.weight > best.weight || (t.weight === best.weight && t.conf > best.conf)) best = t;
         });
         var winName = best.first.name;
         var winMv = best.first.mv;

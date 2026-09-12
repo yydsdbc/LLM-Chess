@@ -135,6 +135,7 @@
     elo_title: '🏆 Elo 天梯', elo_reset: '清空', elo_reset_confirm: '清空全部 Elo 战绩? 不可恢复。', elo_empty: '(暂无战绩 — 完成 AI 对战后自动记账)',
     elo_th_rating: '分数', elo_th_games: '局数', elo_th_wdl: '胜/和/负',
     provider_no_key: '未配Key', rp_hk_wheel_label: '滚轮', rp_committee_tag: '会诊 {n}', btn_flip: '⇅ 翻转视角',
+    undo_tip: '↩ 悔棋 (快捷键 U)',
     votes_model: '模型', votes_to: '落点', votes_conf: '信心', votes_fail: '失败',
     set_coords: '棋盘坐标标', set_vol: '音量', set_drag: '拖拽走子', reset_data: '清空本地数据', reset_confirm: '清空全部本地棋谱/Elo/回放进度? 不可恢复。',
     test_conn: '⚡ 试连', test_run: '试连中…', test_ok: '✓ 连通 {ms}ms', test_fail: '✗ 失败', test_no_relay: '本地服务未启动',
@@ -163,7 +164,7 @@
     rp_bm_title: '书签 (按 B 标注/取消当前手)', rp_hk_bm: '书签: 标注/取消当前手 (走法列表 🔖 可见, 按棋谱持久保存)',
     rp_hk_tips: '💡 走法列表点击跳转 · 时间柱状图点击跳转 · 最长思考 @#N 点击跳转',
     rp_hk_bm_go: '书签跳转: N 下一书签 / P 上一书签 (无书签不动)',
-    rp_hk_main: '主界面快捷键: M 静音 · R 重开 · F 全屏观战 · 方向键移动光标 + Enter/Space 选子走子 + Esc 取消 (回放打开时 F 由回放接管)'
+    rp_hk_main: '主界面快捷键: M 静音 · R 重开 · F 全屏观战 · U 悔棋 · 方向键移动光标 + Enter/Space 选子走子 + Esc 取消 (回放打开时 F 由回放接管)'
   };
   var EN = {
     app_title: '🦞 LLM-chess v1.0 · AI Battle & Spectating Platform',
@@ -289,6 +290,7 @@
     elo_title: '🏆 Elo Ladder', elo_reset: 'Reset', elo_reset_confirm: 'Clear all Elo records? This cannot be undone.', elo_empty: '(No games yet — finished AI games are rated automatically)',
     elo_th_rating: 'Rating', elo_th_games: 'Games', elo_th_wdl: 'W/D/L',
     provider_no_key: 'no key', rp_hk_wheel_label: 'Wheel', rp_committee_tag: 'Council {n}', btn_flip: '⇅ Flip board',
+    undo_tip: '↩ Undo (shortcut U)',
     votes_model: 'Model', votes_to: 'Dest', votes_conf: 'Conf', votes_fail: 'failed',
     set_coords: 'Board coordinates', set_vol: 'Volume', set_drag: 'Drag moves', reset_data: 'Clear local data', reset_confirm: 'Clear all local games/Elo/replay data? Cannot be undone.',
     test_conn: '⚡ Test', test_run: 'Testing...', test_ok: '✓ OK {ms}ms', test_fail: '✗ failed', test_no_relay: 'local server not running',
@@ -317,7 +319,7 @@
     rp_bm_title: 'Bookmark (press B to tag/untag the current move)', rp_hk_bm: 'Bookmark: tag/untag the current move (🔖 in the move list, persisted per game)',
     rp_hk_tips: '💡 Click move list / time chart / longest-think @#N to jump',
     rp_hk_bm_go: 'Bookmark jump: N next bookmark / P previous bookmark (no-op without bookmarks)',
-    rp_hk_main: 'Main UI keys: M mute · R reset · F fullscreen · arrows move the cursor + Enter/Space select & move + Esc cancel (replay takes over when open)'
+    rp_hk_main: 'Main UI keys: M mute · R reset · F fullscreen · U undo · arrows move the cursor + Enter/Space select & move + Esc cancel (replay takes over when open)'
   };
   var STRINGS = { zh: ZH, en: EN };
   function has(l) { return l && LANGS.indexOf(l) !== -1 ? l : 'zh'; }

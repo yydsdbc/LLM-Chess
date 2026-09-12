@@ -343,6 +343,13 @@ const server = http.createServer(async (req, res) => {
   serveStatic(req, res, u);
 });
 
+process.on('SIGTERM', shutdown);   // 第36轮: 优雅停机
+process.on('SIGINT', shutdown);
+function shutdown() {
+  server.close(function () { process.exit(0); });
+  setTimeout(function () { process.exit(0); }, 1500);
+}
+
 const HOST = process.env.LLMCHESS_HOST || '127.0.0.1';   // v3.4: 默认仅本机可访问 (API Key 安全); 局域网访问设 LLMCHESS_HOST=0.0.0.0
 server.on('error', e => {   // v1.0.daily: 端口占用等启动错误给可操作提示, 不再裸抛堆栈
   if (e && e.code === 'EADDRINUSE') {

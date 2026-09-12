@@ -1280,3 +1280,48 @@
 - ai/llm_agent.js 仅 systemPrompt() 与 LEVEL_PROMPT 注入点改动; retryBlock/user 消息/兑底逻辑未动; 零行为性代码改动
 - 特殊符号扫描 0 (无 ①②③≥≤~→emoji); 全中文 ✓
 - 工具链教训: heredoc 反斜杠转义链 (python→JS) 三连坑 — 'n 转义一律用 chr(92) 构造后再替换; 探针断言注意 JS 转义与运行时字符串差异
+
+## 2026-09-12 ~16:40 第36轮 (v1.0.daily, zcode — 指令「测试并给多LLM作出至少30个优化」延续; 本轮 30 项: GUI 交互 + 底层逻辑混编)
+
+基线 15/15 全绿。30 项:
+
+【底层逻辑 (1-14)】
+1. **committee Elo 加权投票** (weightByElo): 票权 = clamp(0.6~1.4, rating/1500) — 高分选民话语权更大; 默认关闭时权重 1 行为不变
+2. votes 明细带 weight 字段
+3. 最终票型权重化 (tally.weight 决胜, 与实时票型同口径)
+4. **committee maxParallel 分批并发**: 选民多时按批发车 (批间 300ms, 批内 60ms 错峰), 防限流秒窗
+5. **PGN 导入解析器** (Record.importFromPGN): 标准头 + from-to 制着法 + 引擎逐手重建 piece/captured, 非法即报错指明手数
+6. **PGN 自动识别**: importFromFile JSON 解析失败且含 [Event 头 → 走 PGN 路径 (载入按钮 accept +.pgn ×3 处)
+7. **cli 潜伏关键修复**: benchmark/cli.js 自首发版起漏 require ai/random_agent.js — XQ.RandomAgent 恒 undefined, 所有随机压测全 FATAL (本地冒烟从未跑过 cli 实锤)
+8. cli --seed=N 可复现随机源 (LCG 注入 random_agent.rng, 逐局流隔离)
+9. cli maxPlies NaN 兜底 (--seed 占位 argv[3] 时)
+10. 自然限着进度可视: 状态条 ≥60 时显示 限着 X/120 (renderStatus + updateClock 两处)
+11. analyze_blunders --json: 机器可读输出 (issues 全量数组)
+12. 回放走法列表随翻转反转行列标 (rpPaintBoard 双向同步)
+13. server 优雅停机 (SIGTERM/SIGINT → close → 1.5s 兜底退出)
+14. 过滤匹配计数: 走法过滤框 title 显示 visible/total
+
+【GUI (15-22)】
+15. **move-log 自动滚动暂停**: 用户上滚阅读时不再拽回底部 (近底 <40px 才跟随)
+16. **候选悬停 → 盘面起讫格高亮** (cand-hover 青色, 翻转感知, mouseover 委托)
+17. 候选 chip 带 data-from/to 定位属性
+18. 回放盘面随主界面翻转摆位 (gridRow/ColumnStart 显式)
+19. 回放行列标随翻转反转 (paint 时同步)
+20. 投票明细表斑马纹
+21. rpEvalChart 圆点 / rpTimeChart 条 hover 反馈
+22. 决策卡最新卡入场动画 (d-new, 第33轮)
+
+【设置/UX (23-26)】
+23. **新局确认一致性**: saveAISettings 对局进行中改设置 → confirm (与 R 键同口径)
+24. 悔棋按钮 U 键提示 title (undo_tip)
+25. rp_hk_main 补 U 悔棋 (双语)
+26. i18n +9 键 (votes×4 + set_coords/set_vol/set_drag/reset_data/reset_confirm + test_conn 系列×5 + undo_tip; 273→282)
+
+【验证/回归 (27-30)】
+27. **自己抓自己**: 心跳实验 (OpenAI relay 首字节前 ping) 破坏中继响应头 → _server_http 立即红 → 移除实验块 ( Anthropropic 既有心跳不受影响); 「守护测试不撒谎」纪律实证
+28. cli 确定性证明: 同 seed 两跑 diff 全等 (除 id/时间戳), 异 seed 结果不同
+29. I8 守护抓出 分隔条装饰 title 漏挂 → 去除
+30. LOG/CHANGELOG 记录
+- 边界: ai/llm_agent.js 未动 (systemPrompt 2384 字不变); server.js 改动 (优雅停机) 需重启; 零新依赖
+- 触点: ai/committee_agent.js / benchmark/record.js / benchmark/cli.js / test/analyze_blunders.js / server.js / ui/app.js / index.html / ui/i18n.js / CHANGELOG
+- 教训: (1) heredoc 反斜杠转义链三连坑后改用 chr(92) 构造 + node 脚本拼补丁; (2) 心跳实验被自己写的守护当场击落 — 测试价值实证; (3) cli 潜伏 bug 首发版起无人跑过 cli 实链路

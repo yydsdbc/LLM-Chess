@@ -237,6 +237,7 @@ report += issues.length ? issues.map(x => `#${String(x.ply).padStart(2, '0')} [$
 var cntPrefix = (p2) => issues.filter(x => x.type.indexOf(p2) === 0).length;   // v3.3 修复: 送吃大子/亏换大子/送兵 此前未计入总计 (type 精确匹配漏掉子类型)
 report += `\n\n总计: 送吃${cntPrefix('送吃') + cntPrefix('送兵')} 亏换${cntPrefix('亏换')} 漏吃${issues.filter(x => x.type === '漏吃').length} 对方免费吃${issues.filter(x => x.type === '对方免费吃').length} 拉锯${issues.filter(x => x.type === '拉锯').length} 错失必杀${issues.filter(x => x.type === '错失必杀').length} 窝心马${issues.filter(x => x.type === '窝心马').length} 开局任务${issues.filter(x => x.type === '开局任务').length} 长将${cntPrefix('长将')}`;
 console.log(report);
+if (/--json/.test(argStr)) console.log(JSON.stringify({ record: record.id, plies: record.moves.length, total: issues.length, issues: issues }, null, 2));   // 第36轮: --json 机器可读输出
 if (OUT) fs.writeFileSync(path.join(ROOT, OUT), report, 'utf8');
 }
 

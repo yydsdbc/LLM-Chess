@@ -319,7 +319,9 @@
     } else {
       var elapsed = (Date.now() - view.startTime) / 1000 | 0;
       var ph = phaseCN(engine);
-      document.getElementById('status-info').textContent = '第' + engine.ply() + '手 · ' + (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2) + (ph ? ' · ' + ph : '');
+      var clockTxt = '';
+    try { if (engine.naturalClock && engine.naturalClock() >= 60) clockTxt = ' · 限着 ' + engine.naturalClock() + '/120'; } catch (eNC) {}
+    document.getElementById('status-info').textContent = '第' + engine.ply() + '手 · ' + (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2) + (ph ? ' · ' + ph : '') + clockTxt;
     }
     document.getElementById('status-bar').className = cls;
     document.getElementById('btn-row').classList.toggle('visible', engine.isOver());
@@ -387,7 +389,8 @@
       var T = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return ('… ' + a.n + ' earlier moves folded'); };
       more.textContent = T('log_trimmed', { n: logTrimmed });
     }
-    log.scrollTop = log.scrollHeight;
+    var nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;   // 第36轮: 用户上滚阅读时不拽回底部
+    if (nearBottom) log.scrollTop = log.scrollHeight;
   }
 
   // v1.5.5: 点击 move-log 中任意一手, 派发 xq:replay 事件 (app.js 接手)
@@ -525,7 +528,9 @@
     var cards = entries.map(function (e) {
       var cands = (e.candidates || []).map(function (c) {
         var isWin = String(c.move || '').indexOf('*') >= 0;   // 第32轮: 会诊胜出候选金色
-        return '<span class="d-cand' + (isWin ? ' d-cand-win' : '') + '">' + esc(c.move) + (c.score ? ' <b>' + esc(c.score) + '</b>' : '') + '</span>';
+        var mm = /^([a-i](?:10|[1-9]))-([a-i](?:10|[1-9]))/.exec(String(c.move || ''));
+        var attrs = mm ? ' data-from="' + mm[1] + '" data-to="' + mm[2] + '"' : '';   // 第36轮: 悬停高亮定位
+        return '<span class="d-cand' + (isWin ? ' d-cand-win' : '') + '"' + attrs + '>' + esc(c.move) + (c.score ? ' <b>' + esc(c.score) + '</b>' : '') + '</span>';
       }).join('');
       var hasReason = !!e.reasoning;
       return '<div class="dcard">'
@@ -557,6 +562,22 @@
         b.classList.toggle('on', !open);
         b.setAttribute('aria-expanded', open ? 'false' : 'true');   // 第33轮: 展开态读屏可感知
       }
+    });
+  });
+
+  // 第36轮: 候选悬停 → 盘面对应起讫格高亮 (翻转感知)
+  document.addEventListener('mouseover', function (ev) {
+    var chip = ev.target && ev.target.closest && ev.target.closest('.d-cand[data-from]');
+    var boardEl = document.getElementById('board');
+    if (!boardEl) return;
+    boardEl.querySelectorAll('.cand-hover').forEach(function (c) { c.classList.remove('cand-hover'); });
+    if (!chip) return;
+    var flip = document.documentElement.dataset.flip === '1';
+    [[chip.dataset.from, 'from'], [chip.dataset.to, 'to']].forEach(function (pair) {
+      var bx = pair[0].charCodeAt(0) - 97, by = 10 - parseInt(pair[0].slice(1), 10);
+      var dx = flip ? 8 - bx : bx, dy = flip ? 9 - by : by;
+      var cell = boardEl.querySelector('.cell[data-x="' + dx + '"][data-y="' + dy + '"]');
+      if (cell) cell.classList.add('cand-hover');
     });
   });
 
@@ -611,7 +632,9 @@
     var elapsed = (Date.now() - view.startTime) / 1000 | 0;
     var el = document.getElementById('status-info');
     var ph = phaseCN(engine);
-    if (el) el.textContent = '第' + engine.ply() + '手 · ' + (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2) + (ph ? ' · ' + ph : '');
+    var clockTxt = '';
+    try { if (engine.naturalClock && engine.naturalClock() >= 60) clockTxt = ' · 限着 ' + engine.naturalClock() + '/120'; } catch (eNC) {}
+    if (el) el.textContent = '第' + engine.ply() + '手 · ' + (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2) + (ph ? ' · ' + ph : '') + clockTxt;
   }
 
   XQ.UI = { CS: CS, drawBoard: drawBoard, render: render, aiBanner: aiBanner, logMove: logMove, thinkPanel: thinkPanel, decisionCards: decisionCards, updateClock: updateClock, capturedTray: capturedTray, lastMoveBadge: lastMoveBadge, evalSpark: evalSpark };

@@ -758,6 +758,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
   }
   function saveAISettings() {
+    /* 第36轮: 对局进行中改设置=开新局 — 与 R 键悔棋路径同口径确认 */
+    if (engine.ply() > 0 && !engine.isOver()) {
+      var Tc = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+      if (!window.confirm(Tc('btn_restart_confirm'))) return;
+    }
     var s = readSettings();
     try { localStorage.setItem(CFG_KEY, JSON.stringify(s)); } catch (e) {}
     closeAISettings();   // 第23轮: 走统一出口 (焦点归还齿轮)
@@ -1158,7 +1163,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     };
     document.getElementById('btn-load').onclick = function () {
       var input = document.createElement('input');
-      input.type = 'file'; input.accept = '.json,application/json';
+      input.type = 'file'; input.accept = '.json,.pgn,application/json';
       input.onchange = function () {
         if (!input.files[0]) return;
         XQ.Record.importFromFile(input.files[0]).then(function (rec) {
@@ -1591,7 +1596,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     /* v2.4 导入本地 JSON 棋谱直接回放 (与 Record.downloadFile 导出格式一致, 主界面载入只重放无控制, 这里给完整回放体验) */
     rpEl.btnImport.onclick = function () {
       var input = document.createElement('input');
-      input.type = 'file'; input.accept = '.json,application/json';
+      input.type = 'file'; input.accept = '.json,.pgn,application/json';
       input.onchange = function () {
         if (!input.files[0]) return;
         XQ.Record.importFromFile(input.files[0]).then(function (rec) {
@@ -1994,7 +1999,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   }
   function rpRestoreAll() {
     var input = document.createElement('input');
-    input.type = 'file'; input.accept = '.json,application/json';
+    input.type = 'file'; input.accept = '.json,.pgn,application/json';
     input.onchange = function () {
       if (!input.files[0]) return;
       var fr = new FileReader();
@@ -2076,6 +2081,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   var rpNextTarget = null;
   function rpPaintBoard(st, animate) {
     var board = rpEl.board;
+    var flip = document.documentElement.dataset.flip === '1';   // 第36轮: 回放盘面跟随主界面翻转
     rpNextTarget = null;
     if (rpSession && st.idx < st.total) {
       var nxt = rpSession.record.moves[st.idx];
@@ -2087,6 +2093,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       for (var x = 0; x < 9; x++) {
         var c = document.createElement('div');
         c.className = 'cell';
+        if (flip) { c.style.gridRowStart = (9 - y) + 1; c.style.gridColumnStart = (8 - x) + 1; } else { c.style.gridRowStart = ''; c.style.gridColumnStart = ''; }   // 第36轮: 翻转摆位
         var p = st.cells[y][x];
         if (p) {
           var pe = document.createElement('div');
@@ -2123,8 +2130,25 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         }
         if (st.check && p && p.type === 'king' && p.color === st.turn) c.classList.add('in-check');
         if (rpNextTarget && x === rpNextTarget.x && y === rpNextTarget.y) c.classList.add('next-target');
-        board.appendChild(c);
+        /* 第36轮: 翻转时按显示位置摆放 (池序仍按盘面, 由 dataset 映射) */
+        if (flip) {
+          var dx0 = 8 - x, dy0 = 9 - y;
+          board.appendChild(c);
+          c.style.gridRowStart = dy0 + 1;
+          c.style.gridColumnStart = dx0 + 1;
+        } else {
+          board.appendChild(c);
+        }
       }
+    }
+    if (flip) {
+      var rc = document.getElementById('rp-col-labels'), rr = document.getElementById('rp-row-labels');
+      if (rc) 'a,b,c,d,e,f,g,h,i'.split(',').forEach(function (ch, i2) { if (rc.children[i2]) rc.children[i2].textContent = 'abcdefghi'[7 - i2]; });
+      if (rr) '10,9,8,7,6,5,4,3,2,1'.split(',').forEach(function (ch, i2) { if (rr.children[i2]) rr.children[i2].textContent = String(i2 + 1); });
+    } else {
+      var rc2 = document.getElementById('rp-col-labels'), rr2 = document.getElementById('rp-row-labels');
+      if (rc2) 'a,b,c,d,e,f,g,h,i'.split(',').forEach(function (ch, i2) { if (rc2.children[i2]) rc2.children[i2].textContent = 'abcdefghi'[i2]; });
+      if (rr2) '10,9,8,7,6,5,4,3,2,1'.split(',').forEach(function (ch, i2) { if (rr2.children[i2]) rr2.children[i2].textContent = String(10 - i2); });
     }
     if (animate && last) { playDrop(!!last.captured); if (st.check) playCheck(); }
   }
@@ -2261,6 +2285,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (html) rpEl.movelist.innerHTML = html;
     else if (!rec.moves || !rec.moves.length) rpEl.movelist.innerHTML = '<li style="color:#7a5a2a;justify-content:center">' + TA('rp_moves_unit', { n: 0 }) + '</li>';   // v1.0.daily: 空谱≠过滤无匹配 (0手 提示)
     else rpEl.movelist.innerHTML = '<li style="color:#7a5a2a;justify-content:center">' + T('rp_no_match') + '</li>';
+    if (rpEl.movesFilter) rpEl.movesFilter.title = visible + ' / ' + rec.moves.length;   // 第36轮: 过滤匹配计数
     if (visible > 0) { var act = rpEl.movelist.querySelector('li.active'); if (act) act.scrollIntoView({ block: 'nearest' }); }
   }
   /* v1.6.1 边界禁用: 在起点 ⏮◀ 灰, 在终点 ⏭▶| 灰 (循环开启时 ▶ 在终点可继续) */

@@ -112,7 +112,11 @@
         try {
           var txt = String(fr.result || '');
           if (txt.length > 10 * 1024 * 1024) throw new Error('文件超过 10MB 上限');
-          var r = JSON.parse(txt);
+          var r;
+          try { r = JSON.parse(txt); } catch (eJ) {
+            if (/\[Event /.test(txt)) { r = importFromPGN(txt); }   // 第36轮: PGN 自动识别 (JSON 解析失败且含 [Event 头)
+            else throw eJ;
+          }
           if (!r.moves || !Array.isArray(r.moves)) throw new Error('缺少 moves 字段');
           for (var i = 0; i < r.moves.length; i++) {   // 第28轮: 逐手形状校验 (旧版只查数组, 坏手到回放才炸且难定位)
             var mv = r.moves[i];
@@ -155,6 +159,56 @@
     var dur = secs >= 60 ? Math.floor(secs / 60) + '分' + (secs % 60) + '秒' : secs + '秒';
     var tag = rec.result && rec.result !== 'checkmate' ? ' (' + (RESULT_CN[rec.result] || rec.result) + ')' : '';
     return win + ' · ' + n + '手 · 吃子' + caps + ' · ' + dur + tag;
+  }
+
+  /* ── 第36轮 PGN 导入: 解析本仓导出格式 (标准头 + from-to 制着法 + {注释}) ── */
+  function importFromPGN(text) {
+    var lines = String(text || '').split(/\r?\n/);
+    var tags = {};
+    var moveText = [];
+    lines.forEach(function (l) {
+      var t = l.trim();
+      if (t.charAt(0) === '[') {
+        var mTag;   // 第36轮修正: 一行可含多个标签 ([Red "a"] [RedModel "b"]), 全局逐个匹配
+        var tagRe = /\[(\w+)\s+"([^"]*)"\]/g;
+        while ((mTag = tagRe.exec(t)) !== null) tags[mTag[1]] = mTag[2];
+      } else if (t && t.charAt(0) !== '[') {
+        moveText.push(t);
+      }
+    });
+    var body = moveText.join(' ');
+    var pairs = [];
+    var re = /([a-i](?:10|[1-9]))-([a-i](?:10|[1-9]))/g;
+    var pm;
+    while ((pm = re.exec(body)) !== null) pairs.push({ from: pm[1], to: pm[2] });
+    if (!pairs.length) throw new Error('PGN 中未找到着法 (需 from-to 制, 如 e3-e6)');
+    // 重建 piece/captured: 逐手用引擎走一遍 (非法即报错, 保证谱面干净)
+    var XQE = root.XQ;
+    var eng = XQE.Engine.create({ ruleEnforce: false });
+    var moves = [];
+    for (var i = 0; i < pairs.length; i++) {
+      var from = XQE.Move.parseSq(pairs[i].from), to = XQE.Move.parseSq(pairs[i].to);
+      var res = eng.applyPlayerMove(from.x, from.y, to.x, to.y);
+      if (!res.ok) throw new Error('第 ' + (i + 1) + ' 手 ' + pairs[i].from + '-' + pairs[i].to + ' 非法: ' + (res.reason || ''));
+      var mv = res.move;
+      moves.push({
+        n: i + 1, side: mv.piece.color, piece: mv.piece.type,
+        from: pairs[i].from, to: pairs[i].to, name: XQE.Move.name(mv),
+        captured: mv.captured ? mv.captured.type : null, timeMs: 0
+      });
+    }
+    var winner = tags.Result === '1-0' ? 'red' : tags.Result === '0-1' ? 'black' : (tags.Result === '1/2-1/2' ? null : null);
+    var result = tags.Result === '1-0' || tags.Result === '0-1' ? 'checkmate' : (tags.Result === '1/2-1/2' ? 'draw' : null);
+    var rec = {
+      id: 'pgn' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      date: tags.Date && tags.Date !== '????.??.??' ? tags.Date.replace(/\./g, '-') + 'T00:00:00' : new Date().toISOString(),
+      red: { name: tags.Red || 'Red', kind: 'llm', model: tags.RedModel || null, style: null, models: null },
+      black: { name: tags.Black || 'Black', kind: 'llm', model: tags.BlackModel || null, style: null, models: null },
+      moves: moves, result: result, winner: winner,
+      durationMs: 0, illegal: 0, tokens: { red: null, black: null },
+      note: tags.Termination ? 'PGN Termination: ' + tags.Termination : null
+    };
+    return rec;
   }
 
   /* ── 第30轮 一键备份/恢复: records + Elo + 界面设置 打包为单 JSON ── */
@@ -200,7 +254,7 @@
   XQ.Record = {
     blank: blank, addMove: addMove, finish: finish,
     save: save, list: list, get: get, remove: remove,
-    saveImported: saveImported, summarize: summarize,
+    saveImported: saveImported, summarize: summarize, importFromPGN: importFromPGN,
     exportAll: exportAll, importAllBackup: importAllBackup,
     toPrettyJSON: toPrettyJSON, downloadFile: downloadFile, importFromFile: importFromFile
   };
