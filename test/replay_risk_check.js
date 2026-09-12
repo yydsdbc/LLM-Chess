@@ -59,8 +59,21 @@ const rFree = XQ.Replay.moveRisk(sFree.engine(), XQ.Move.parseSq('e3'), XQ.Move.
 ok('免费吃卒 负风险', rFree < 0, 'risk=' + rFree);
 ok('prev 回退后 risks 表仍可用', s.prev() === true && Object.keys(s.risks()).length === 2, 'keys=' + Object.keys(s.risks()).length);
 
-/* 真实棋谱 (match_headless) 全程检测不崩 + 风险值非 NaN */
-const recReal = JSON.parse(fs.readFileSync('logs/match_headless.json', 'utf8'));
+/* 真实棋谱 (match_headless) 全程检测不崩 + 风险值非 NaN
+   第29轮 CI 修复: 文件可能不存在 (logs/ 被 gitignore, 本地才有) — 缺文件时合成 4 手谱, 不再 ENOENT
+   (与第12轮 replay_smoke CI 红灯同款教训) */
+let recReal = null;
+try { recReal = JSON.parse(fs.readFileSync('logs/match_headless.json', 'utf8')); } catch (e) {}
+if (!recReal || !Array.isArray(recReal.moves) || recReal.moves.length < 2) {
+  recReal = { id: 'synthetic', date: new Date().toISOString(),
+    red: { name: '红', kind: 'llm' }, black: { name: '黑', kind: 'llm' },
+    moves: [
+      { n: 1, side: 'red', piece: 'pawn', from: 'a4', to: 'a5' },
+      { n: 2, side: 'black', piece: 'cannon', from: 'b8', to: 'a8' },
+      { n: 3, side: 'red', piece: 'cannon', from: 'h3', to: 'e3' },
+      { n: 4, side: 'black', piece: 'cannon', from: 'a8', to: 'a5', captured: 'pawn' }
+    ] };
+}
 const sReal = XQ.Replay.create(recReal);
 while (sReal.idx() < sReal.total()) sReal.next();
 const rr = sReal.risks();
