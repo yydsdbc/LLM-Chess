@@ -992,3 +992,9 @@
 - 边界: systemPrompt 未动 (dump PASS); server.js 改动 (req 传参 + LLMCHESS_KEYS) 需重启生效
 - 触点: ai/committee_agent.js (新) / ui/app.js / ui/i18n.js (+4 键) / index.html / server.js / test/_server_http.js (28→31) / test/_committee_agent.js (新) / test/run_all.js / test/check_ui.js / README×2 / AGENTS / ARCHITECTURE / BENCHMARK / CHANGELOG
 - 下轮候选: 会诊进阶 (辩论制: 主模型出招+同侪点评后改着), 会诊耗时预算 (并行上限), Elo 天梯 UI 面板
+
+## 2026-09-12 ~07:30 第29轮补记 (CI 热修 0a5ce94)
+- push 后真实 CI 抓出第29轮漏网: replay_risk_check 直读 logs/match_headless.json 无守卫 — logs/ 被 gitignore,
+  CI 干净 checkout ENOENT (与第12轮 replay_smoke CI 红灯完全同款, 本轮挂链时未吸取该教训, 第29轮 LOG 教训段现补)
+- 修复: 缺文件时合成 4 手确定性谱 (覆盖风险检测/NaN 扫描意图不变); 本地 + 干净 clone CI 模拟 15/15 双验证后推送
+- 推送记录: 第29轮主体 commit 4579297 首推时双路断网 deferred, 代理恢复后上库; CI 首跑红 → 本热修 0a5ce94 CI 绿
