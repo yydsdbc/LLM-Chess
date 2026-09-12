@@ -238,7 +238,7 @@ var cntPrefix = (p2) => issues.filter(x => x.type.indexOf(p2) === 0).length;   /
 report += `\n\n总计: 送吃${cntPrefix('送吃') + cntPrefix('送兵')} 亏换${cntPrefix('亏换')} 漏吃${issues.filter(x => x.type === '漏吃').length} 对方免费吃${issues.filter(x => x.type === '对方免费吃').length} 拉锯${issues.filter(x => x.type === '拉锯').length} 错失必杀${issues.filter(x => x.type === '错失必杀').length} 窝心马${issues.filter(x => x.type === '窝心马').length} 开局任务${issues.filter(x => x.type === '开局任务').length} 长将${cntPrefix('长将')}`;
 console.log(report);
 if (/--json/.test(argStr)) console.log(JSON.stringify({ record: record.id, plies: record.moves.length, total: issues.length, issues: issues }, null, 2));   // 第36轮: --json 机器可读输出
-if (OUT) fs.writeFileSync(path.join(ROOT, OUT), report, 'utf8');
+if (OUT && OUT !== '--json') fs.writeFileSync(path.join(ROOT, OUT), report, 'utf8');
 }
 
 // ── v3.7 --selftest: 开局三任务检测回归 (好坏两场景, 全程真实引擎校验合法性) ──
