@@ -1,6 +1,6 @@
 # 🦞 LLM-chess v1.0 · AI Battle & Spectating Platform
 
-[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-14%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
+[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-15%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
 
 ![LLM-chess v1.0 battle & spectating UI](docs/ui.png)
 
@@ -69,7 +69,7 @@ LLM-chess/
 ├── replay/
 │   ├── replay.js            # replay data layer: record → engine state machine (tolerant of dirty data)
 │   └── replay_controller.js # replay control: play/pause/step/seek/7 speeds/loop
-└── test/               # 14 suites, see Testing below (perft gold standard included)
+└── test/               # 15 suites, see Testing below (perft gold standard included)
 ```
 
 ## Features
@@ -101,6 +101,9 @@ Installable (manifest + themed icon → standalone window / home-screen), plus a
 - **Fallback safety valve**: 3rd-attempt coordinate fallback scores worse than the greedy best by >1.5 → replaced by the safe greedy move.
 - **Retry cooling**: temperature converges to 0.1 from attempt 2; linear backoff 3s→6s→9s for 429/50x/gateway errors; permanent errors (401/balance/model-not-found) fail fast.
 - **Self-validation**: strict JSON field checks, nested-JSON scanner, full-width character rescue, bare-key tolerance, reasoning_content JSON salvage, per-move attempt counting, external abort support.
+
+### Multi-LLM per Side (v1.0.daily)
+A side can field **several LLMs that reason together**: put comma-separated model names in the model box (`glm-a, glm-b` or cross-provider `deepseek:deepseek-chat, qwen:qwen3-max`) and pick a mode — **Rotation** (each move uses the next model, independent prefix caches) or **Council** (all voters answer in parallel, the destination square wins by vote, ties broken by summed confidence; every voter shows up in the move card, and voters' failures are tolerated as long as one answers).
 
 ### Elo Ladder (v1.0.daily)
 AI-vs-AI games (LLM / Random on either side, no human seat) are auto-rated: every finished game updates the local Elo table, the end-card shows the ±delta per side, and replays export `{%bm N}` bookmark comments. Pure functions (`previewDelta`) are unit-tested.
@@ -167,7 +170,8 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 | `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest + SW guard + replay-dialog semantics |
 | `node test/_prompt_level_smoke.js` | prompt-tier injection: each level constant + legacy style map + prefix-cache invariance |
 | `node test/replay_risk_check.js` | replay risk detector + record quota fallback |
-| `node test/_server_http.js` | server.js HTTP behavior, 28 checks (spawns a real server: health shape / static+ETag/304 incl. sw.js / 404 / path-traversal 403 incl. sibling-prefix dir / malformed-encoding 400 / OPTIONS on api+static / bad-json 400 / empty body 400 / >2MB abort / unknown provider 400 / providers shape + no-key-leak / HEAD+ETag / manifest+icon+sw MIME / method guards / wrong-ETag 200 / 429 rate limit) |
+| `node test/_committee_agent.js` | same-side multi-LLM committee: council vote, tie-break, rotation, all-fail, usage sum |
+| `node test/_server_http.js` | server.js HTTP behavior, 31 checks (incl. real relay traversal via injected stub upstream) (spawns a real server: health shape / static+ETag/304 incl. sw.js / 404 / path-traversal 403 incl. sibling-prefix dir / malformed-encoding 400 / OPTIONS on api+static / bad-json 400 / empty body 400 / >2MB abort / unknown provider 400 / providers shape + no-key-leak / HEAD+ETag / manifest+icon+sw MIME / method guards / wrong-ETag 200 / 429 rate limit) |
 | `node test/analyze_blunders.js <log.json>` | blunder detector (hanging moves, missed mates, shuffling; `--top=N --type=...`) |
 | `node test/match_headless.js <provider> <model> [n]` | headless LLM game, n moves |
 

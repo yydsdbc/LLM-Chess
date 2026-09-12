@@ -65,7 +65,7 @@ flowchart LR
 | `test/check_ui.js` | syntax sweep, ID cross-check, localStorage prefix, release files, README version parity, HTML hygiene, PWA manifest + SW guard, replay-dialog semantics |
 | `npm run check` | syntax sweep of every JS file + prompt hard gate |
 
-Run everything with `npm test` (12 suites) — CI runs `npm run check` + `npm test` on Node 18/20/22 (ubuntu) and Node 22 (windows).
+Run everything with `npm test` (15 suites) — CI runs `npm run check` + `npm test` on Node 18/20/22 (ubuntu) and Node 22 (windows).
 
 ## Conventions / 约定
 

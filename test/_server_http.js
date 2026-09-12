@@ -6,6 +6,7 @@
  *   第24轮二期: providers 形状+无 apiKey 泄漏 / HEAD+ETag / manifest.json+icon.svg MIME / GET /api/chat 方法守卫
  *   第26轮三期: sw.js 托管 / POST providers 守卫 / 空体 400 / health 形状 / 2MB 上限
  *   第27轮四期: 前缀穿越 (兄弟同名前缀目录) 403 / 错误 ETag 200 / sw.js 304 / OPTIONS 静态路径 204
+ *   第29轮五期: 真实中继穿越 (LLMCHESS_KEYS 注入 + 本地 stub 上游; 回归 req 脱作用域崩进程) / 415 / 404 no-store
  * 零依赖 (http + child_process); 不打上游 — 全部走本地可判定路径。
  * 用法: node test/_server_http.js
  */
@@ -53,7 +54,23 @@ function postChat(payload) {
 }
 
 async function main() {
-  server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore' });
+  // 第29轮: 中继穿越测试基建 — 本地 stub 上游 + 独立密钥文件 (LLMCHESS_KEYS, 不触用户真实 keys.json)
+  const upstream = http.createServer(function (uReq, uRes) {
+    let ubody = '';
+    uReq.on('data', function (c) { ubody += c; });
+    uReq.on('end', function () {
+      uRes.writeHead(200, { 'Content-Type': 'application/json' });
+      uRes.end(JSON.stringify({ choices: [{ message: { content: '{"from":"h3","to":"e3","summary":"upstream-ok","confidence":0.8}' } }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }));
+    });
+  });
+  await new Promise(function (r) { upstream.listen(0, '127.0.0.1', r); });
+  const upPort = upstream.address().port;
+  const fS = require('fs');   // 第29轮: 文件级 const fs 在 133 行 (TDZ), main 顶部先取独立引用
+  const keysFile = path.join(ROOT, 'temp', 'guard-keys-' + process.pid + '.json');
+  fS.mkdirSync(path.dirname(keysFile), { recursive: true });
+  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key' } } }));
+
+  server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile }) });
   const up = await waitHealth(40);   // ~6s 上限
   ok(up, '服务启动 + GET /api/health → 200');
 
@@ -132,6 +149,13 @@ async function main() {
   const optStatic = await req('OPTIONS', '/');
   ok(optStatic.status === 204 && !!optStatic.headers['access-control-allow-origin'], 'OPTIONS / (静态路径) → 204 + ACAO (预检处理器全局, 不限 /api)');
 
+  // 第29轮五期: 真实中继穿越 (本地 stub 上游) — 回归 v1.0.3 起的 req 脱作用域崩进程 bug
+  const relayRes = await postChat({ provider: 'stubprov', model: 'stub-model', messages: [{ role: 'system', content: 'sys' }, { role: 'user', content: 'usr' }] });
+  ok(relayRes.status === 200, '中继穿越: POST /api/chat (stub 上游) → 200');
+  ok(relayRes.body.indexOf('upstream-ok') >= 0, '中继穿越: 上游应答原文透传 (SSE 帧含 content)');
+  const healthAfter = await req('GET', '/api/health');
+  ok(healthAfter.status === 200, '中继穿越后: 服务进程存活 (v1.0.3 起此处曾 ReferenceError 崩溃)');
+
   // 第28轮五期: Content-Type 门禁 + 404 no-store
   const ctBad = await req('POST', '/api/chat', '{"provider":"x"}', { 'Content-Type': 'text/plain' });
   ok(ctBad.status === 415, 'POST /api/chat text/plain → 415 (Content-Type 门禁, 无声明仍宽松放行)');
@@ -150,6 +174,8 @@ async function main() {
 
 function finish() {
   try { if (server) server.kill(); } catch (e) {}
+  try { upstream.close(); } catch (eU) {}
+  try { fs.rmSync(keysFile, { force: true }); } catch (eK) {}
   setTimeout(function () {
     console.log('_server_http (port ' + PORT + '):');
     console.log(results.join('\n'));

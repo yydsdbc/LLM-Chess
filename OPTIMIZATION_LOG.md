@@ -966,3 +966,29 @@
   挂链的两个死测试共抓出 3 处问题 (陈旧路径/退出码缺失/期望错误), 印证「守护必须先真实跑再挂链」
 - 验证: npm run check ALL PASS + npm test 并行 14/14 全绿 + IAB 实机 (Elo applyResult 页面直驱 1516/1484 零和 + 对局 ply 流动 + 无错误横幅)
 - 环境伪象记录: IAB 后台标签 setTimeout 被钳制 ~1s (r26 已记), 随机对局终局等待不经济 → Elo 接线以「单测 + 页面直驱」双验证替代长等
+
+## 2026-09-12 ~06:40 第29轮 (v1.0.daily, zcode — 指令「增加多 LLM 功能: 多个 LLM 可以在同一方推理思考」)
+
+【新功能: 同方多 LLM (ai/committee_agent.js 新模块, 15 套件)】
+1. **同方多 LLM 两种模式**: 模型框逗号/分号分隔多模型 (支持 provider:model 跨厂商混编, 如 deepseek:deepseek-chat, qwen:qwen3-max), 设置面板新增模式选择 (ui-multi, 随 CFG_KEY 持久化):
+   - rotate 轮换: 每手换同方下一个模型, 各自独立会话/前缀缓存, reasoning 带 [轮换 provider:model] 标记
+   - council 会诊: 同方全体并行作答 (错峰 300ms 发车避限流秒窗), 按落点投票决胜, 票数同比信心和; 决策卡候选位展示全体选民 (*=胜出), summary 带 [会诊 N/M], reasoning 记投票明细; 个别选民失败容忍 (≥1 应答即出招), 全灭才走既有随机兑底
+2. **配置解析**: off 模式多模型取第一个 (避免整串当模型名 400); 委员会 usage 为选民之和; onThinking 只转发首选民 (多路混流互踩); reset 广播全体
+3. **兼容性**: 委员会方 name/model = joined (record/replay/决策卡/Elo 天梯名自动兼容); kind=llm 走既有全部链路 (牌局存档/终局统计/Elo)
+
+【关键 bug 修复 (4-5) — IAB 实测中撞出, v1.0.3 起潜伏】
+4. **relay/relayAnthropic req 脱作用域崩进程 (关键级)**: v1.0.3 CORS 回显时函数内引用了不在作用域的 req — 任何真实 LLM 中继调用在收到上游响应瞬间 ReferenceError 崩掉整个服务进程 (测试从未 traversed: 无 key 早退 400, 浏览器验证用 stub; 本轮 IAB stub 全链验证时被真实转发路径撞出)。修复: req 显式传参; 捞到真实崩溃栈存档
+5. **server LLMCHESS_KEYS 环境变量**: 密钥文件路径可注入 — 测试可用独立密钥文件, 不触用户真实 keys.json
+
+【回归防线 (6-8)】
+6. _server_http 五期 (28→31 断言): **真实中继穿越** — 测试内起本地 stub 上游 + 注入式密钥文件, POST /api/chat 全链 → 200 + SSE 原文透传 + 服务进程存活 (修复前此处必崩, 红绿实证); 415 / 404-no-store 断言顺延
+7. 新测试套件 test/_committee_agent.js (15 套件): 会诊投票/平票信心决胜/轮换标记/全灭抛错/用量聚合/单模型退化, 11 断言首跑全过
+8. 套件数文档 15 同步 (README 双语徽章/树/表 +2 行 / AGENTS ×2 / ARCHITECTURE) + 修正第28轮文档脚本中断造成的三处漏改 (AGENTS/ARCHITECTURE 仍 12, BENCHMARK 复现性注记缺失)
+
+【验证】
+- node 测试: _committee_agent 11/11 首跑全过; npm run check ALL PASS + npm test 并行 **15/15 全绿**
+- IAB 实机 (页内 stub fetch, 零真实 API 消耗): 红「glm-a, glm-b」会诊 + 黑「glm-c」单模型 → 决策卡 [会诊 2/2] + 双选民候选 (a4-a5* 胜出) + 模型卡 glm-a+glm-b; 完整走到 三次重复判和 终局 → 终局记录 glm-a+glm-b vs glm-c + **Elo 表按委员会方名记账 1500/1500 (平局零变动正确)** — 第28轮 Elo 接线同场二次实证
+- 环境注记: 随机对局终局等待受 IAB 后台标签定时器钳制 (~1s/定时器), 改用页内直驱/存档读取完成验证
+- 边界: systemPrompt 未动 (dump PASS); server.js 改动 (req 传参 + LLMCHESS_KEYS) 需重启生效
+- 触点: ai/committee_agent.js (新) / ui/app.js / ui/i18n.js (+4 键) / index.html / server.js / test/_server_http.js (28→31) / test/_committee_agent.js (新) / test/run_all.js / test/check_ui.js / README×2 / AGENTS / ARCHITECTURE / BENCHMARK / CHANGELOG
+- 下轮候选: 会诊进阶 (辩论制: 主模型出招+同侪点评后改着), 会诊耗时预算 (并行上限), Elo 天梯 UI 面板

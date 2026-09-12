@@ -23,6 +23,7 @@ const SUITES = [   // 第18轮 +_replay_edge / 第19轮 +_logic_layer / 第23轮
   '_logic_layer.js',
   '_prompt_level_smoke.js',
   'replay_risk_check.js',
+  '_committee_agent.js',
   '_server_http.js',
 ];
 

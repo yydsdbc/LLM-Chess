@@ -16,7 +16,7 @@ const path = require('path');
 
 const PORT = parseInt(process.argv[2] || process.env.PORT || '8788', 10);
 const ROOT = __dirname;
-const KEYS_PATH = path.join(ROOT, 'config', 'keys.json');
+const KEYS_PATH = process.env.LLMCHESS_KEYS || path.join(ROOT, 'config', 'keys.json');   // 第29轮: 测试可注入独立密钥文件 (不触用户真实 keys.json)
 let VERSION = 'unknown';
 try { VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || 'unknown'; } catch (e) {}
 
@@ -86,7 +86,7 @@ function serveStatic(req, res, urlPath) {
 }
 
 /* ── 上游转发 ── */
-function relay(providerCfg, payload, res) {
+function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 传入 (v1.0.3 起函数内引用 req 但不在作用域, 真实中继调用上游响应时 ReferenceError 崩进程)
   const base = (providerCfg.baseUrl || '').replace(/\/+$/, '');
   const path = providerCfg.chatPath || '/chat/completions';
   const url = new URL(base + path);
@@ -153,7 +153,7 @@ function relay(providerCfg, payload, res) {
  * 这里做双向转换: 入站 OpenAI 风格 payload → Anthropic; 出站 Anthropic 响应 → 合成 OpenAI 风格 SSE 帧 (llm_agent 无需改动)。
  * 等待上游期间每 15s 发 SSE 注释心跳 (: ping), 防 llm_agent 的 streamIdleMs 60s 看门狗误杀长思考。
  */
-function relayAnthropic(providerCfg, payload, res) {
+function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
   const base = (providerCfg.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '');
   const url = new URL(base + (providerCfg.chatPath || '/v1/messages'));
   const mod = url.protocol === 'https:' ? https : http;
@@ -335,8 +335,8 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: '缺少 model/messages' }));
     }
-    if ((cfg.protocol || '') === 'anthropic') return relayAnthropic(cfg, payload, res);   // v3.5: Claude 走协议转换
-    return relay(cfg, payload, res);
+    if ((cfg.protocol || '') === 'anthropic') return relayAnthropic(cfg, payload, res, req);   // v3.5: Claude 走协议转换
+    return relay(cfg, payload, res, req);
   }
 
   /* ── 静态 ── */

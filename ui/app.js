@@ -709,6 +709,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
 
   function readSettings() {
     var s = { red: {}, black: {} };
+    var multiEl = document.getElementById('ui-multi');
+    s.multi = multiEl ? multiEl.value : 'off';   // 第29轮: 同方多 LLM 模式 (随 CFG_KEY 持久化)
     Object.keys(SIDE_DEFS).forEach(function (side) {
       var d = SIDE_DEFS[side];
       s[side] = {
@@ -723,6 +725,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     return s;
   }
   function fillSettings(saved) {
+    var multiEl = document.getElementById('ui-multi');
+    if (multiEl) multiEl.value = saved.multi || 'off';
     Object.keys(SIDE_DEFS).forEach(function (side) {
       var d = SIDE_DEFS[side], v = saved[side] || {};
       document.getElementById(d.checkbox).checked = !!v.enabled;
@@ -758,13 +762,32 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           warnBanner((XQ.I18N ? XQ.I18N.t('warn_llm_no_server') : '⚠️ LLM 需要本地服务: 请运行 node server.js 后访问本页地址') + ' <b>http://' + location.host + '</b>');   // v1.0.daily: 端口随实际服务端口 (server.js 支持 argv 端口)
           agents[side] = null; return;
         }
-        var agent = XQ.LLMAgent.create({
-          side: side, provider: v.provider, model: v.model, promptLevel: v.style || 'mid',
-          thinking: v.quick ? 'disabled' : 'enabled',   // v1.7.2: 快答模式关思考 (不支持时 400 自动降级)
-          onThinking: function (s, text) { if (aiBusy && s === side) showThinking(s, text); },
-          onRetry: function (info) { view.aiRetries = view.aiRetries || {}; view.aiRetries[side] = info.attempt; }   // v2.5: 重试实时可见 (状态条 重试N次)
+        /* 第29轮 同方多 LLM: 模型框逗号/分号分隔多模型 (支持 provider:model 跨厂商); 模式 off/rotate/council */
+        var specs = [];
+        String(v.model || '').split(/[,，;；]/).forEach(function (tok) {
+          tok = tok.trim();
+          if (tok) specs.push(tok);
         });
-        agents[side] = { kind: 'llm', label: v.model || 'LLM', model: v.model, provider: v.provider, quick: !!v.quick, style: v.style || 'mid', agent: agent };
+        var multiMode = (s.multi === 'rotate' || s.multi === 'council') && specs.length > 1 ? s.multi : 'off';
+        var onThink = function (s2, text) { if (aiBusy && s2 === side) showThinking(s2, text); };
+        var onRetry2 = function (info) { view.aiRetries = view.aiRetries || {}; view.aiRetries[side] = info.attempt; };   // v2.5: 重试实时可见 (状态条 重试N次)
+        var agent, modelName;
+        if (multiMode !== 'off') {
+          agent = XQ.CommitteeAgent.create({
+            side: side, provider: v.provider, models: specs, mode: multiMode,
+            promptLevel: v.style || 'mid', thinking: v.quick ? 'disabled' : 'enabled',
+            onThinking: onThink, onRetry: onRetry2
+          });
+          modelName = specs.join('+');
+        } else {
+          agent = XQ.LLMAgent.create({
+            side: side, provider: v.provider, model: specs[0] || v.model, promptLevel: v.style || 'mid',
+            thinking: v.quick ? 'disabled' : 'enabled',
+            onThinking: onThink, onRetry: onRetry2
+          });
+          modelName = specs[0] || v.model;
+        }
+        agents[side] = { kind: 'llm', label: modelName || 'LLM', model: modelName, provider: v.provider, quick: !!v.quick, style: v.style || 'mid', agent: agent };
       }
     });
     paintGear();

@@ -57,3 +57,5 @@ Report-layer knobs: `--top=N` (limit listed issues) and `--type=` (filter by typ
 - Browser: `localStorage` (`xq_records_v1`) → replay picker, deep link `#rp=ls:<id>`.
 - Headless: `logs/match_headless.json` — loadable via the replay overlay 📂 import.
 - JSON import/export formats are identical everywhere; PGN export includes per-move `{cn: ...}` Chinese notation comments.
+
+- 复现性: `XQ.RandomAgent.create({ rng })` 支持注入确定性随机源 (第28轮) — 自动化对局可用固定序列随机数复现同一局, 免 CI 概率性断言。

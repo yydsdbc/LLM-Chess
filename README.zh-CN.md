@@ -2,7 +2,7 @@
 
 # 🦞 LLM-chess v1.0 · AI 对战直播平台
 
-[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-14%20suites-brightgreen)
+[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-15%20suites-brightgreen)
 
 中国象棋 + LLM 对战平台。v1.5 决策卡片流/棋风对垒/观战动效；v1.6 回放系统（不调 LLM 快速重看对局）；v1.7 HUD 观战仪表盘（被吃托盘/中文记谱/评值走势/终局结算）；v2 赛博暗金主题。核心引擎可独立用于搜索算法（alpha-beta / MCTS）与 Agent 研发。
 
@@ -67,7 +67,7 @@ LLM-chess/
 ├── replay/
 │   ├── replay.js            # 回放数据层: 棋谱 → 引擎状态机 (next增量/prev/goto重建, 脏数据容错)
 │   └── replay_controller.js # 回放控制层: 播放/暂停/步进/跳转/倍速7档/循环
-└── test/               # run_tests.js 49项(perft金标准+重复局面/长将追踪/moveTag杀标注/长将判负/三次重复判和/送吃守卫) · test_llm_convo.js 149项(提示词/重试/兑底安全阀/开局炮保护回归/对拉与长将警示/重复局面警示/合法列表杀标注/亏子标注/危子预标/全角容错/对手吃子标注/重试钩子/多轮缓存守护/HIST_CAP裁剪/reasoning打捞) · replay_smoke.js 53项 · test_evaluation.js 88项(含士象完整性/底线老兵/空头炮/窝心马/中炮矄中卒/开局任务提醒/出车提醒) · _clean_reason_check.js 10项 · analyze_blunders.js 瞎走检测器(含错失必杀) · check_ui.js 语法+ID+HTML净化+PWA守护 · _replay_edge/_logic_layer/_prompt_level_smoke/replay_risk_check/_server_http.js 边界/分级注入/服务端行为守护 · smoke_ui.js UI冒烟13项
+└── test/               # run_tests.js 49项(perft金标准+重复局面/长将追踪/moveTag杀标注/长将判负/三次重复判和/送吃守卫) · test_llm_convo.js 149项(提示词/重试/兑底安全阀/开局炮保护回归/对拉与长将警示/重复局面警示/合法列表杀标注/亏子标注/危子预标/全角容错/对手吃子标注/重试钩子/多轮缓存守护/HIST_CAP裁剪/reasoning打捞) · replay_smoke.js 53项 · test_evaluation.js 88项(含士象完整性/底线老兵/空头炮/窝心马/中炮矄中卒/开局任务提醒/出车提醒) · _clean_reason_check.js 10项 · analyze_blunders.js 瞎走检测器(含错失必杀) · check_ui.js 语法+ID+HTML净化+PWA守护 · _replay_edge/_logic_layer/_prompt_level_smoke/replay_risk_check/_committee_agent/_server_http.js 边界/分级注入/委员会/服务端行为守护 · smoke_ui.js UI冒烟13项
 ```
 
 ## v1.5 观战直播平台
@@ -116,6 +116,9 @@ LLM-chess/
 
 ## Elo 天梯 (v1.0.daily)
 双方均为 AI（LLM/随机，无人类席位）的对局自动计入本地 Elo 表：终局卡显示双方 ±变动；纯函数（`previewDelta`）有单元测试覆盖；回放导出 PGN 携带 `{%bm N}` 书签注释。
+
+## 同方多 LLM (v1.0.daily)
+同一方可以配置多个 LLM 协同推理：模型框逗号分隔多个模型（`glm-a, glm-b`，或跨厂商 `deepseek:deepseek-chat, qwen:qwen3-max`），再选择模式 — **轮换**（每手换下一个模型，各自独立前缀缓存）或 **会诊**（全体并行作答，按落点投票决胜，平票比信心和；投票清单进决策卡，个别选民失败不影响出招，全灭才走随机兑底）。
 
 ## 运行
 
@@ -177,7 +180,8 @@ LLM-chess/
 | `node test/check_ui.js` | 语法 (17 文件) + getElementById/HTML 交叉核查 + script src/localStorage 前缀/发布文件/HTML 净化/PWA manifest+SW 守护 |
 | `node test/_prompt_level_smoke.js` | 提示词分级注入守护 (每级长度恒定 + legacy 兼容 + 前缀缓存不变式) |
 | `node test/replay_risk_check.js` | 回放疑误着法检测 + 存档配额兜底 |
-| `node test/_server_http.js` | server.js HTTP 行为 28 项 (真实起服务: 健康形状/静态+ETag/304含sw.js/404/路径穿越403含兄弟同名前缀目录/畸形编码400/OPTIONS含静态路径/非法JSON 400/空体400/超2MB中断/未知服务商400/providers形状+无密钥泄漏/HEAD+ETag/manifest+icon+sw MIME/方法守卫/错ETag全量200/限流429) |
+| `node test/_committee_agent.js` | 同方多 LLM 委员会: 会诊投票/平票决胜/轮换/全灭/用量聚合 |
+| `node test/_server_http.js` | server.js HTTP 行为 31 项 (含注入 stub 上游的真实中继穿越) | (真实起服务: 健康形状/静态+ETag/304含sw.js/404/路径穿越403含兄弟同名前缀目录/畸形编码400/OPTIONS含静态路径/非法JSON 400/空体400/超2MB中断/未知服务商400/providers形状+无密钥泄漏/HEAD+ETag/manifest+icon+sw MIME/方法守卫/错ETag全量200/限流429) |
 | `node test/analyze_blunders.js <log.json>` | 瞎走检测 (送吃/免费吃/漏吃/拉锯/错失必杀, 静态交换评估) |
 | `node test/smoke_relay.js` | 真实中继单发 (需 key) |
 | `node test/smoke_ui.js [model]` | 无头 Edge 冒烟 13 项 (自动开局/决策日志/分页哨兵/截图) |

@@ -10,7 +10,7 @@
 
 ## 硬门禁（违反 = 白干）
 
-1. **测试**：`npm test`（并行 12 套件 ~20s）全绿才能 commit；单套件可 `node test/<name>.js`；改动 js 全部先 `node --check`。
+1. **测试**：`npm test`（并行 15 套件 ~20s）全绿才能 commit；单套件可 `node test/<name>.js`；改动 js 全部先 `node --check`。
 2. **system prompt**（`ai/llm_agent.js`）：≤2400 字、全中文、无特殊符号（①②③≥≤~→emoji）；提示词等级 none/low/mid/high 每级长度恒定（前缀缓存不变式）。
 3. **server.js 尽量不改**（改了用户要重启进程）；确要改必须跑 `test/check_ui.js`。
 4. **PowerShell 纪律**：每条命令后查 `$LASTEXITCODE`；严禁管道收尾（PowerShell 会伪报 exit 1）。
@@ -20,7 +20,7 @@
 ## 常用命令
 
 ```powershell
-npm test                 # 并行 12 套件（~20s）
+npm test                 # 并行 15 套件（~20s）
 node test/run_tests.js   # 串行链
 node server.js           # 本地起服务 :8788
 git push                 # 直连优先；失败: git -c http.https://github.com.proxy=http://127.0.0.1:10808 push

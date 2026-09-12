@@ -77,7 +77,7 @@ if (!vEn || !vZh || vEn !== vZh || pkg.version.indexOf(vEn) !== 0) process.exit(
 const runAllSrc = fs.readFileSync(__dirname + '/../test/run_all.js', 'utf8');
 const mustWire = ['run_tests.js', 'test_evaluation.js', 'test_llm_convo.js', 'replay_smoke.js', '_clean_reason_check.js',
   'cn_notation_check.js', 'i18n_check.js', 'link_check.js', 'check_ui.js', '_replay_edge.js', '_logic_layer.js',
-  '_server_http.js', '_prompt_level_smoke.js', 'replay_risk_check.js'];
+  '_server_http.js', '_prompt_level_smoke.js', 'replay_risk_check.js', '_committee_agent.js'];
 const unwired = mustWire.filter(function (f) { return runAllSrc.indexOf("'" + f + "'") < 0; });
 const phantom = [];
 runAllSrc.split("'").forEach(function (seg, qi) {

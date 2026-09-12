@@ -498,6 +498,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
             <div id="server-warn" style="display:none;margin:2px 0 12px;padding:8px 10px;border-radius:6px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.35);font-size:11px;color:#f0b8b0;"></div>
             <div class="set-note" data-i18n="keys_note">密钥仅保存在服务端 config/keys.json，前端永不接触。双方可各配不同类型/服务商。</div>
             <div class="set-foot">
+                <div class="set-row" style="margin-bottom:8px"><label data-i18n="multi_label">同方多 LLM</label><select id="ui-multi"><option value="off" data-i18n="multi_off">关闭 (单模型)</option><option value="rotate" data-i18n="multi_rotate">轮换 (每手换模型)</option><option value="council" data-i18n="multi_council">会诊 (并行投票)</option></select></div>
                 <div class="set-row" style="margin-bottom:8px"><label data-i18n="language_label">语言</label><select id="ui-lang"><option value="zh">中文</option><option value="en">English</option></select></div>
                 <div class="set-row" style="margin-bottom:8px"><label data-i18n="pieces_label">棋子显示</label><select id="ui-pieces"><option value="cn">汉字</option><option value="en">Letters</option></select></div>
                 <button class="btn" onclick="XQApp.closeAISettings()"><span data-i18n="btn_close">取消</span></button>
@@ -551,6 +552,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 <script src="evaluation/position.js"></script>
 <script src="ai/random_agent.js"></script>
 <script src="ai/llm_agent.js"></script>
+<script src="ai/committee_agent.js"></script>
 <script src="benchmark/record.js"></script>
 <script src="replay/replay.js"></script>
 <script src="replay/replay_controller.js"></script>
