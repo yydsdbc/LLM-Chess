@@ -50,13 +50,18 @@
           return mv;
         });
       }
-      // council: 并行作答 (错峰发车) → 落点投票
+      // council: 并行作答 (错峰发车) → 落点投票; 选民预算超时按弃权 (第30轮, opts.voterBudgetMs 默认 60s)
+      var budget = typeof opts.voterBudgetMs === 'number' ? opts.voterBudgetMs : 60000;
       var calls = agents.map(function (a, idx) {
         return new Promise(function (res) {
+          var settled = false;
+          var done = function (v) { if (!settled) { settled = true; res(v); } };
           setTimeout(function () {
+            // 第30轮修正: 预算从选民开始作答起算 (错峰等待不计入)
+            if (budget > 0) setTimeout(function () { done({ err: new Error('voter budget ' + budget + 'ms exceeded'), name: a.name, timeout: true }); }, budget);
             a.agent.next(engine, history)
-              .then(function (mv) { res({ mv: mv, name: a.name }); })
-              .catch(function (err) { res({ err: err, name: a.name }); });
+              .then(function (mv) { done({ mv: mv, name: a.name }); })
+              .catch(function (err) { done({ err: err, name: a.name }); });
           }, idx * 300);
         });
       });

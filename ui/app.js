@@ -336,6 +336,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     }
     if (currentRecord) {
       XQ.Record.addMove(currentRecord, engine, m, secs * 1000);
+      if (engine.ply() % 5 === 0) XQ.Record.save(currentRecord);   // 第30轮: 进行中对局每 5 手自动存档 (崩溃/F5 可续)
       syncArchive();   // v1.0.daily: 有手可存 → 启用 存棋谱
       if (res.status.over) {
         playEnd(res.status.winner);   // v1.0.daily 终局提示音 (红胜上行/黑胜下行/和棋单音)
@@ -511,8 +512,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     replayStack = [];
     while (engine.ply() > ply) {
       var last = engine.lastMove();
-      engine.undoMove(last);
       replayStack.push(last);
+      engine.undoPly();   // 第30轮关键修复: 门面只有 undoPly (无 undoMove) — 复盘功能自第19轮起点击即抛错从未生效
     }
     aiBusy = false;
     bannerClear();
@@ -530,7 +531,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     paintReplayBar();
   }
   function replayRestore() {
-    while (replayStack.length) engine.applyMove(replayStack.pop());
+    /* 第30轮关键修复: 门面无 applyMove — 还原改走 applyPlayerMove (按 LIFO 顺序重放; 规则闭环触发时截断保底盘) */
+    while (replayStack.length) {
+      var m30 = replayStack.pop();
+      var r30 = engine.applyPlayerMove(m30.from.x, m30.from.y, m30.to.x, m30.to.y);
+      if (!r30.ok) break;
+    }
     replayStack = [];
     refresh();
     paintReplayBar();
@@ -676,7 +682,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           list.forEach(function (p) {
             var opt = document.createElement('option');
             opt.value = p.id;
-            opt.textContent = p.name + (p.hasKey ? '' : ' (未配Key)');
+            opt.textContent = p.name + (p.hasKey ? '' : ' (' + (XQ.I18N ? XQ.I18N.t('provider_no_key') : '未配Key') + ')');   // 第30轮 i18n
             sel.appendChild(opt);
           });
           // 保留原选择; 若已不存在则回退到第一个已配Key的项
@@ -877,6 +883,41 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       o.connect(g); g.connect(masterBus()); o.start(t + i * 0.13); o.stop(t + i * 0.13 + 0.36);
     });
   }
+  /* 第30轮 悔棋: 人机局撤「人类+AI」一对; AI-vs-AI 撤 1 手并让对局继续。
+     同步回滚: 走法列表/决策日志/吃子托盘/评值走势; LLM 会话 reset (历史已不匹配, 重建) */
+  function undoLastMove() {
+    if (aiBusy || engine.ply() === 0) return;
+    if (replayStack.length) { warnBanner((XQ.I18N ? XQ.I18N.t('undo_need_restore') : '复盘查看中 — 请先 ⟲ 还原再悔棋'), null); return; }
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    var steps = 1;
+    var lastSide = engine.lastMove() && engine.lastMove().piece.color;
+    if (lastSide && !agents[lastSide] && agents[engine.turn()]) steps = 2;   // 上手是人类且轮到 AI → 撤一对
+    while (steps-- > 0 && engine.ply() > 0) {
+      var lm = engine.lastMove();
+      if (!lm) break;
+      var side = lm.piece.color;
+      engine.undoPly();   // 第30轮: 门面 API 名 (undoMove 不存在)
+      if (currentRecord && currentRecord.moves.length) currentRecord.moves.pop();
+      var le = document.querySelector('#move-log .log-entry:last-child');
+      if (le) le.parentNode.removeChild(le);
+      if (decisionLog[side] && decisionLog[side].length) decisionLog[side].pop();
+      if (lm.captured && capturedBy[side].length) {
+        capturedBy[side].pop();
+        XQ.UI.capturedTray(side, capturedBy[side]);
+      }
+      if (evalHist[side].length) { evalHist[side].pop(); XQ.UI.evalSpark(side, evalHist[side]); }
+    }
+    replayStack = [];
+    selected = null; kbCursor = null;
+    ['red', 'black'].forEach(function (sd) {
+      var h = agents[sd];
+      if (h && h.agent && typeof h.agent.reset === 'function') h.agent.reset();
+    });
+    bannerClear(); thinkWarned = false; repWarnedN = 0; chWarnedN = 0;
+    syncArchive(); refresh(); paintReplayBar();
+    warnBanner(T('undo_ok'), null);
+    if (!engine.isOver()) setTimeout(scheduleAgent, 100);
+  }
   /* v1.0.daily 用户重开入口 (R 键/重开按钮): 对局已走且未终局时先确认, 防误触丢进度 */
   function userRestart() {
     if (engine.ply() > 0 && !engine.isOver()) {
@@ -925,9 +966,58 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     paint();
   }
 
+  /* 第30轮 未完对局续局: 每手自动存档的伴生功能 — 找最近无 result 记录, 提示续弈 (走子重放 + HUD 重建 + 续录同谱) */
+  function resumeGame(rec) {
+    restartGame();
+    currentRecord = rec;
+    rec.moves.forEach(function (m) {
+      if (!m || !m.from || !m.to) return;
+      var p2 = XQ.Move.parseSq(m.from), t2 = XQ.Move.parseSq(m.to);
+      var res = engine.applyPlayerMove(p2.x, p2.y, t2.x, t2.y);
+      if (!res.ok) return;
+      var sd = res.move.piece.color;
+      var secs2 = Math.round((m.timeMs || 0) / 1000);
+      XQ.UI.logMove(engine.ply(), sd, XQ.Piece.CHARS[sd][res.move.piece.type], XQ.Move.name(res.move),
+        res.move.captured ? res.move.captured.type : null,
+        res.move.captured ? XQ.Piece.CHARS[res.move.captured.color][res.move.captured.type] : null, secs2, '');
+      if (m.captured) capturedBy[sd].push(XQ.Piece.CHARS[sd === 'red' ? 'black' : 'red'][m.captured]);
+      var ev2 = parseEvalNum(m.evaluation);
+      if (!isNaN(ev2)) evalHist[sd].push(ev2);
+      thinkStat[sd].total += secs2; thinkStat[sd].moves++;
+      decisionLog[sd].push({ n: m.n, name: (m.piece ? XQ.Piece.CHARS[m.side][m.piece] : '?') + '-' + m.from + '→' + m.to,
+        summary: m.summary || '(无摘要)', plan: m.plan || '', evaluation: m.evaluation || '',
+        confidence: (typeof m.confidence === 'number') ? m.confidence : null, candidates: m.candidates || [], reasoning: '', secs: secs2 });
+    });
+    XQ.UI.capturedTray('red', capturedBy.red); XQ.UI.capturedTray('black', capturedBy.black);
+    XQ.UI.evalSpark('red', evalHist.red); XQ.UI.evalSpark('black', evalHist.black);
+    selected = null; kbCursor = null;
+    syncArchive(); refresh();
+    setTimeout(scheduleAgent, 200);
+  }
+  function tryOfferResume() {
+    try {
+      var recs = XQ.Record.list();
+      var rec = null;
+      for (var i = 0; i < recs.length; i++) {
+        if (!recs[i].result && recs[i].moves && recs[i].moves.length >= 2) { rec = recs[i]; break; }
+      }
+      if (!rec) return;
+      var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TA = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
+      var bar = document.createElement('div');
+      bar.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:250;background:rgba(20,14,6,.95);border:1px solid #C28A20;border-radius:10px;padding:8px 14px;display:flex;gap:10px;align-items:center;color:#FFE8A3;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.6)';
+      bar.innerHTML = '<span>' + TA('resume_banner', { n: rec.moves.length }) + '</span>';
+      var b1 = document.createElement('button'); b1.className = 'btn'; b1.textContent = T('resume_btn');
+      var b2 = document.createElement('button'); b2.className = 'btn'; b2.textContent = T('resume_later');
+      bar.appendChild(b1); bar.appendChild(b2);
+      document.body.appendChild(bar);
+      b2.onclick = function () { bar.remove(); };
+      b1.onclick = function () { bar.remove(); resumeGame(rec); };
+    } catch (eR) {}
+  }
   /* ── 初始化 ── */
   document.addEventListener('DOMContentLoaded', function () {
     XQ.UI.drawBoard(document.getElementById('board-lines'));
+    setTimeout(tryOfferResume, 1200);   // 第30轮: 初始化后探测未完对局
     // 第24轮 PWA 二期: service worker (网络优先离线壳, 见根级 sw.js) — file:// 等非安全上下文静默跳过
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
       try { navigator.serviceWorker.register('sw.js'); } catch (eSW) {}
@@ -992,6 +1082,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
     document.getElementById('gear-toggle').onclick = openAISettings;
     document.getElementById('btn-restart').onclick = userRestart;   // v1.0.daily 确认入口
+    var buEl = document.getElementById('btn-undo');
+    if (buEl) buEl.onclick = undoLastMove;   // 第30轮: 悔棋
     var eoOv = document.getElementById('end-overlay');
     if (eoOv && !eoOv._dismissBound) {
       eoOv._dismissBound = true;
@@ -1040,6 +1132,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       document.addEventListener(ev, function () { ensureAudio(); }, { once: false, passive: true });
     });
 
+    // 第30轮: 页面隐藏兜底存档 (与每 5 手自动存档配套)
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden' && currentRecord && currentRecord.moves.length && !engine.isOver()) {
+        try { XQ.Record.save(currentRecord); } catch (eVS) {}
+      }
+    });
     // 设置层独立监听 (输入框内也生效; 主 keydown 对 INPUT 早退, 管不到这里)
     document.addEventListener('keydown', function (ev) {
       var so3 = document.getElementById('settings-overlay');
@@ -1160,6 +1258,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '  <label style="color:#c4a56e;font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="rp-autoplay" style="accent-color:#e0a030"><span data-i18n="rp_autoplay_label"> 自动播放</span></label>'
       + '  <button class="btn" id="rp-next-record" data-i18n-title="rp_nextrecord_title" title="下一局">▶▶</button>'
       + '  <button class="btn" id="rp-export-pgn" data-i18n-title="rp_export_pgn_title" title="导出 PGN">💾 PGN</button>'
+      + '  <button class="btn" id="rp-elo" data-i18n-title="elo_title" title="Elo 天梯">🏆</button>'
+      + '  <button class="btn" id="rp-backup" data-i18n-title="backup_btn" title="备份全部数据">📦</button>'
+      + '  <button class="btn" id="rp-restore" data-i18n-title="restore_btn" title="恢复备份">📥</button>'
       + '  <button class="btn" id="rp-del" data-i18n-title="rp_delete_title" title="删除该棋谱" style="background:rgba(192,57,43,.25)">🗑</button>'
       + '  <button class="btn" id="rp-help" data-i18n-title="rp_help_title" title="键盘帮助 (?)">⌨</button>'
       + '  <button class="btn" id="rp-fullscreen" data-i18n-title="rp_full_title" title="全屏模式 (F)">⛶</button>'
@@ -1291,6 +1392,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     rpEl.btnNextRecord.onclick = rpGotoNextRecord;
     rpEl.btnExportPGN.onclick = rpExportPGN;
     rpEl.btnDel.onclick = rpDeleteRecord;
+    ov.querySelector('#rp-elo').onclick = rpShowElo;      // 第30轮: 天梯浮层
+    ov.querySelector('#rp-backup').onclick = rpBackupAll; // 第30轮: 一键备份
+    ov.querySelector('#rp-restore').onclick = rpRestoreAll; // 第30轮: 备份恢复
     rpEl.btnHelp.onclick = rpShowHelp;
     /* v1.7.7 全屏模式: 覆盖层整体进全屏, Esc 先退全屏再退回放 */
     function rpToggleFull() {
@@ -1530,16 +1634,27 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (pos > 0) rpCtrl.gotoPly(pos); else rpCtrl.gotoPly(0);
     if (rpGetSetting('autoplay') === '1') setTimeout(function () { rpCtrl && rpCtrl.play(); }, 300);
   }
+  var _rpHeavyTick = 0;   // 第30轮 (第28轮该编辑曾随脚本中断丢失, 本轮落地)
   function rpOnState(st) {
     var animate = (st.idx === rpLastIdx + 1);
     rpPaintBoard(st, animate);
     rpPaintInfo(st);
     rpPaintEval(st);
-    rpPaintMoveList();
-    rpPaintTimeChart();
-    rpPaintEvalChart();
-    rpPaintHead();
     rpPaintButtons(st);
+    /* ≥10x 高倍速: 时长/评值图/头部/走法列表 每 5 手或终态重绘; 非重绘手只切走法列表 active 高亮 (当前手指示不中断) */
+    _rpHeavyTick++;
+    var heavy = rpCtrl && rpCtrl.speed() >= 10;
+    if (!heavy || _rpHeavyTick % 5 === 0 || st.idx === st.total) {
+      rpPaintTimeChart();
+      rpPaintEvalChart();
+      rpPaintHead();
+      rpPaintMoveList();
+    } else {
+      var curPly30 = st.idx;
+      Array.prototype.forEach.call(rpEl.movelist.querySelectorAll('li[data-ply]'), function (li) {
+        li.classList.toggle('active', parseInt(li.dataset.ply, 10) === curPly30);
+      });
+    }
     rpSavePos(st);
     rpLastIdx = st.idx;
   }
@@ -1692,6 +1807,67 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     a.click();
     
   }
+  /* 第30轮 Elo 天梯浮层 (回放层 🏆) */
+  function rpShowElo() {
+    if (document.getElementById('rp-elo-overlay')) return;
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    function paint() {
+      var rows = XQ.Elo.leaderboard();
+      var body = rows.length
+        ? rows.map(function (r2) {
+            return '<tr><td style="padding:2px 10px">' + esc2(r2.name) + '</td><td style="padding:2px 10px;text-align:right;color:#f0d9a0"><b>' + r2.rating + '</b></td><td style="padding:2px 10px;text-align:right">' + r2.games + '</td><td style="padding:2px 10px;text-align:right;color:#58d68d">' + r2.win + '</td><td style="padding:2px 10px;text-align:right">' + r2.draw + '</td><td style="padding:2px 10px;text-align:right;color:#ff8a7a">' + r2.loss + '</td></tr>';
+          }).join('')
+        : '<tr><td colspan="6" style="text-align:center;padding:10px;color:#c4a56e">' + T('elo_empty') + '</td></tr>';
+      var ov = document.getElementById('rp-elo-overlay');
+      ov.querySelector('#rp-elo-body').innerHTML = body;
+    }
+    var html = '<div id="rp-elo-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:310;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">'
+      + '<div style="background:#2a1a0c;border:1px solid #7a5a2a;border-radius:14px;padding:20px 24px;min-width:420px;color:#f0e0c0;box-shadow:0 8px 32px rgba(0,0,0,.7)">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b style="color:#f0d9a0;font-size:18px">' + T('elo_title') + '</b>'
+      + '<button id="rp-elo-reset" class="btn" style="background:rgba(192,57,43,.3)">' + T('elo_reset') + '</button></div>'
+      + '<table style="width:100%;font-size:13px"><thead><tr style="color:#c4a56e"><th style="text-align:left;padding:2px 10px">Model</th><th style="text-align:right;padding:2px 10px">' + T('elo_th_rating') + '</th><th style="text-align:right;padding:2px 10px">' + T('elo_th_games') + '</th><th style="text-align:right;padding:2px 10px" colspan="3">' + T('elo_th_wdl') + '</th></tr></thead>'
+      + '<tbody id="rp-elo-body"></tbody></table></div></div>';
+    var d = document.createElement('div');
+    d.innerHTML = html;
+    var ov = d.firstChild;
+    document.body.appendChild(ov);
+    paint();
+    ov.querySelector('#rp-elo-reset').onclick = function () {
+      if (!window.confirm(T('elo_reset_confirm'))) return;
+      XQ.Elo.resetAll();
+      paint();
+    };
+  }
+  /* 第30轮 备份/恢复 (回放层 📦/📥): records + Elo + 设置 打包导出 / 按 id 合并导入 */
+  function rpBackupAll() {
+    var bak = XQ.Record.exportAll();
+    var blob = new Blob([JSON.stringify(bak, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'llm-chess-backup_' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+  function rpRestoreAll() {
+    var input = document.createElement('input');
+    input.type = 'file'; input.accept = '.json,application/json';
+    input.onchange = function () {
+      if (!input.files[0]) return;
+      var fr = new FileReader();
+      fr.onload = function () {
+        try {
+          var bak = JSON.parse(fr.result);
+          var r2 = XQ.Record.importAllBackup(bak, 'merge');
+          warnBanner((XQ.I18N ? XQ.I18N.tArgs('backup_ok', { n: r2.added }) : '恢复完成'), null);
+          rpFillPicker();
+        } catch (eB) {
+          warnBanner((XQ.I18N ? XQ.I18N.t('restore_fail') : '') + (eB && eB.message || eB), null);
+        }
+      };
+      fr.readAsText(input.files[0]);
+    };
+    input.click();
+  }
   function rpShowHelp() {
     if (document.getElementById('rp-help-overlay')) return;
     var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
@@ -1711,7 +1887,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + row('<kbd>C</kbd> / <kbd>Shift+C</kbd>', T('rp_hk_capture') + ' (v3.9.2)')
       + row('<kbd>B</kbd>', T('rp_hk_bm'))
       + row('<kbd>N</kbd> / <kbd>P</kbd>', T('rp_hk_bm_go'))
-      + row(T('rp_hk_wheel').split(' ')[0] === '棋盘上' ? '滚轮' : 'Wheel', T('rp_hk_wheel'))
+      + row('<kbd>' + T('rp_hk_wheel_label') + '</kbd>', T('rp_hk_wheel'))   // 第30轮: 去掉按首词猜语言的 hack
       + row('<kbd>?</kbd> / <kbd>/</kbd>', T('rp_hk_help'))
       + row('<kbd>Esc</kbd>', T('rp_hk_esc'))
       + '</table>'
@@ -1748,7 +1924,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + rpHeadProgress()
       + rpHeadMaterial()
       + rpHeadMaxTime()
-      + ((rpSession.record && rpSession.record.note) ? '<div style="color:#c4a56e;font-size:11px;margin-top:3px;word-break:break-all">' + T('rp_note') + ' ' + esc2(String(rpSession.record.note).slice(0, 240)) + '</div>' : '');   // v1.0.daily: 谱内备注 (如兑底原因) 回放可见
+      + ((rpSession.record && rpSession.record.note) ? '<div style="color:#c4a56e;font-size:11px;margin-top:3px;word-break:break-all">' + T('rp_note') + ' ' + esc2(String(rpSession.record.note).slice(0, 240))
+        + ' <a href="javascript:void(0)" id="rp-note-edit" style="color:#e0a030">' + T('rp_note_edit') + '</a></div>' : '');   // 第30轮: 备注可编辑
   }
   var rpNextTarget = null;
   function rpPaintBoard(st, animate) {
@@ -1859,6 +2036,14 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       html += '<div style="font-size:12px;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(122,90,42,.4)">↪ <b style="color:#e0a030">' + T('rp_next_move') + '</b> ' + nTag + ' <b style="color:#f0d9a0">' + esc2(nPc) + '</b> <span style="color:#e8d5ae">' + esc2(nxt.from) + ' → ' + esc2(nxt.to) + '</span>' + (nxt.summary ? ' <span style="color:#c4a56e">· ' + esc2(nxt.summary) + '</span>' : '') + '</div>';
     }
     rpEl.info.innerHTML = html;
+    var ne = document.getElementById('rp-note-edit');
+    if (ne) ne.onclick = function () {
+      var v = window.prompt(T('rp_note_edit'), (rpSession.record.note || '').slice(0, 240));
+      if (v == null) return;
+      rpSession.record.note = v.slice(0, 240);
+      XQ.Record.save(rpSession.record);   // 备注落谱
+      rpPaintInfo(rpSession.state());
+    };
     rpEl.range.max = st.total;
     rpEl.range.value = st.idx;
   }

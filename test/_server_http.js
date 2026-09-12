@@ -59,8 +59,10 @@ async function main() {
     let ubody = '';
     uReq.on('data', function (c) { ubody += c; });
     uReq.on('end', function () {
+      var echo = 0;
+      try { echo = JSON.parse(ubody).max_tokens || 0; } catch (eP) {}
       uRes.writeHead(200, { 'Content-Type': 'application/json' });
-      uRes.end(JSON.stringify({ choices: [{ message: { content: '{"from":"h3","to":"e3","summary":"upstream-ok","confidence":0.8}' } }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }));
+      uRes.end(JSON.stringify({ echo_max_tokens: echo, choices: [{ message: { content: '{"from":"h3","to":"e3","summary":"upstream-ok","confidence":0.8}' } }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }));
     });
   });
   await new Promise(function (r) { upstream.listen(0, '127.0.0.1', r); });
@@ -155,6 +157,8 @@ async function main() {
   ok(relayRes.body.indexOf('upstream-ok') >= 0, '中继穿越: 上游应答原文透传 (SSE 帧含 content)');
   const healthAfter = await req('GET', '/api/health');
   ok(healthAfter.status === 200, '中继穿越后: 服务进程存活 (v1.0.3 起此处曾 ReferenceError 崩溃)');
+  const clampRes = await postChat({ provider: 'stubprov', model: 'stub-model', messages: [{ role: 'user', content: 'x' }], max_tokens: 999999 });
+  ok(clampRes.status === 200 && clampRes.body.indexOf('"echo_max_tokens":32768') >= 0, 'max_tokens 钳制: 999999 → 转发 32768 (上游回显断言)');
 
   // 第28轮五期: Content-Type 门禁 + 404 no-store
   const ctBad = await req('POST', '/api/chat', '{"provider":"x"}', { 'Content-Type': 'text/plain' });

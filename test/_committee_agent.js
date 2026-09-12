@@ -70,6 +70,26 @@ function resetStub(script) { callN = 0; scripted = script; }
   const u = c3.usage();
   ok(u.attempts >= 3, 'C5 usage.attempts 为选民之和 (得 ' + u.attempts + ')');
 
+  // C7 选民预算超时 → 按弃权 (挂起选民不阻塞出招)   第30轮
+  resetStub([{ f: 'h3', t: 'e3', c: 0.5 }]);
+  var cB = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['slow', 'fast'], mode: 'council', voterBudgetMs: 50 });
+  var origFetch = globalThis.fetch;
+  var callIdx = 0;
+  globalThis.fetch = function (url, opts) {
+    callIdx++;
+    if (callIdx === 1) return new Promise(function () {});   // slow 选民挂起
+    return origFetch(url, opts);
+  };
+  const mvB = await cB.next(eng);
+  ok(XQ.Move.sqName(mvB.to) === 'e3', 'C7 预算超时选民弃权, 快选民出招 (得 ' + XQ.Move.sqName(mvB.to) + ')');
+  globalThis.fetch = origFetch;
+
+  // C8 轮换回绕: 3 模型第 4 手回到 m1   第30轮
+  resetStub([{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.5 }, { f: 'h3', t: 'c3', c: 0.5 }, { f: 'h3', t: 'e3', c: 0.5 }]);
+  const r3 = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['a', 'b', 'c'], mode: 'rotate' });
+  const seq = [await r3.next(eng), await r3.next(eng), await r3.next(eng), await r3.next(eng)];
+  ok((seq[0].meta.reasoning || '').indexOf('[轮换 stub:a]') === 0 && (seq[3].meta.reasoning || '').indexOf('[轮换 stub:a]') === 0, 'C8 轮换 4 手回绕到 a');
+
   // C6 单模型会诊退化为普通路径
   resetStub([{ f: 'h3', t: 'e3', c: 0.5 }]);
   const c1 = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['m1'], mode: 'council' });

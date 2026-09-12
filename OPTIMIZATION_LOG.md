@@ -998,3 +998,59 @@
   CI 干净 checkout ENOENT (与第12轮 replay_smoke CI 红灯完全同款, 本轮挂链时未吸取该教训, 第29轮 LOG 教训段现补)
 - 修复: 缺文件时合成 4 手确定性谱 (覆盖风险检测/NaN 扫描意图不变); 本地 + 干净 clone CI 模拟 15/15 双验证后推送
 - 推送记录: 第29轮主体 commit 4579297 首推时双路断网 deferred, 代理恢复后上库; CI 首跑红 → 本热修 0a5ce94 CI 绿
+
+## 2026-09-12 ~09:00 第30轮 (v1.0.daily, zcode — 指令「测试并作出至少30个优化」)
+
+基线 15/15 全绿。第26-29轮矿区之外的 30 项: 会诊预算 / Elo 天梯 / 备份恢复 / 悔棋 / 自动存档续局 / 两处自第19轮起损坏的潜在坏功能 / 杂项:
+
+【会诊进阶 (1-4)】
+1. **选民预算超时**: council 每选民 voterBudgetMs (默认 60s, 可配) — 超时按弃权计, 挂起选民不再阻塞出招
+2. **预算语义修正**: 原实现错峰等待也计入预算 (测试抓出设计缺陷: 300ms 错峰 > 50ms 预算直接全灭) → 预算从选民开始作答起算
+3. _committee_agent +C7 预算超时断言 (挂起选民弃权, 快选民出招)
+4. _committee_agent +C8 轮换回绕断言 (3 模型第 4 手回 a)
+
+【Elo 天梯 (5-8)】
+5. applyResult 附带战绩计数 (局/胜/和/负, stats: 前缀键存储)
+6. leaderboard 富输出 (games/win/draw/loss + 过滤 stats 内部键不外泄)
+7. 回放层 🏆 Elo 天梯浮层: 排名表 (分/局/胜和负) + 清空按钮 (confirm) + 空态
+8. 天梯 i18n 键 ×6 (elo_title/elo_reset/elo_reset_confirm/elo_empty/elo_th_rating/elo_th_games/elo_th_wdl)
+
+【备份/恢复 (9-13)】
+9. 回放层 📦 一键备份: records + Elo + 界面设置 打包单 JSON 下载 (kind=llm-chess-backup)
+10. 📥 恢复: 按 id 合并导入 (同 id 不重复), Elo 合并以备份为准; 10MB 上限继承 importFromFile 口径
+11. record.js 新增 exportAll/importAllBackup (含格式校验, 坏备份明确报错)
+12. 回放层按钮绑定 + backup_ok/restore_fail 提示 (restore_fail 继承失败明细)
+13. _logic_layer +L7 备份 round-trip 断言 (打包形状/同 id 合并不重复/空库恢复) + +L8 战绩计数断言 (2局1胜1和 + stats 键不泄漏)
+
+【悔棋 + 两处自第19轮起损坏的坏功能修复 (14-16)】
+14. **悔棋按钮** (btn-row ↩): 人机局撤「人类+AI」一对 / AI-vs-AI 撤 1 手续走; 走法列表/决策日志/吃子托盘/评值走势同步回滚, LLM 会话 reset 重建; 复盘查看中先要求还原
+15. **关键修复①**: 点击走法复盘自第19轮起损坏 — replayTo 调 engine.undoMove(), 门面只有 undoPly() → 点击即抛 ReferenceError 从未生效; 改 undoPly 实测复现 (ply 4 → 点击第2条 → ply 2 + ⟲ 条出现)
+16. **关键修复②**: ⟲ 还原同源损坏 — replayRestore 调不存在的 engine.applyMove → 改 applyPlayerMove LIFO 重放 (规则闭环触发时截断保底盘); 实测还原 ply 2 → 4
+
+【自动存档 + 续局 (17-20)】
+17. 进行中对局每 5 手自动存档 (同 id 覆盖) — 崩溃/F5 不再丢局
+18. visibilitychange 页面隐藏兜底存档
+19. 未完对局续局提示条 (fixed 底部): 检测最近无 result 记录 → 「▶ 续上局 / 忽略」
+20. resumeGame: 走子重放进引擎 + 走法列表/吃子托盘/评值走势/思考统计/决策日志重建 + 续录同谱 (LLM 会话按当前局面重建); 实测 reload → 提示条「检测到未完对局 (10 手)」出现
+
+【性能/健壮性 (21-25)】
+21. 回放 ≥10x 走法列表节流: 每 5 手整表重建, 非重绘手只切 active 高亮 — 注记: 第28轮 LOG 曾列此编辑, 实因当时脚本中断被静默丢弃, 本轮落地并如实更正
+22. server max_tokens 钳制 ≤32768 (relay + anthropic 两处) — 恶意/误填超大值不再透传上游计费
+23. _server_http 上游回显断言: max_tokens 999999 → 转发 32768 (28→31 断言不变口径 +1)
+24. provider 下拉 (未配Key) i18n (provider_no_key)
+25. 键盘帮助滚轮行清理: 原按 zh 首词猜语言的 hack → 独立键 rp_hk_wheel_label
+
+【杂项 (26-30)】
+26. ARCHITECTURE 模块图/ai 段补 committee_agent 行
+27. 悔棋按钮 HTML + btn_undo/undo_ok/undo_need_restore 3 键 (ZH/EN)
+28. 续局 3 键 (resume_banner/resume_btn/resume_later)
+29. 备份/恢复/天梯/备注/帮助 11 键 (backup_btn/restore_btn/backup_ok/restore_fail/elo_*/rp_note_edit/rp_hk_wheel_label)
+30. CHANGELOG Round-30 里程碑 + 本轮 LOG (含第28轮欠账更正)
+
+【验证】
+- npm run check ALL PASS + npm test 并行 **15/15 全绿** (新增 C7/C8/L7/L8 共 10 断言)
+- IAB 实机: 4 手 → 复盘 ply4→2 (修复实证) → ⟲ 还原 ply4 → 悔棋×2 ply2 + 横幅; reload → 续局条出现「检测到未完对局 (10 手)」; 悔棋/续局/备份按钮全部绑定
+- 关键发现: 两处自第19轮起完全损坏的观战功能 (复盘/还原) 因门面 API 名不匹配从未生效 — 门面键清单已核 (undoPly 存在/undoMove 与 applyMove 不存在), 修复后红绿双向实测
+- 边界: systemPrompt 未动; server.js 未动本轮 (max_tokens 钳制在 server.js! → 需重启生效); 零新依赖
+- 触点: ui/app.js / ui/renderer.js? (无) / index.html / ui/i18n.js (+20 键) / benchmark/elo.js / benchmark/record.js / ai/committee_agent.js / server.js / test/_committee_agent.js / test/_logic_layer.js / test/_server_http.js / docs/ARCHITECTURE.md / CHANGELOG
+- 修正声明: 第28轮 LOG 第21项 (回放节流) 当时未实际落地 (脚本中断静默丢弃), 本轮补上并在上文如实注记

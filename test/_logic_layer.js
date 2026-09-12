@@ -92,5 +92,28 @@ ok(d2.dra === 0 && d2.drb === 0, 'L6 同分和棋 delta=0');
 var d3 = E.previewDelta(1700, 1500, 0);
 ok(d3.dra < 0 && d3.drb > 0, 'L6 高分输棋掉分/低分赢棋加分');
 
+// L7 备份/恢复 round-trip (第30轮 exportAll/importAllBackup)
+sandbox.localStorage = { _d: {}, getItem: function (k) { return this._d[k] == null ? null : this._d[k]; }, setItem: function (k, v) { this._d[k] = String(v); }, removeItem: function (k) { delete this._d[k]; } };
+var rB1 = XQ.Record.blank({ redName: 'BK1', blackName: 'B' });
+XQ.Record.finish(rB1, { result: 'checkmate', winner: 'red' }, 1000);
+XQ.Record.save(rB1);
+var bak = XQ.Record.exportAll();
+ok(bak.kind === 'llm-chess-backup' && Array.isArray(bak.records) && bak.records.length >= 1, 'L7 exportAll 打包 kind/records');
+ok(bak.elo && typeof bak.elo === 'object', 'L7 exportAll 含 Elo 表');
+var nBefore = XQ.Record.list().length;
+var rImp = XQ.Record.importAllBackup(bak, 'merge');
+ok(rImp.added === 0 && rImp.skipped >= 1, 'L7 同 id 合并导入 → added=0 (不重复)');
+sandbox.localStorage._d['xq_records_v1'] = '[]';
+var rImp2 = XQ.Record.importAllBackup(bak, 'merge');
+ok(rImp2.added >= 1 && XQ.Record.list().some(function (r) { return r.red && r.red.name === 'BK1'; }), 'L7 空库恢复 → 记录回来');
+
+// L8 Elo 战绩计数 (applyResult 附带 局/胜/和/负)
+E.applyResult('L8-W', 'L8-L', 'red');
+E.applyResult('L8-W', 'L8-L', 'draw');
+var lb = E.leaderboard();
+var w = lb.filter(function (x) { return x.name === 'L8-W'; })[0];
+ok(w && w.games === 2 && w.win === 1 && w.draw === 1 && w.loss === 0, 'L8 战绩计数 2局1胜1和 (得 ' + JSON.stringify(w) + ')');
+ok(lb.every(function (x) { return x.name.indexOf('stats:') !== 0; }), 'L8 leaderboard 不泄漏 stats 内部键');
+
 console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
 process.exit(fails.length ? 1 : 0);

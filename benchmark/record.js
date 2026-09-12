@@ -152,10 +152,51 @@
     return win + ' · ' + n + '手 · 吃子' + caps + ' · ' + dur + tag;
   }
 
+  /* ── 第30轮 一键备份/恢复: records + Elo + 界面设置 打包为单 JSON ── */
+  function exportAll() {
+    var elo = null, settings = null;
+    try { elo = root.localStorage.getItem('xq_elo_v1'); } catch (e1) {}
+    try { settings = root.localStorage.getItem('xq_v1_settings'); } catch (e2) {}
+    return {
+      kind: 'llm-chess-backup',
+      version: 1,
+      date: new Date().toISOString(),
+      records: list(),
+      elo: elo ? JSON.parse(elo) : {},
+      settings: settings ? JSON.parse(settings) : null
+    };
+  }
+  function importAllBackup(bak, mode) {
+    if (!bak || bak.kind !== 'llm-chess-backup' || !Array.isArray(bak.records)) throw new Error('备份格式无效 (需 llm-chess-backup 导出文件)');
+    var cur = list();
+    var added = 0, skipped = 0;
+    bak.records.forEach(function (r) {
+      if (!r || !r.id) { skipped++; return; }
+      if (mode === 'replace' || !cur.some(function (c) { return c.id === r.id; })) { cur.push(r); added++; }
+      else skipped++;
+    });
+    var i = cur.length - MAX_RECORDS - 1;
+    if (cur.length > MAX_RECORDS) cur = cur.slice(cur.length - MAX_RECORDS);
+    try { localStorage.setItem(LS_KEY, JSON.stringify(cur)); } catch (e) {
+      try { localStorage.setItem(LS_KEY, JSON.stringify(cur.slice(-30))); } catch (e2) {}
+    }
+    if (bak.elo && typeof bak.elo === 'object') {
+      var t = {};
+      try { t = JSON.parse(root.localStorage.getItem('xq_elo_v1') || '{}'); } catch (e3) {}
+      Object.keys(bak.elo).forEach(function (k) { t[k] = bak.elo[k]; });   // 合并 (同键以备份为准)
+      try { root.localStorage.setItem('xq_elo_v1', JSON.stringify(t)); } catch (e4) {}
+    }
+    if (bak.settings && typeof bak.settings === 'object' && mode === 'replace') {
+      try { root.localStorage.setItem('xq_v1_settings', JSON.stringify(bak.settings)); } catch (e5) {}
+    }
+    return { added: added, skipped: skipped };
+  }
+
   XQ.Record = {
     blank: blank, addMove: addMove, finish: finish,
     save: save, list: list, get: get, remove: remove,
     saveImported: saveImported, summarize: summarize,
+    exportAll: exportAll, importAllBackup: importAllBackup,
     toPrettyJSON: toPrettyJSON, downloadFile: downloadFile, importFromFile: importFromFile
   };
 })(typeof window !== 'undefined' ? window : globalThis);

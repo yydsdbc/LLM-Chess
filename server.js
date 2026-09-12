@@ -96,7 +96,7 @@ function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 
     model: payload.model,
     messages: payload.messages,
     temperature: typeof payload.temperature === 'number' ? payload.temperature : 0.3,
-    max_tokens: payload.max_tokens || 2048,
+    max_tokens: Math.min(payload.max_tokens || 2048, 32768),   // 第30轮: 钳制 (恶意/误填超大值打爆上游计费)
     // thinking 开关仅 GLM 系 (bigmodel/tokenrhythm) 透传; 其他家 (deepseek/moonshot/openai/minimax) 不识别该字段,
     // 防严格校验的上游报未知字段 400 — deepseek-chat 本就不思考, deepseek-reasoner 恒思考, 无需开关
     thinking: /bigmodel\.cn|tokenrhythm/i.test(base) ? payload.thinking : undefined,
@@ -174,7 +174,7 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
   if (!merged.length || merged[0].role !== 'user') merged.unshift({ role: 'user', content: '(开局)' });
   const body = JSON.stringify({
     model: payload.model,
-    max_tokens: payload.max_tokens || 2048,
+    max_tokens: Math.min(payload.max_tokens || 2048, 32768),   // 第30轮: 钳制同上
     temperature: typeof payload.temperature === 'number' ? payload.temperature : 0.3,
     system: system || undefined,
     messages: merged,

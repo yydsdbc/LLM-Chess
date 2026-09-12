@@ -35,7 +35,14 @@
     if (t[name] == null) { t[name] = BASE; saveTable(t); }
     return t[name];
   }
-  /** 记录一场结果: winner 'red'|'black'|null(和) */
+  /** 记录一场结果: winner 'red'|'black'|null(和); 第30轮: 附带战绩计数 (局/胜/和/负) */
+  function bumpStats(t, name, scoreA) {
+    var key = 'stats:' + name;
+    var st = t[key] || { games: 0, win: 0, draw: 0, loss: 0 };
+    st.games++;
+    if (scoreA === 1) st.win++; else if (scoreA === 0.5) st.draw++; else st.loss++;
+    t[key] = st;
+  }
   function applyResult(redName, blackName, winner, k) {
     ensure(redName); ensure(blackName);
     var ra = ratingOf(redName), rb = ratingOf(blackName);
@@ -43,6 +50,8 @@
     var next = update({ ra: ra, rb: rb, scoreA: scoreA, k: k });
     var t = table();
     t[redName] = next.ra; t[blackName] = next.rb;
+    bumpStats(t, redName, scoreA);
+    bumpStats(t, blackName, 1 - scoreA);
     saveTable(t);
     return { red: next.ra, black: next.rb };
   }
@@ -53,8 +62,13 @@
   }
   function leaderboard() {
     var t = table();
-    return Object.keys(t).map(function (n) { return { name: n, rating: t[n] }; })
-      .sort(function (a, b) { return b.rating - a.rating; });
+    return Object.keys(t).filter(function (n) { return n.indexOf('stats:') !== 0; })
+      .map(function (n) {
+        var e = { name: n, rating: t[n], games: 0, win: 0, draw: 0, loss: 0 };
+        if (t['stats:' + n]) { e.games = t['stats:' + n].games || 0; e.win = t['stats:' + n].win || 0; e.draw = t['stats:' + n].draw || 0; e.loss = t['stats:' + n].loss || 0; }
+        return e;
+      })
+      .sort(function (a, b) { return b.rating - a.rating || a.name < b.name ? -1 : 1; });
   }
   function resetAll() { saveTable({}); }
 
