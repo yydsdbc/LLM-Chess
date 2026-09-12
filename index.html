@@ -403,6 +403,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 /* ═══ 第33轮: 面板宽度分隔条 (拖 170-300px, localStorage 记忆; 窄屏横条布局忽略) ═══ */
 #panel-splitter-r{width:7px;cursor:col-resize;align-self:stretch;min-height:200px;border-radius:4px;background:linear-gradient(180deg,transparent,rgba(255,224,138,.22),transparent);transition:background .2s}
 #panel-splitter-r:hover{background:linear-gradient(180deg,transparent,rgba(255,224,138,.55),transparent)}
+#panel-splitter-r:focus-visible{outline:2px solid #ffd54a;outline-offset:-1px;background:linear-gradient(180deg,transparent,rgba(255,224,138,.55),transparent)}
 .think-panel{width:var(--panel-w,200px)}
 @media(max-width:1020px){.think-panel{width:100%}}
 /* 第33轮: 最新决策卡入场 (仅新卡动画, rebuild 旧卡不动) */
@@ -553,7 +554,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
   </div><!-- /board-container -->
   </div><!-- /board-wrap -->
 
-  <div id="panel-splitter-r" aria-hidden="true"></div>
+  <div id="panel-splitter-r" role="separator" tabindex="0" aria-orientation="vertical" aria-valuemin="170" aria-valuemax="300" aria-valuenow="200" data-i18n-aria="set_splitter" aria-label="调整思考面板宽度"></div>
   <div id="think-black" class="think-panel think-black idle">
       <div class="think-head"><span class="think-dot">⚫</span><span id="think-black-name" data-i18n="side_black">黑方</span><span class="think-stat" id="think-black-stat"></span></div>
       <div class="think-info" id="think-black-info"></div>

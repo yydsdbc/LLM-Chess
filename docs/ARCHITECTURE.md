@@ -27,9 +27,9 @@ flowchart LR
 
 - **core/** — the engine. Standalone-usable (perft-verified, alpha-beta friendly): `engine.js` (board state, make/unmake, repetition + perpetual-check + natural-draw clocks), `rules.js` / `generator.js` / `move.js` / `board.js` / `piece.js`, `judge.js` (move semantics: mate / stalemate / check tagging).
 - **evaluation/** — static evaluation + knowledge layer. `position.js` (material, mobility, positional terms) and `xiangqi_knowledge.js` (domain heuristics). Feeds both the safety valve and the spectating evaluation bar.
-- **ai/** — agents. `llm_agent.js` builds prompts, calls the relay, parses/retries/falls back; `random_agent.js` for zero-config play; `committee_agent.js` (round 29) fields several LLMs on one side — rotation or parallel council voting, per-voter states/tally in progress, merged per-voter reasoning streams.
+- **ai/** — agents. `llm_agent.js` builds prompts, calls the relay, parses/retries/falls back; `random_agent.js` for zero-config play; `committee_agent.js` (round 29) fields several LLMs on one side — rotation or parallel council voting with voter budgets, safety veto, per-voter states/tally in progress, merged per-voter reasoning streams, Elo-weighted tallies (round 36).
 - **server.js** — static file server + provider relay (OpenAI protocol, plus Anthropic protocol conversion). API keys never leave the server; default bind `127.0.0.1`.
-- **ui/** + **replay/** — spectating HUD, decision cards, i18n (zh/en), full replay system that re-drives a saved record without calling the LLM.
+- **ui/** + **replay/** — spectating HUD, decision cards, i18n (zh/en), full replay system that re-drives a saved record without calling the LLM. Board flip (black perspective, round 34), drag-move (round 33), keyboard travel + resizable think panels, undo (U), auto-save + resume, PGN import/export, backup/restore, Elo ladder (rounds 30–36).
 - **benchmark/** + **test/** — headless matches, ELO/record tooling, and the test suites.
 
 ## LLM turn data flow / 单手数据流
@@ -61,7 +61,7 @@ flowchart LR
 | `test/cn_notation_check.js` | Chinese move notation (disambiguation edge cases) |
 | `test/_replay_edge.js` | replay edge cases + bookmark pure logic |
 | `test/_logic_layer.js` | pure logic layer guards (notation, HUD helpers) |
-| `test/_server_http.js` | server.js HTTP behavior (spawns a real server: ETag/304, traversal 403, rate-limit 429, …) |
+| `test/_server_http.js` | server.js HTTP behavior (spawns a real server: ETag/304, traversal 403, rate-limit 429, OpenAI + Anthropic protocol relay, CORS origin policy, …) |
 | `test/check_ui.js` | syntax sweep, ID cross-check, localStorage prefix, release files, README version parity, HTML hygiene, PWA manifest + SW guard, replay-dialog semantics |
 | `npm run check` | syntax sweep of every JS file + prompt hard gate |
 

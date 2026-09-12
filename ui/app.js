@@ -152,7 +152,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     return decisionLog[side].map(function (e) {
       return '#' + e.n + ' ' + e.name + '\n  ' + e.summary
         + (e.evaluation ? ' | ' + e.evaluation : '')
-        + (e.confidence != null ? ' | 信' + e.confidence : '')
+        + (e.confidence != null ? ' | ' + (XQ.I18N ? XQ.I18N.t('d_conf') : '信') + e.confidence : '')
         + (e.secs ? ' | ' + e.secs + 's' : '');
     }).join('\n');
   }
@@ -162,17 +162,20 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     return XQ.I18N ? XQ.I18N.t(k) : (s === 'none' ? '无' : s === 'low' ? '低' : s === 'high' ? '高' : '中');
   }
   function levelClass(s) { return s === 'none' ? 'st-none' : s === 'low' ? 'st-low' : s === 'high' ? 'st-high' : 'st-mid'; }
+  /* v1.0.daily i18n: token 统计后缀 (总tok/缓存命中%/拦截次) — modelCard 与 tick 共用一处, 双语 (原两处各自裸中文) */
+  function tokenStatsSuffix(u) {
+    var Tk = XQ.I18N ? XQ.I18N.t : function (k2) { return k2; };
+    var s = '';
+    if (u && u.total) s += ' · ' + (u.total > 999 ? (u.total / 1000).toFixed(1) + 'k' : u.total) + ' tok';
+    if (u && u.cacheHit && u.prompt) s += ' · ' + Tk('stats_cached') + ' ' + Math.round(100 * u.cacheHit / u.prompt) + '%';   // v2.9: 缓存命中率上卡 (provider 上报才显示)
+    if (u && u.blocked) s += ' · ' + Tk('stats_blocked') + ' ' + u.blocked;   // v3.2: 系统拦截次数上卡
+    return s;
+  }
   /* v1.7.2 模型信息卡: 提供商/模型全名/总思考时间/_tokens — 放在思考内容上方的浮卡里 */
   function modelCardHTML(side, holder) {
     var h = holder || agents[side];
     var st = thinkStat[side] || { total: 0 };
-    var tok = '';
-    if (h && h.agent && h.agent.usage) {
-      var u = h.agent.usage();
-      if (u && u.total) tok = ' · ' + (u.total > 999 ? (u.total / 1000).toFixed(1) + 'k' : u.total) + ' tok';
-      if (u && u.cacheHit && u.prompt) tok += ' · 缓存' + Math.round(100 * u.cacheHit / u.prompt) + '%';   // v2.9: 缓存命中率上卡 (provider 上报才显示)
-      if (u && u.blocked) tok += ' · 拦截' + u.blocked;   // v3.2: 系统拦截次数上卡
-    }
+    var tok = (h && h.agent && h.agent.usage) ? tokenStatsSuffix(h.agent.usage()) : '';
     var model = (h && h.model) || (currentRecord && currentRecord[side] && currentRecord[side].model) || '';
     var prov = (h && h.provider) || (currentRecord && currentRecord[side] && currentRecord[side].provider) || '';
     if (!model) return '';
@@ -471,14 +474,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (info && view.aiThinking) { var rcR = view.aiRetries ? view.aiRetries[view.aiThinkingSide] : 0; var phT = ''; try { var pht = XQ.XiangqiKnowledge && XQ.XiangqiKnowledge.detectPhase(engine); phT = (XQ.XiangqiKnowledge.PHASE_CN && XQ.XiangqiKnowledge.PHASE_CN[pht]) || ''; } catch (eP) {} info.textContent = TI('status_ticker', { n: engine.ply(), s: s, ph: phT ? ' · ' + phT : '', rt: rcR ? TI('status_retry', { n: rcR }) : '' }); }   // v1.7.4 全局时间只在下方横幅; v2.5 重试可见; v3.7 阶段徽章; 第26轮 i18n
       if (s >= 60 && !thinkWarned) { thinkWarned = true; warnBanner(TI('warn_think_slow', { m: modelName, n: s }), side); }   // 第26轮 i18n
       if (Date.now() >= checkFlashUntil) {   // 将军横幅闪屏期不被 tick 覆盖
-        XQ.UI.aiBanner('busy', '全局 ' + (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2), side);   // v1.7.4: 下方横幅只显示全局时间 (上方已含模型/方别/手数)
+        XQ.UI.aiBanner('busy', (XQ.I18N ? XQ.I18N.tArgs('ai_elapsed', { t: (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2) }) : '全局 ' + (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2)), side);   // v1.7.4: 下方横幅只显示全局时间 (上方已含模型/方别/手数)
       }
       var hh = agents[side];   // v1.7.3: 信息卡总思考实时跳动
       var imStat = document.querySelector('#think-' + side + '-info .im-stat');
       if (imStat) {
-        var tok = '';
-        if (hh && hh.agent && hh.agent.usage) { var u = hh.agent.usage(); if (u && u.total) tok = ' · ' + (u.total > 999 ? (u.total / 1000).toFixed(1) + 'k' : u.total) + ' tok'; if (u && u.cacheHit && u.prompt) tok += ' · 缓存' + Math.round(100 * u.cacheHit / u.prompt) + '%'; if (u && u.blocked) tok += ' · 拦截' + u.blocked; }   // v2.9 缓存命中 + v3.2 拦截计数实时上卡
-        imStat.textContent = '总思考 ' + ((thinkStat[side] ? thinkStat[side].total : 0) + s) + 's' + tok;
+        var tok = (hh && hh.agent && hh.agent.usage) ? tokenStatsSuffix(hh.agent.usage()) : '';
+        imStat.textContent = (XQ.I18N ? XQ.I18N.tArgs('think_total', { n: (thinkStat[side] ? thinkStat[side].total : 0) + s }) : '总思考 ' + ((thinkStat[side] ? thinkStat[side].total : 0) + s) + 's') + tok;
       }
     };
     tick();
@@ -799,7 +801,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         var onProg = function (p) {   // 第31轮: 会诊进度实时上卡 (⚡ 思考中卡片文字替换)
           if (!aiBusy || p.side !== side) return;
           var dc = document.querySelector('#think-' + side + '-body .dcard.d-thinking');
-          if (dc) dc.textContent = '⚡ 会诊中 (' + p.answered + '/' + p.total + ' 已应答)…';
+          if (dc) dc.textContent = XQ.I18N ? XQ.I18N.tArgs('council_progress', { a: p.answered, t: p.total }) : '⚡ 会诊中 (' + p.answered + '/' + p.total + ' 已应答)…';
         };
         var agent, modelName, modelsOut = null;
         if (multiMode !== 'off') {
@@ -1249,14 +1251,23 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       kill.forEach(function (k3) { localStorage.removeItem(k3); });
       location.reload();
     };
-    // 第33轮: 面板宽度分隔条 (170-300px 拖拽, localStorage 记忆)
+    // 第33轮: 面板宽度分隔条 (170-300px 拖拽, localStorage 记忆; 第37轮: 键盘可调 + 分隔条语义)
     var spEl = document.getElementById('panel-splitter-r');
     if (spEl) {
       try {
         var savedW = parseInt(localStorage.getItem('xq_panel_w') || '0', 10);
-        if (savedW >= 170 && savedW <= 300) document.documentElement.style.setProperty('--panel-w', savedW + 'px');
+        if (savedW >= 170 && savedW <= 300) {
+          document.documentElement.style.setProperty('--panel-w', savedW + 'px');
+          if (spEl.setAttribute) spEl.setAttribute('aria-valuenow', String(savedW));
+        }
       } catch (eW0) {}
       var spDrag = null;
+      var spApply = function (w) {
+        w = Math.max(170, Math.min(300, w));
+        document.documentElement.style.setProperty('--panel-w', w + 'px');
+        try { localStorage.setItem('xq_panel_w', String(w)); } catch (eS2) {}
+        if (spEl.setAttribute) spEl.setAttribute('aria-valuenow', String(w));
+      };
       spEl.addEventListener('pointerdown', function (e) {
         spDrag = { x: e.clientX, w: parseInt(getComputedStyle(document.querySelector('.think-panel')).width, 10) || 200 };
         if (spEl.setPointerCapture) { try { spEl.setPointerCapture(e.pointerId); } catch (eC) {} }
@@ -1264,15 +1275,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       });
       spEl.addEventListener('pointermove', function (e) {
         if (!spDrag) return;
-        var w = Math.max(170, Math.min(300, spDrag.w + (e.clientX - spDrag.x)));
-        document.documentElement.style.setProperty('--panel-w', w + 'px');
+        spApply(spDrag.w + (e.clientX - spDrag.x));
       });
       spEl.addEventListener('pointerup', function () {
         spDrag = null;
-        try {
-          var wNow = parseInt(getComputedStyle(document.querySelector('.think-panel')).width, 10);
-          localStorage.setItem('xq_panel_w', String(wNow));
-        } catch (eS) {}
+      });
+      spEl.addEventListener('keydown', function (e) {   // 第37轮 a11y: 键盘用户 ←/→ 调宽 (步长 10px, 与拖拽同口径持久化)
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault();
+        var cur = parseInt(getComputedStyle(document.querySelector('.think-panel')).width, 10) || 200;
+        spApply(cur + (e.key === 'ArrowRight' ? 10 : -10));
       });
     }
     // 第30轮: 页面隐藏兜底存档 (与每 5 手自动存档配套)
@@ -1310,6 +1322,24 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) return;
       /* v1.6 回放模式快捷键: ←/→ 步进, 空格 播放/暂停, Esc 退出 */
       if (rpEl && rpEl.ov.style.display === 'block') {
+        if (ev.key === 'Tab') {   // 第37轮 a11y: aria-modal=true 的配套 Tab 陷阱 (与设置层同款) — 焦点在回放对话框内循环, 不逃到背后棋盘
+          var rpDlg = rpEl.ov.querySelector('#rp-dialog');
+          if (rpDlg) {
+            var rpFables = Array.prototype.filter.call(
+              rpDlg.querySelectorAll('button, input, select, [tabindex="0"]'),
+              function (el) { return el.offsetParent !== null && !el.disabled; }
+            );
+            if (rpFables.length) {
+              var rpAct = document.activeElement;
+              if (ev.shiftKey) {
+                if (rpAct === rpFables[0] || !rpDlg.contains(rpAct)) { rpFables[rpFables.length - 1].focus(); ev.preventDefault(); }
+              } else {
+                if (rpAct === rpFables[rpFables.length - 1] || !rpDlg.contains(rpAct)) { rpFables[0].focus(); ev.preventDefault(); }
+              }
+            }
+          }
+          return;
+        }
         if (ev.key === 'ArrowRight') { if (rpCtrl) rpCtrl.stepNext(); ev.preventDefault(); return; }
         if (ev.key === 'ArrowLeft') { if (rpCtrl) rpCtrl.stepPrev(); ev.preventDefault(); return; }
         if (ev.key === ' ') { if (rpCtrl) rpCtrl.toggle(); ev.preventDefault(); return; }
@@ -1623,6 +1653,14 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     rpEl.movelist.addEventListener('click', function (e) {
       var li = e.target.closest('li[data-ply]');
       if (li && rpCtrl) rpCtrl.gotoPly(parseInt(li.dataset.ply, 10));
+    });
+    rpEl.movelist.addEventListener('keydown', function (e) {   // 第37轮 a11y: 走法 li 键盘可达 (tabindex=0 + Enter/Space; stopPropagation 防 Space 落到回放全局 播放/暂停)
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      var li = e.target.closest && e.target.closest('li[data-ply]');
+      if (!li) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (rpCtrl) rpCtrl.gotoPly(parseInt(li.dataset.ply, 10));
     });
     /* 滚轮步进: 棋盘上 wheel 下=next 上=prev, 180ms 节流 */
     var rpWheelLock = 0;
@@ -2279,7 +2317,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var mkHtml = mk === '杀' ? '<span title="' + esc2(T('rp_title_mate')) + '" style="color:#ff5050;font-weight:bold">杀</span> '
         : mk === '困' ? '<span title="' + esc2(T('rp_title_stuck')) + '" style="color:#ff5050">困</span> '
         : mk === '将' ? '<span title="' + esc2(T('rp_title_check')) + '" style="color:#e0a030">将</span> ' : '';
-      html += '<li' + cls + ' data-ply="' + (i + 1) + '"><span class="rp-ml-side">' + sideTag + '</span><b>' + m.n + '</b><span style="flex:1">' + bmHtml + mkHtml + risky + esc2(label) + '</span></li>';
+      html += '<li' + cls + ' data-ply="' + (i + 1) + '" tabindex="0"><span class="rp-ml-side">' + sideTag + '</span><b>' + m.n + '</b><span style="flex:1">' + bmHtml + mkHtml + risky + esc2(label) + '</span></li>';
       visible++;
     }
     if (html) rpEl.movelist.innerHTML = html;

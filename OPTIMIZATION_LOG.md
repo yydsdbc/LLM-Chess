@@ -1325,3 +1325,35 @@
 - 边界: ai/llm_agent.js 未动 (systemPrompt 2384 字不变); server.js 改动 (优雅停机) 需重启; 零新依赖
 - 触点: ai/committee_agent.js / benchmark/record.js / benchmark/cli.js / test/analyze_blunders.js / server.js / ui/app.js / index.html / ui/i18n.js / CHANGELOG
 - 教训: (1) heredoc 反斜杠转义链三连坑后改用 chr(92) 构造 + node 脚本拼补丁; (2) 心跳实验被自己写的守护当场击落 — 测试价值实证; (3) cli 潜伏 bug 首发版起无人跑过 cli 实链路
+
+## 2026-09-13 02:18 第37轮 (v1.0.daily, zcode — 指令「优化: a11y 二期 / PWA / 渲染性能 / 服务端行为测试 / 文档对齐 / i18n 漏挂」)
+
+基线 npm run check ALL PASS + npm test 15/15。13 项: i18n 漏挂 5 + a11y 3 + 服务端行为测试 3 + 守护 1 + 文档 1。主线: **JS 动态写入口裸中文扫描出 5 处 EN 漏挂并新增 I10 守护; anthropic 协议中继最复杂路径零覆盖被补齐; 回放/分隔条两处 a11y 空档**。
+
+【i18n 漏挂 (1-5) — I10 首跑抓出 + 人工扫描】
+1. **底部横幅 '全局 X:XX' 漏挂**: aiBanner('busy','全局 '+…tick) 走 innerHTML 注入, i18n_check I9 只扫属性/模板文本抓不到 → 新键 ai_elapsed ZH '全局 {t}' / EN 'Elapsed {t}' (浏览器实机 EN 界面横幅显示 "Elapsed 0:02" 实证)
+2. **会诊进度 '⚡ 会诊中 (n/m 已应答)…' 漏挂**: onProg 回调 textContent 裸中文 → 新键 council_progress ZH '⚡ 会诊中 ({a}/{t} 已应答)…' / EN '⚡ Council ({a}/{t} answered)…' (字典渲染断言过)
+3. **tick 每秒 '总思考 Ns' 覆盖 modelCard 的 think_total 键**: tick 直写 .im-stat 绕过 i18n (EN 界面每 1s 闪中文) → 改用 tArgs('think_total') 同口径
+4. **' · 缓存N%' / ' · 拦截N' 两处裸中文**: modelCardHTML 与 tick 各一份 → 抽 tokenStatsSuffix() 共用 + 复用 stats_cached/stats_blocked 键 (消除双份漂移)
+5. **状态行 '第N手 · 时间 · 限着' 双写入口漏挂**: renderStatus 与 updateClock 各有一份 ('第'+ply+'手 · '+mm) → 新键 status_clock (第{n}手 · {t}{ph}{lim} / Move {n} · {t}{ph}{lim}) + status_limit ( · 限着 {n}/120 / · {n}/120 limit) (实机 "Move 3 · 0:05" 断言过); 另 logTextFor 的 ' | 信x' 复用既有 d_conf 键
+
+【a11y 二期 (6-8)】
+6. **回放走法列表 li 键盘不可达**: rp-moves 每个 li 只有 click 无 tabindex — 键盘用户无法用主导航表跳转 → li 加 tabindex="0" + movelist keydown 委托 (Enter/Space → gotoPly, stopPropagation 防 Space 落到回放全局播放/暂停); 实机: 131 li 全带 tabindex, 聚焦第 2 手 Enter → 跳转 ply 2 active 实证
+7. **回放对话框 aria-modal 缺 Tab 陷阱**: 设置层第24轮有陷阱, 回放层第27轮只加了语义没加陷阱, Tab 可逃到背后棋盘 → 回放分支补同款焦点循环 (合成 Tab 断言 preventDefault 生效)
+8. **面板分隔条键盘不可调**: 第33轮分隔条仅 pointer 拖拽 → role=separator + tabindex=0 + aria-orientation/valuemin/max/now + data-i18n-aria (新键 set_splitter, EN 'Resize panel (←/→ keyboard)') + ←/→ 10px 步进调宽 (复用 spApply 统一 clamp/持久化/aria 同步); 实机: 合成 ArrowRight → aria-valuenow 200→210 + 面板宽 210px + localStorage 210 三步全过
+
+【服务端行为测试 (9-11) — server.js 零改动, 断言 31→45】
+9. **anthropic 协议中继零自动化覆盖** (最复杂转换路径): stub 上游扩展 anthropic shape + stub-err 分支 + 捕获请求侧 头/体 → 9 断言: SSE 帧含内容+[DONE] / usage 换算 total 18 / system 提取为独立字段 / 相邻同角色合并 (u1+u2 → 单 user) / max_tokens 钳制 32768 / x-api-key + anthropic-version 鉴权头 / type:error → 4xx JSON error 不合成虚假帧 / 首条 assistant 前 unshift '(开局)' 不吞原消息
+10. **CORS 策略 (req_origin_safe) 零覆盖**: OPTIONS 预检 3 断言 — localhost 回显同源 / 异源 → '*' / 无 Origin → '*' (file:// 调试友好)
+11. **二次编码穿越边界实证**: /%252e%252e%252fserver.js 单层 decode 不还原 ../ → 404 非文件泄露
+
+【守护/文档 (12-13)】
+12. **i18n_check 新增 I10 组** (动态写入口裸中文: .textContent= / aiBanner() / .innerHTML= 含 CJK 必须走 t 家族或 data-i18n): **先红后绿实证** — 临时把 ai_elapsed 还原成裸中文 → I10 当场抓红 (ui/app.js:477) → 恢复 → 10/10 绿; 首跑还抓到 updateClock 双写入口 (renderStatus 修完 updateClock 露头 ≠ 白干, I10 价值实证)
+13. ARCHITECTURE 同步: ai/ 补 Elo 加权 tally; ui/ 补 flip/drag/键盘/分隔条/undo/续局/PGN/备份/天梯; 测试地图 _server_http 行补 Anthropic relay + CORS
+
+【验证】
+- 全门禁: node --check 7 文件 + npm run check ALL PASS + npm test 15/15 (i18n 279 键 10/10 组; _server_http 45/45)
+- 浏览器实机 (IAB): 预置 xq_v1_settings 双 random + xq_lang=en → lang=en / 32 子 / 思考状态行与读屏全英文 / 横幅 "Elapsed 0:02" / 分隔条语义属性+EN 标签 / 合成键 Triple-probe (aria-valuenow/面板宽/持久化) / 回放 131 li tabindex + Enter 跳 ply 2 + Tab 陷阱 preventDefault / EN 渲染串断言 (Move 3 · 0:05, Council 2/3 answered)
+- 教训: ① 限流 8/s 秒窗会打自己 — 测试新增 chat POST 混入 415 断言前同秒堆积被 429 顶掉, 教训: 新增请求类断言按秒窗节奏排布 (块前 1.1s 休眠) ② IAB press() 对 div 焦点元素键盘路由不可靠, 应用层行为用页面内合成 KeyboardEvent 验证 (处理器本身工作正常) ③ 36 轮 LOG 声称 i18n 282 键, git 实测 273→274 — 本轮记录以字典实测 274→279 为准, 键数记账今后以 i18n_check 输出为准
+- 边界: ai/llm_agent.js 未动 (systemPrompt 2384 字不变); server.js 未动 (纯测试补强, 无需重启); 零新依赖
+- 触点: ui/app.js / ui/renderer.js / ui/i18n.js (+5 键: ai_elapsed/council_progress/set_splitter/status_clock/status_limit) / index.html (分隔条语义+焦点环) / test/_server_http.js (45 断言) / test/i18n_check.js (I10) / docs/ARCHITECTURE.md / CHANGELOG

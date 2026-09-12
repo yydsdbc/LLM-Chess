@@ -320,8 +320,11 @@
       var elapsed = (Date.now() - view.startTime) / 1000 | 0;
       var ph = phaseCN(engine);
       var clockTxt = '';
-    try { if (engine.naturalClock && engine.naturalClock() >= 60) clockTxt = ' · 限着 ' + engine.naturalClock() + '/120'; } catch (eNC) {}
-    document.getElementById('status-info').textContent = '第' + engine.ply() + '手 · ' + (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2) + (ph ? ' · ' + ph : '') + clockTxt;
+    try { if (engine.naturalClock && engine.naturalClock() >= 60) clockTxt = (XQ.I18N ? XQ.I18N.tArgs('status_limit', { n: engine.naturalClock() }) : ' · 限着 ' + engine.naturalClock() + '/120'); } catch (eNC) {}
+    var mm = (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2);
+    document.getElementById('status-info').textContent = XQ.I18N
+      ? XQ.I18N.tArgs('status_clock', { n: engine.ply(), t: mm, ph: ph ? ' · ' + ph : '', lim: clockTxt })
+      : '第' + engine.ply() + '手 · ' + mm + (ph ? ' · ' + ph : '') + clockTxt;
     }
     document.getElementById('status-bar').className = cls;
     document.getElementById('btn-row').classList.toggle('visible', engine.isOver());
@@ -633,8 +636,11 @@
     var el = document.getElementById('status-info');
     var ph = phaseCN(engine);
     var clockTxt = '';
-    try { if (engine.naturalClock && engine.naturalClock() >= 60) clockTxt = ' · 限着 ' + engine.naturalClock() + '/120'; } catch (eNC) {}
-    if (el) el.textContent = '第' + engine.ply() + '手 · ' + (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2) + (ph ? ' · ' + ph : '') + clockTxt;
+    try { if (engine.naturalClock && engine.naturalClock() >= 60) clockTxt = (XQ.I18N ? XQ.I18N.tArgs('status_limit', { n: engine.naturalClock() }) : ' · 限着 ' + engine.naturalClock() + '/120'); } catch (eNC) {}
+    var mm2 = (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2);
+    if (el) el.textContent = XQ.I18N
+      ? XQ.I18N.tArgs('status_clock', { n: engine.ply(), t: mm2, ph: ph ? ' · ' + ph : '', lim: clockTxt })
+      : '第' + engine.ply() + '手 · ' + mm2 + (ph ? ' · ' + ph : '') + clockTxt;
   }
 
   XQ.UI = { CS: CS, drawBoard: drawBoard, render: render, aiBanner: aiBanner, logMove: logMove, thinkPanel: thinkPanel, decisionCards: decisionCards, updateClock: updateClock, capturedTray: capturedTray, lastMoveBadge: lastMoveBadge, evalSpark: evalSpark };

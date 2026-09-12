@@ -55,12 +55,24 @@ function postChat(payload) {
 
 async function main() {
   // 第29轮: 中继穿越测试基建 — 本地 stub 上游 + 独立密钥文件 (LLMCHESS_KEYS, 不触用户真实 keys.json)
+  // 第37轮: 扩展为双协议 stub — openai 回显 shape / anthropic 内容 shape / stub-err 错误分支; 并捕获每请求上游侧 头+体
+  let lastUpReq = null;
   const upstream = http.createServer(function (uReq, uRes) {
     let ubody = '';
     uReq.on('data', function (c) { ubody += c; });
     uReq.on('end', function () {
-      var echo = 0;
-      try { echo = JSON.parse(ubody).max_tokens || 0; } catch (eP) {}
+      lastUpReq = { headers: uReq.headers, body: ubody };
+      var jb = {};
+      try { jb = JSON.parse(ubody) || {}; } catch (eP) {}
+      if (jb.model === 'stub-err') {   // anthropic 错误映射路径 (type:error → 客户端 JSON error)
+        uRes.writeHead(400, { 'Content-Type': 'application/json' });
+        return uRes.end(JSON.stringify({ type: 'error', error: { message: 'boom-claude' } }));
+      }
+      if (String(jb.model || '').indexOf('stub-a') === 0) {   // anthropic 协议 content shape
+        uRes.writeHead(200, { 'Content-Type': 'application/json' });
+        return uRes.end(JSON.stringify({ content: [{ type: 'text', text: '{"from":"h3","to":"e3","summary":"anthropic-ok","confidence":0.7}' }], usage: { input_tokens: 12, output_tokens: 6 } }));
+      }
+      var echo = jb.max_tokens || 0;
       uRes.writeHead(200, { 'Content-Type': 'application/json' });
       uRes.end(JSON.stringify({ echo_max_tokens: echo, choices: [{ message: { content: '{"from":"h3","to":"e3","summary":"upstream-ok","confidence":0.8}' } }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }));
     });
@@ -70,7 +82,7 @@ async function main() {
   const fS = require('fs');   // 第29轮: 文件级 const fs 在 133 行 (TDZ), main 顶部先取独立引用
   const keysFile = path.join(ROOT, 'temp', 'guard-keys-' + process.pid + '.json');
   fS.mkdirSync(path.dirname(keysFile), { recursive: true });
-  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key' } } }));
+  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key' }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', protocol: 'anthropic', apiKey: 'anthropic-test-key' } } }));
 
   server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile }) });
   const up = await waitHealth(40);   // ~6s 上限
@@ -159,6 +171,37 @@ async function main() {
   ok(healthAfter.status === 200, '中继穿越后: 服务进程存活 (v1.0.3 起此处曾 ReferenceError 崩溃)');
   const clampRes = await postChat({ provider: 'stubprov', model: 'stub-model', messages: [{ role: 'user', content: 'x' }], max_tokens: 999999 });
   ok(clampRes.status === 200 && clampRes.body.indexOf('"echo_max_tokens":32768') >= 0, 'max_tokens 钳制: 999999 → 转发 32768 (上游回显断言)');
+
+  // 第37轮: anthropic 协议中继穿越 — 最复杂的转换路径 (system 提取/同角色合并/鉴权头/SSE 合成/错误映射) 此前零自动化覆盖
+  // 节奏: 前 4 个 chat POST 同秒内就绪 → 先睡一个完整秒窗, 让本块 + 后续 415 断言均匀落在新秒窗 (8/s 限流下同秒连发自己打自己)
+  await new Promise(function (r) { setTimeout(r, 1100); });
+  const antRes = await postChat({ provider: 'stubanthropic', model: 'stub-a', messages: [{ role: 'system', content: 'SYS-HI' }, { role: 'user', content: 'u1' }, { role: 'user', content: 'u2' }], max_tokens: 999999 });
+  ok(antRes.status === 200 && /text\/event-stream/.test(antRes.headers['content-type'] || ''), 'anthropic 中继: POST /api/chat (stub anthropic 上游) → 200 + SSE 帧');
+  ok(antRes.body.indexOf('anthropic-ok') >= 0 && antRes.body.indexOf('[DONE]') >= 0, 'anthropic 中继: 响应转换合成的 SSE 帧含内容 + 收尾 [DONE]');
+  ok(antRes.body.indexOf('"total_tokens":18') >= 0, 'anthropic 中继: usage input+output → total_tokens 18 换算正确');
+  let antUp = null;
+  try { antUp = JSON.parse(lastUpReq.body); } catch (eA) {}
+  ok(!!antUp && antUp.system === 'SYS-HI', 'anthropic 中继: system 消息提取为独立 system 字段 (不进 messages)');
+  ok(!!antUp && Array.isArray(antUp.messages) && antUp.messages.length === 1 && antUp.messages[0].role === 'user' && antUp.messages[0].content === 'u1\nu2', 'anthropic 中继: 相邻同角色消息合并 (u1+u2 → 单 user, 满足交替约束)');
+  ok(!!antUp && antUp.max_tokens === 32768, 'anthropic 中继: max_tokens 钳制 999999 → 32768 (与 openai 路径同口径)');
+  ok(!!lastUpReq && lastUpReq.headers['x-api-key'] === 'anthropic-test-key' && lastUpReq.headers['anthropic-version'] === '2023-06-01', 'anthropic 中继: 上游鉴权头 x-api-key + anthropic-version');
+  const antErr = await postChat({ provider: 'stubanthropic', model: 'stub-err', messages: [{ role: 'assistant', content: 'a1' }] });
+  let antErrUp = null;
+  try { antErrUp = JSON.parse(lastUpReq.body); } catch (eE2) {}
+  ok(antErr.status === 400 && antErr.body.indexOf('boom-claude') >= 0, 'anthropic 中继: 上游 type:error → 客户端 4xx + JSON error 原文 (不合成虚假成功帧)');
+  ok(!!antErrUp && Array.isArray(antErrUp.messages) && antErrUp.messages.length === 2 && antErrUp.messages[0].role === 'user' && antErrUp.messages[0].content === '(开局)' && antErrUp.messages[1].role === 'assistant', 'anthropic 中继: 首条 assistant 前 unshift user (开局) — 交替约束补位不吞原消息');
+
+  // 第37轮: CORS 策略 (req_origin_safe 零覆盖) — localhost 回显 / 异源与无 Origin 均 '*' (走 OPTIONS 预检, 不耗限流窗)
+  const or1 = await req('OPTIONS', '/api/chat', null, { Origin: 'http://localhost:5173' });
+  ok(or1.status === 204 && or1.headers['access-control-allow-origin'] === 'http://localhost:5173', 'CORS 策略: localhost Origin → ACAO 回显同源');
+  const or2 = await req('OPTIONS', '/api/chat', null, { Origin: 'https://evil.example.com' });
+  ok(or2.status === 204 && or2.headers['access-control-allow-origin'] === '*', 'CORS 策略: 异源 Origin → ACAO * (不泄露同源回显)');
+  const or3 = await req('OPTIONS', '/api/chat', null, {});
+  ok(or3.status === 204 && or3.headers['access-control-allow-origin'] === '*', 'CORS 策略: 无 Origin (file://) → ACAO *');
+
+  // 第37轮: 二次编码穿越边界 — %252e.. 只解码一层不还原为 ../ → 404 非文件泄露 (防护纵深实证)
+  const dbl = await req('GET', '/%252e%252e%252fserver.js');
+  ok(dbl.status === 404, '二次编码穿越 (%252e%252e%252fserver.js) → 404 (单次 decode, 无二次解码, 不泄露文件)');
 
   // 第28轮五期: Content-Type 门禁 + 404 no-store
   const ctBad = await req('POST', '/api/chat', '{"provider":"x"}', { 'Content-Type': 'text/plain' });

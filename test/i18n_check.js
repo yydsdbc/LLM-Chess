@@ -11,6 +11,7 @@
  *  I8 静态 CJK 属性 (title/aria-label/placeholder) 必须挂对应 data-i18n 标记 (第24轮)
  *  I9 JS 侧动态属性 CJK 守护 — JS 模板串里的 title=/placeholder=/aria-label= 含中文必须同串挂 data-i18n* 标记,
  *     .title = '…中文…' 赋值必须走 t/tArgs 家族 (第27轮; I8 只扫 index.html, JS 构建的 DOM 是第三盲区)
+ *  I10 JS 动态写入口 (textContent=/aiBanner()/innerHTML=) 裸中文必须走 t 家族或挂 data-i18n (第37轮)
  * 用法: node test/i18n_check.js
  */
 'use strict';
@@ -136,6 +137,32 @@ jsFiles.forEach(function (f) {
 });
 ok(miss9.length === 0, 'I9 JS 侧属性/文本 CJK 挂载/走 t()' + (miss9.length ? ' (漏挂: ' + miss9.join(' ; ') + ')' : ' (0 漏挂)'));
 
-console.log('i18n_check: ' + (9 - fails.length) + '/9 groups PASS, ' + zk.length + ' keys');
+// I10 第37轮: JS 动态 UI 写入口裸中文守护 — I9 覆盖属性与模板文本, 但 .textContent= 赋值与 aiBanner() 消息参数
+//   (innerHTML 注入) 是第三盲区: 状态行 第N手·时间 / 底部横幅 全局 X:XX / 会诊中 n/m 已应答 / tick 总思考
+//   曾以裸中文漏进 EN 界面 (EN 实机截图抓漏)。规则 (逐行, 跳过注释行/块):
+//   a) .textContent = '<…CJK…>' → 同行须有 t/tArgs 家族调用 (裸字面量即漏挂);
+//   b) aiBanner( 消息含 CJK → 同行须走 t 家族 (banner 走 innerHTML);
+//   c) .innerHTML =/+= '<…CJK…>' → 同行须走 t 家族或挂 data-i18n 标记。
+var miss10 = [];
+jsFiles.forEach(function (f) {
+  fs.readFileSync(path.join(ROOT, f), 'utf8').split(/\r?\n/).forEach(function (line, i) {
+    if (!CJK7.test(line)) return;
+    var ls = line.trim();
+    if (ls.indexOf('//') === 0 || ls.indexOf('*') === 0) return;   // 注释行豁免 (仅扫执行代码)
+    var ln = f + ':' + (i + 1);
+    var tcOk = /[tT][A-Za-z0-9]*\(/.test(line) || /XQ\.I18N/.test(line) || /data-i18n/.test(line);
+    var m10 = line.match(/\.textContent\s*=\s*(['"])((?:(?!\1).)*\1)/);   // 右侧首段字面量 (行尾注释不计)
+    if (m10 && CJK7.test(m10[2]) && !tcOk) miss10.push(ln + ' textContent="' + m10[2].slice(0, 24) + '"');
+    if (line.indexOf('aiBanner(') >= 0 && !tcOk) {
+      var ab = line.match(/aiBanner\([^)]*[\u4e00-\u9fff][^)]*/);
+      if (ab) miss10.push(ln + ' ' + ab[0].slice(0, 34));
+    }
+    var im10 = line.match(/\.innerHTML\s*(?:\+=|=)\s*(['"])((?:(?!\1).)*\1)/);
+    if (im10 && CJK7.test(im10[2]) && !tcOk) miss10.push(ln + ' innerHTML="' + im10[2].slice(0, 24) + '"');
+  });
+});
+ok(miss10.length === 0, 'I10 JS 动态写入口 (textContent/aiBanner/innerHTML) 裸中文' + (miss10.length ? ' (漏挂: ' + miss10.join(' ; ') + ')' : ' (0 漏挂)'));
+
+console.log('i18n_check: ' + (10 - fails.length) + '/10 groups PASS, ' + zk.length + ' keys');
 if (fails.length) { process.exit(1); }
 process.exit(0);
