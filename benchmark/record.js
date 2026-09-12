@@ -40,6 +40,11 @@
       if (Array.isArray(meta.candidates) && meta.candidates.length) {
         e.candidates = meta.candidates.slice(0, 3).map(function (c) { return { move: String(c.move || '').slice(0, 30), score: String(c.score || '').slice(0, 14) }; });
       }
+      if (Array.isArray(meta.votes) && meta.votes.length) {   // 第34轮: 会诊投票明细入谱 (回放信息面板可展示)
+        e.votes = meta.votes.slice(0, 8).map(function (v) {
+          return { model: String(v.model || '').slice(0, 40), to: String(v.to || '').slice(0, 6), conf: typeof v.conf === 'number' ? Math.round(v.conf * 100) / 100 : null, ok: v.ok !== false };
+        });
+      }
     }
     record.moves.push(e);
   }

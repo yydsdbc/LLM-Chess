@@ -95,6 +95,8 @@
             settled = true;
             answered++;
             vstate[idx] = v.mv ? 'ok' : 'fail';
+            streams[idx] = '✓ 已应答';   // 第34轮: 应答完成的选民折叠为一行 (合并视图聚焦仍在思考的选民)
+            if (opts.onThinking) { try { opts.onThinking(side, agents.map(function (a2, j2) { return '【' + a2.name + '】' + (streams[j2] != null && streams[j2] !== '' ? streams[j2] : '…'); }).join('\n\n')); } catch (eT) {} }
             votes.push(v.mv   // 第32轮修正: 即时收集 (原在 Promise.all 后统一收, 进度回调时 tally 恒空)
               ? { model: a.name, from: XQ.Move.sqName(v.mv.from), to: XQ.Move.sqName(v.mv.to), conf: confOf(v.mv), ms: Date.now() - t0, ok: true }
               : { model: a.name, fail: String((v.err && v.err.message) || v.err || 'failed').slice(0, 60), ok: false });

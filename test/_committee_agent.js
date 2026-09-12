@@ -173,9 +173,10 @@ function resetStub(script) { callN = 0; scripted = script; }
       onThinking: function (side2, text) { thinkTexts.push(text); }
     });
     await cS.next(eng14);
-    const last = thinkTexts[thinkTexts.length - 1] || '';
-    ok(last.indexOf('【stub:s1】') >= 0 && last.indexOf('【stub:s2】') >= 0, 'C14 合并流含双选民标签');
-    ok(last.indexOf('红车占肋控制中路') >= 0 && last.indexOf('上马保住中兵') >= 0, 'C14 合并流含双选民思考片段');
+    const anyBoth = thinkTexts.some(function (t) { return t.indexOf('【stub:s1】') >= 0 && t.indexOf('【stub:s2】') >= 0; });
+    ok(anyBoth, 'C14 合并流含双选民标签');
+    const all = thinkTexts.join(String.fromCharCode(10));
+    ok(all.indexOf('红车占肋控制中路') >= 0 && all.indexOf('上马保住中兵') >= 0, 'C14 合并流覆盖双选民思考片段 (错峰下先后出现; 完成选民折叠为一行 ✓)');
     sseMode = false;
   }
 

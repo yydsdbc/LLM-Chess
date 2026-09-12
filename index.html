@@ -522,6 +522,14 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
             <div id="server-warn" style="display:none;margin:2px 0 12px;padding:8px 10px;border-radius:6px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.35);font-size:11px;color:#f0b8b0;"></div>
             <div class="set-note" data-i18n="keys_note">密钥仅保存在服务端 config/keys.json，前端永不接触。双方可各配不同类型/服务商。</div>
             <div class="set-foot">
+                <div class="set-row" style="margin-bottom:8px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="ui-coords" checked> <span data-i18n="set_coords">棋盘坐标标</span></label>
+                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="ui-drag" checked> <span data-i18n="set_drag">拖拽走子</span></label>
+                    <label style="display:flex;align-items:center;gap:5px"><span data-i18n="set_vol">音量</span> <input type="range" id="ui-vol" min="0" max="100" value="90" style="width:90px"></label>
+                </div>
+                <div class="set-row" style="margin-bottom:8px;text-align:right">
+                    <button type="button" class="btn" id="ui-resetdata" data-i18n="reset_data" style="background:rgba(192,57,43,.25);font-size:11px">清空本地数据</button>
+                </div>
                 <div class="set-row" style="margin-bottom:8px"><label data-i18n="language_label">语言</label><select id="ui-lang"><option value="zh">中文</option><option value="en">English</option></select></div>
                 <div class="set-row" style="margin-bottom:8px"><label data-i18n="pieces_label">棋子显示</label><select id="ui-pieces"><option value="cn">汉字</option><option value="en">Letters</option></select></div>
                 <button class="btn" onclick="XQApp.closeAISettings()"><span data-i18n="btn_close">取消</span></button>
@@ -559,7 +567,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 <div id="sr-status" class="sr-only" aria-live="polite"></div>
 <div id="ai-banner"></div>
 <div id="sr-move" class="sr-only" aria-live="polite"></div>
-<div id="btn-row"><button class="btn" id="btn-undo" data-i18n="btn_undo">↩ 悔棋</button><button class="btn" id="btn-restart" data-i18n="btn_reset">🔄 重新开始</button><button class="btn" id="btn-replay-watch" data-i18n="btn_watch_replay" data-i18n-title="btn_watch_replay_title" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" data-i18n="btn_fullscreen" data-i18n-title="btn_fullscreen_title" title="全屏观战 (F 键)">⛶ 全屏</button></div>
+<div id="btn-row"><button class="btn" id="btn-flip" data-i18n="btn_flip">⇅ 翻转</button><button class="btn" id="btn-undo" data-i18n="btn_undo">↩ 悔棋</button><button class="btn" id="btn-restart" data-i18n="btn_reset">🔄 重新开始</button><button class="btn" id="btn-replay-watch" data-i18n="btn_watch_replay" data-i18n-title="btn_watch_replay_title" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" data-i18n="btn_fullscreen" data-i18n-title="btn_fullscreen_title" title="全屏观战 (F 键)">⛶ 全屏</button></div>
 <div id="archive-row">
     <button class="btn" id="btn-save" data-i18n="btn_save_short" data-i18n-title="btn_save" title="导出棋谱JSON" disabled>💾 存棋谱</button>
     <button class="btn" id="btn-load" data-i18n="btn_load" data-i18n-title="btn_load" title="导入棋谱JSON并重放">📂 载入棋谱</button>

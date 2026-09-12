@@ -118,6 +118,7 @@
     var c = cellAtPoint(ev.clientX, ev.clientY);
     if (c) {
       var tx = +c.dataset.x, ty = +c.dataset.y;
+      if (d.view.flip) { tx = 8 - tx; ty = 9 - ty; }   // 第34轮: 翻转视角下 dataset 是显示坐标 → 换算回盘面坐标
       if (tx === d.fx && ty === d.fy) { if (d.view.onCancelSelect) d.view.onCancelSelect(); return; }   // 原地放下 = 取消
       d.view.onCellClick(tx, ty);   // 合法 → 走子; 非法 → 应用层自行取消/重选
     } else if (d.view.onCancelSelect) {
@@ -161,9 +162,15 @@
       engine.dangerTargets(selected.x, selected.y).forEach(function (d) { danger[d.x + ',' + d.y] = d; });
     }
 
-    for (var y = 0; y < 10; y++) {
-      for (var x = 0; x < 9; x++) {
-        var c = cells[y * 9 + x];
+    var flip = !!view.flip;   // 第34轮: 视角翻转 (黑方视角) — 显示坐标 (dx,dy) 与盘面坐标 (x,y) 解耦, 交互全走显示坐标
+    function dispX(x) { return flip ? 8 - x : x; }
+    function dispY(y) { return flip ? 9 - y : y; }
+    function boardX(dx) { return flip ? 8 - dx : dx; }
+    function boardY(dy) { return flip ? 9 - dy : dy; }
+    for (var dy0 = 0; dy0 < 10; dy0++) {
+      for (var dx0 = 0; dx0 < 9; dx0++) {
+        var y = boardY(dy0), x = boardX(dx0);
+        var c = cells[dy0 * 9 + dx0];
         var p = snap.cells[y][x];
         // 棋子差量更新: glyph(色+种) 未变复用现节点, 变则重建 (重建即重放 just-placed/滑入动画)
         var wantKey = p ? (p.color + ':' + p.type) : null;
@@ -190,7 +197,8 @@
           // 72% 落位 + 86% 轻微压定); ghost 滞后 0.07s 淡出; 途中整格抬层防穿子; 结束摘类恢复 hover 缩放
           if (sliding && view.pendingAnim) {
             var m0 = snap.lastMove;
-            var dx = (m0.from.x - m0.to.x) * 100, dy = (m0.from.y - m0.to.y) * 100;   // piece 与 cell 同尺寸 → 百分比即一格
+            var flipSign = flip ? -1 : 1;   // 第34轮: 翻转视角下滑动向量按显示方向反转
+            var dx = (m0.from.x - m0.to.x) * 100 * flipSign, dy = (m0.from.y - m0.to.y) * 100 * flipSign;   // piece 与 cell 同尺寸 → 百分比即一格
             if (dx || dy) {
               var dist = Math.max(Math.abs(m0.from.x - m0.to.x), Math.abs(m0.from.y - m0.to.y));
               pe.style.setProperty('--dx', dx + '%');
@@ -232,13 +240,39 @@
             c.addEventListener('pointerdown', function (ev) {
               if (ev.button !== 0 && ev.pointerType === 'mouse') return;
               var engLive = view._liveEngine;
-              if (!engLive || engLive.isOver() || view.aiThinking || _drag) return;
+              if (!engLive || engLive.isOver() || view.aiThinking || _drag || view.dragEnabled === false) return;   // 第34轮: 拖拽开关
               var pd = engLive.pieceAt(rx, ry);
               if (!pd || pd.color !== engLive.turn()) return;
               startDrag(rx, ry, engLive.pieceAt(rx, ry) && c.querySelector('.piece'), ev, view);
             });
           })(x, y);
         }
+      }
+    }
+    // 第34轮: 最后着法箭头 (显示坐标绘制; 视角翻转自动随动; pendingAnim 滑动期间不画防重叠)
+    var arrowSvg = document.getElementById('move-arrow');
+    if (!arrowSvg && boardEl.parentNode) {
+      arrowSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      arrowSvg.id = 'move-arrow';
+      arrowSvg.setAttribute('viewBox', '0 0 432 480');
+      arrowSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      arrowSvg.setAttribute('aria-hidden', 'true');
+      arrowSvg.style.cssText = 'position:absolute;top:0;left:0;width:calc(var(--cell,48px)*9);height:calc(var(--cell,48px)*10);pointer-events:none;z-index:4';
+      boardEl.appendChild(arrowSvg);
+    }
+    if (arrowSvg) {
+      var m2 = snap.lastMove;
+      if (m2 && !view.pendingAnim && view.arrow !== false) {
+        var ax1 = dispX(m2.from.x) * 48 + 24, ay1 = dispY(m2.from.y) * 48 + 24;
+        var ax2 = dispX(m2.to.x) * 48 + 24, ay2 = dispY(m2.to.y) * 48 + 24;
+        var ang = Math.atan2(ay2 - ay1, ax2 - ax1);
+        var head = 11, wing = 5;
+        var x3 = ax2 - Math.cos(ang) * head * 1.6, y3 = ay2 - Math.sin(ang) * head * 1.6;
+        var col = m2.piece && m2.piece.color === 'red' ? 'rgba(192,57,43,.78)' : 'rgba(52,84,120,.8)';
+        arrowSvg.innerHTML = '<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="' + col + '"/></marker></defs>'
+          + '<line x1="' + ax1.toFixed(1) + '" y1="' + ay1.toFixed(1) + '" x2="' + x3.toFixed(1) + '" y2="' + y3.toFixed(1) + '" stroke="' + col + '" stroke-width="7" stroke-linecap="round" opacity=".55" marker-end="url(#ah)"/>';
+      } else if (arrowSvg.firstChild) {
+        arrowSvg.innerHTML = '';
       }
     }
     renderStatus(engine, view);

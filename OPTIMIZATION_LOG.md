@@ -1182,3 +1182,50 @@
 - 边界: llm_agent.js 未动; server.js 未动; 零新依赖; systemPrompt 未动
 - 触点: ui/renderer.js (拖拽状态机+绑定+行内记谱+aria) / ui/app.js (onCancelSelect/分隔条/试连/导出/U 键/syncArchive/d-new) / index.html (按钮+CSS) / ui/i18n.js / README×2 / CHANGELOG
 - 教训: 浏览器验证前必须清 localStorage 对局设置 (历轮验证残留会在新会话自启真实 LLM 对局消耗 key)
+
+## 2026-09-12 ~13:40 第34轮 (v1.0.daily, zcode — 指令「针对GUI做30个优化」)
+
+基线 15/15 全绿。30 项 (主打两次评估后跳过的「视角翻转」, 池化渲染下以显示坐标/盘面坐标解耦安全落地):
+
+【视角翻转 (黑方视角) (1-8)】
+1. **渲染循环坐标解耦**: 显示坐标 (dx,dy) 与盘面坐标 (x,y) 分离 — 池索引/选中/合法落点/last-move/将军/aria 全部仍用盘面坐标, 仅显示层映射
+2. 点击/pointer 绑定天然正确 (绑定传盘面坐标, 翻转零适配)
+3. **拖拽落点换算**: 翻转下 dataset 是显示坐标 → 松手换算回盘面坐标再进 onCellClick
+4. **滑动动画向量反转**: 翻转下 dx/dy ×(-1) — 棋子仍朝正确显示方向滑入
+5. **行列标反转**: applyFlip 重写 a-i/10-1 文案 (翻转后显示列 i..a / 行 1..10)
+6. **翻转按钮** btn-flip (⇅ 翻转视角, btn_flip 键)
+7. **持久化**: xq_flip + 初始化恢复 (labels/view/refresh)
+8. **键盘方向换算**: 翻转下方向键按屏幕方向移动光标 (kbMove ×flip)
+
+【最后着法箭头 (9-10)】
+9. **SVG 箭头覆盖层**: move-arrow 层 (pointer-events none, z4) — 起讫格中心连线 + marker 箭头, 红黑配色, 懒创建
+10. 翻转视角自动随动 (显示坐标绘制) + pendingAnim 滑动期间不画防重叠
+
+【会诊显示进阶 (11-13)】
+11. **会诊投票明细入谱**: Record.addMove 存 meta.votes (逐选民 model/to/conf/ok, 截 8 条)
+12. **回放信息面板投票明细表**: 逐选民 模型/落点/信心/失败 红显 (i18n votes_model/to/conf/fail 4 键)
+13. **会诊思考折叠**: 选民应答完成 → 合并流中折叠为一行 ✓ (聚焦仍在思考的选民; 错峰下片段先后出现, C14 断言改联合覆盖)
+
+【设置显示项 (14-19)】
+14. **棋盘坐标标开关**: ui-coords → 列/行标显隐 + 持久化
+15. **音量滑条**: ui-vol → volPct 联动 masterBus 增益 (实时) + 持久化
+16. **拖拽走子开关**: ui-drag → renderer dragEnabled 守卫 + 持久化
+17. **危险区清空本地数据**: confirm + xq_ 前缀遍历清理 (保留 设置/语言/折叠/音效) + reload
+18. 上述持久化键: xq_coords/xq_vol/xq_drag
+19. 设置面板 foot 三控件一行排布 (checkbox×2 + range + 危险按钮独立行)
+
+【守护/文档/杂项 (20-30)】
+20. **I8 守护实证**: btn-flip 装饰 title 硬编码中文被 I8 抓出 → 去除 (装饰元素无障碍由 aria 承担)
+21. i18n 新键 10 个 (votes×4 + set_coords/set_vol/set_drag/reset_data/reset_confirm/btn_flip; 263→273)
+22. IAB 实机: 翻转后行列标反转 (a→i) + 翻转态点击走子映射正确 (a4 兵, 需按显示索引探针 — 首版探针混用两坐标系已修正) + reload 持久化 ✓
+23. IAB 实机: 箭头层 normal/flip 双态绘制 ✓
+24. 回归: npm run check ALL PASS + npm test 15/15 (i18n 273 键 9/9)
+25. 环境止血: 8788 孤儿端口清理 (上轮服务进程残留致新起失败); 断连错误页 reload 重载
+26. README EN 交互段补 翻转/坐标开关/音量/拖拽开关
+27. README zh 同步
+28. CHANGELOG Round-34
+29. 委员会 collapse 语义注记: 错峰下片段先后出现属正确行为 (完成者折叠), 单测改联合覆盖
+30. LOG/CHANGELOG 收录
+- 边界: ai/llm_agent.js 未动; server.js 未动; systemPrompt 未动; 零新依赖
+- 触点: ui/renderer.js (坐标解耦/换算/箭头) / ui/app.js (flip/设置绑定/投票表) / index.html (按钮/开关/箭头CSS依赖) / ui/i18n.js (+10) / benchmark/record.js (votes 入谱) / replay/replay.js (summarize models — 第31轮) / README×2 / CHANGELOG
+- 教训: 坐标系混用探针 (显示 idx 当盘面 idx 查子) 白查一轮 — 坐标变换功能探针必须显式声明坐标空间

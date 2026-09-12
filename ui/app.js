@@ -13,9 +13,10 @@
     if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; } }
     if (actx && actx.state === 'suspended') { try { actx.resume(); } catch (e) {} }
   }
+  var volPct = 90;   // 第34轮: 音量百分比 (设置滑条联动 masterBus 增益)
   function masterBus() {
     if (!mBus) {
-      mBus = actx.createGain(); mBus.gain.value = 0.9;
+      mBus = actx.createGain(); mBus.gain.value = 0.9 * volPct / 100;
       var comp = actx.createDynamicsCompressor();
       comp.threshold.value = -20; comp.knee.value = 14; comp.ratio.value = 5;
       mBus.connect(comp); comp.connect(actx.destination);
@@ -410,8 +411,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   var kbCursor = null;
   function kbMove(dx, dy) {
     if (!kbCursor) { kbCursor = { x: 4, y: 5 }; }   // 缺省落在棋盘中央
-    kbCursor.x = Math.max(0, Math.min(8, kbCursor.x + dx));
-    kbCursor.y = Math.max(0, Math.min(9, kbCursor.y + dy));
+    kbCursor.x = Math.max(0, Math.min(8, kbCursor.x + dx * (flipOn ? -1 : 1)));
+    kbCursor.y = Math.max(0, Math.min(9, kbCursor.y + dy * (flipOn ? -1 : 1)));
     refresh();
   }
 
@@ -907,6 +908,19 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       o.connect(g); g.connect(masterBus()); o.start(t + i * 0.13); o.stop(t + i * 0.13 + 0.36);
     });
   }
+  var flipOn = false;   // 第34轮: 视角翻转 (黑方视角)
+  try { flipOn = localStorage.getItem('xq_flip') === '1'; } catch (eF0) {}
+  function applyFlip() {   // 翻转: 渲染变量 + 行列标反转 (按钮/持久化调用)
+    view.flip = flipOn;
+    try { localStorage.setItem('xq_flip', flipOn ? '1' : '0'); } catch (eF1) {}
+    var cols = document.querySelectorAll('#col-labels span');
+    var rowsL = document.querySelectorAll('#row-labels span');
+    var CL = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
+    for (var ci = 0; ci < 9; ci++) if (cols[ci]) cols[ci].textContent = flipOn ? CL[8 - ci] : CL[ci];
+    for (var ri = 0; ri < 10; ri++) if (rowsL[ri]) rowsL[ri].textContent = String(flipOn ? ri + 1 : 10 - ri);
+    if (typeof refresh === 'function') refresh();
+  }
+
   /* 第30轮 悔棋: 人机局撤「人类+AI」一对; AI-vs-AI 撤 1 手并让对局继续。
      同步回滚: 走法列表/决策日志/吃子托盘/评值走势; LLM 会话 reset (历史已不匹配, 重建) */
   function undoLastMove() {
@@ -1041,6 +1055,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   /* ── 初始化 ── */
   document.addEventListener('DOMContentLoaded', function () {
     XQ.UI.drawBoard(document.getElementById('board-lines'));
+    if (flipOn) applyFlip();   // 第34轮: 恢复翻转视角 (labels/view/refresh)
     setTimeout(tryOfferResume, 1200);   // 第30轮: 初始化后探测未完对局
     // 第24轮 PWA 二期: service worker (网络优先离线壳, 见根级 sw.js) — file:// 等非安全上下文静默跳过
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
@@ -1106,6 +1121,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
     document.getElementById('gear-toggle').onclick = openAISettings;
     document.getElementById('btn-restart').onclick = userRestart;   // v1.0.daily 确认入口
+    var bfEl = document.getElementById('btn-flip');   // 第34轮: 视角翻转
+    if (bfEl) bfEl.onclick = function () { flipOn = !flipOn; applyFlip(); };
     /* 第33轮: 服务商试连 (1-token 探活, 实测延迟/HTTP 错误) */
     ['red', 'black'].forEach(function (sd) {
       var tbtn = document.getElementById('ai-' + sd + '-testconn');
@@ -1174,6 +1191,59 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       document.addEventListener(ev, function () { ensureAudio(); }, { once: false, passive: true });
     });
 
+    /* 第34轮: 坐标标开关 / 音量滑条 / 拖拽开关 / 危险区重置 */
+    var coordsEl = document.getElementById('ui-coords');
+    var volEl = document.getElementById('ui-vol');
+    var dragEl = document.getElementById('ui-drag');
+    function applyCoords(v) {
+      var c1 = document.getElementById('col-labels'), c2 = document.getElementById('row-labels');
+      if (c1) c1.style.display = v ? '' : 'none';
+      if (c2) c2.style.display = v ? '' : 'none';
+    }
+    var savedCoords = '1', savedVol = 90, savedDrag = '1';
+    try {
+      savedCoords = localStorage.getItem('xq_coords') || '1';
+      savedVol = parseInt(localStorage.getItem('xq_vol') || '90', 10);
+      if (isNaN(savedVol)) savedVol = 90;
+      savedDrag = localStorage.getItem('xq_drag') || '1';
+    } catch (eSV) {}
+    volPct = savedVol;
+    view.dragEnabled = savedDrag === '1';
+    if (coordsEl) {
+      coordsEl.checked = savedCoords === '1';
+      applyCoords(coordsEl.checked);
+      coordsEl.addEventListener('change', function () {
+        try { localStorage.setItem('xq_coords', coordsEl.checked ? '1' : '0'); } catch (eC) {}
+        applyCoords(coordsEl.checked);
+      });
+    }
+    if (volEl) {
+      volEl.value = savedVol;
+      volEl.addEventListener('input', function () {
+        try { localStorage.setItem('xq_vol', String(volEl.value)); } catch (eV) {}
+        volPct = parseInt(volEl.value, 10) || 0;
+        if (mBus) mBus.gain.value = 0.9 * volPct / 100;
+      });
+    }
+    if (dragEl) {
+      dragEl.checked = savedDrag === '1';
+      dragEl.addEventListener('change', function () {
+        try { localStorage.setItem('xq_drag', dragEl.checked ? '1' : '0'); } catch (eD) {}
+        view.dragEnabled = dragEl.checked;
+      });
+    }
+    var rdEl = document.getElementById('ui-resetdata');
+    if (rdEl) rdEl.onclick = function () {
+      var T3 = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+      if (!window.confirm(T3('reset_confirm'))) return;
+      var kill = [];
+      for (var ki = 0; ki < localStorage.length; ki++) {
+        var k2 = localStorage.key(ki);
+        if (k2.indexOf('xq_') === 0 && k2 !== 'xq_v1_settings' && k2 !== 'xq_lang' && k2.indexOf('xq_fold_') !== 0 && k2 !== 'xq_snd') kill.push(k2);
+      }
+      kill.forEach(function (k3) { localStorage.removeItem(k3); });
+      location.reload();
+    };
     // 第33轮: 面板宽度分隔条 (170-300px 拖拽, localStorage 记忆)
     var spEl = document.getElementById('panel-splitter-r');
     if (spEl) {
@@ -2092,6 +2162,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         html += '<div style="color:#c4a56e;font-size:12px">' + T('rp_candidates') + ' '
           + e.candidates.map(function (c) { return '<code style="background:rgba(255,255,255,.06);padding:1px 5px;border-radius:4px">' + esc2(c.move) + '(' + esc2(c.score || '?') + ')</code>'; }).join(' ')
           + '</div>';
+      }
+      if (e.votes && e.votes.length) {   // 第34轮: 会诊投票明细表 (逐选民落点/信心/失败)
+        html += '<table style="width:100%;font-size:11px;margin-top:5px;border-collapse:collapse;background:rgba(0,0,0,.2);border-radius:6px">'
+          + '<tr style="color:#c4a56e"><td style="padding:2px 6px">' + T('votes_model') + '</td><td style="padding:2px 6px">' + T('votes_to') + '</td><td style="padding:2px 6px">' + T('votes_conf') + '</td></tr>';
+        e.votes.forEach(function (v) {
+          html += v.ok
+            ? '<tr><td style="padding:2px 6px">' + esc2(v.model) + '</td><td style="padding:2px 6px;color:#f0d9a0">' + esc2(v.to) + '</td><td style="padding:2px 6px">' + (v.conf != null ? v.conf : '—') + '</td></tr>'
+            : '<tr><td style="padding:2px 6px">' + esc2(v.model) + '</td><td colspan="2" style="padding:2px 6px;color:#ff8a7a">' + T('votes_fail') + '</td></tr>';
+        });
+        html += '</table>';
       }
     }
     if (st.over) {
