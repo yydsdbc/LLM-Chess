@@ -102,6 +102,9 @@ Installable (manifest + themed icon → standalone window / home-screen), plus a
 - **Retry cooling**: temperature converges to 0.1 from attempt 2; linear backoff 3s→6s→9s for 429/50x/gateway errors; permanent errors (401/balance/model-not-found) fail fast.
 - **Self-validation**: strict JSON field checks, nested-JSON scanner, full-width character rescue, bare-key tolerance, reasoning_content JSON salvage, per-move attempt counting, external abort support.
 
+### Interaction & Panels (v1.0.daily)
+Pieces move by **click or drag** (drag shows legal targets, a floating ghost, and snap-back on illegal drops); arrow keys + Enter work too, `U` undoes a human-vs-AI move pair, and the undo/save buttons disable themselves when inapplicable. The think panels resize via a **drag splitter** (persisted), providers offer a one-token **test-connection** button with latency/error feedback, the end card gains a one-click **game export**, the move log shows inline Chinese notation, and the Elo ladder supports column sorting.
+
 ### Multi-LLM per Side (v1.0.daily)
 A side can field **several LLMs that reason together**: put comma-separated model names in the model box (`glm-a, glm-b` or cross-provider `deepseek:deepseek-chat, qwen:qwen3-max`) and pick a per-side mode — **Rotation** (each move uses the next model, independent prefix caches; voters failing twice in a row are skipped) or **Council** (all voters answer in parallel, the destination square wins by vote, ties broken by summed confidence; a supermajority blunder is vetoed by static-exchange check; thinking streams are shown **per voter** (`【model】...` blocks side by side), the thinking card shows live voter marks and the running tally, the played move's card tags the winning voter, and single-voter failures are tolerated within a 90s per-voter budget).
 

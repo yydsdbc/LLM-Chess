@@ -59,6 +59,73 @@
     svgEl.innerHTML = lines;
   }
 
+  /* ── 第33轮 拖拽走子: pointer 选取→拖动→落点 (纯输入层) ──
+     语义完全复用 onCellClick: 拖起 = 选中 (高亮合法落点), 拖到目标格松手 = onCellClick(目标);
+     非法/出界 = 取消 (onCancelSelect 由 app 提供)。幽灵棋子跟随指针, 原子淡化, 触屏经 pointer 统一。 */
+  var _drag = null;          // {fx, fy, pieceEl, ghost, sx, sy, moved, overCell}
+  var _suppressUntil = 0;    // 拖拽松手后短暂抑制合成 click (防双重走子)
+
+  function dragGhostCreate(pieceEl) {
+    var g = pieceEl.cloneNode(true);
+    g.className = 'piece drag-ghost ' + (pieceEl.className.indexOf('red') >= 0 ? 'red' : 'black');
+    g.style.width = pieceEl.offsetWidth + 'px';
+    g.style.height = pieceEl.offsetHeight + 'px';
+    document.body.appendChild(g);
+    return g;
+  }
+  function dragGhostMove(g, x, y) {
+    g.style.left = (x - g.offsetWidth / 2) + 'px';
+    g.style.top = (y - g.offsetHeight / 2) + 'px';
+  }
+  function cellAtPoint(x, y) {
+    var el = document.elementFromPoint(x, y);
+    var c = el && el.closest ? el.closest('#board .cell') : null;
+    return c && c.dataset && c.dataset.x != null ? c : null;
+  }
+  function dragOverCell(c) {
+    if (_drag && _drag.overCell && _drag.overCell !== c) _drag.overCell.classList.remove('drag-over');
+    if (_drag) { _drag.overCell = c; if (c) c.classList.add('drag-over'); }
+  }
+  function startDrag(fx, fy, pieceEl, ev, view) {
+    _drag = { fx: fx, fy: fy, pieceEl: pieceEl, sx: ev.clientX, sy: ev.clientY, moved: false, overCell: null, view: view };
+    document.addEventListener('pointermove', dragMove);
+    document.addEventListener('pointerup', dragEnd);
+  }
+  function dragMove(ev) {
+    if (!_drag) return;
+    if (!_drag.moved) {
+      if (Math.abs(ev.clientX - _drag.sx) + Math.abs(ev.clientY - _drag.sy) < 7) return;
+      _drag.moved = true;
+      _drag.ghost = dragGhostCreate(_drag.pieceEl);
+      dragGhostMove(_drag.ghost, ev.clientX, ev.clientY);
+      _drag.pieceEl.classList.add('drag-src');
+      _drag.view.onCellClick(_drag.fx, _drag.fy);   // 拖起即选中 → 合法落点高亮亮出
+      suppress();
+    }
+    dragGhostMove(_drag.ghost, ev.clientX, ev.clientY);
+    dragOverCell(cellAtPoint(ev.clientX, ev.clientY));
+  }
+  function dragEnd(ev) {
+    document.removeEventListener('pointermove', dragMove);
+    document.removeEventListener('pointerup', dragEnd);
+    if (!_drag) return;
+    var d = _drag; _drag = null;
+    if (d.ghost) d.ghost.remove();
+    if (d.pieceEl.parentNode) d.pieceEl.classList.remove('drag-src');
+    if (d.overCell) d.overCell.classList.remove('drag-over');
+    suppress();
+    if (!d.moved) return;   // 未拖动 → 交给原生 click (选中语义)
+    var c = cellAtPoint(ev.clientX, ev.clientY);
+    if (c) {
+      var tx = +c.dataset.x, ty = +c.dataset.y;
+      if (tx === d.fx && ty === d.fy) { if (d.view.onCancelSelect) d.view.onCancelSelect(); return; }   // 原地放下 = 取消
+      d.view.onCellClick(tx, ty);   // 合法 → 走子; 非法 → 应用层自行取消/重选
+    } else if (d.view.onCancelSelect) {
+      d.view.onCancelSelect();   // 拖出棋盘 = 取消
+    }
+  }
+  function suppress() { _suppressUntil = Date.now() + 280; }
+
   /* ── 主渲染: 依据快照更新格子 ──
      第23轮 性能: 90 格持久化复用 — 原实现每次 render 全拆全建 90 节点 (键盘光标每移一格 / 每手棋都触发),
      改为创建一次常驻, 之后只差量更新 className 与棋子子元素; DOM 节点身份跨渲染保持,
@@ -71,6 +138,8 @@
     for (var i = 0; i < 90; i++) {
       var c = document.createElement('div');
       c.className = 'cell';
+      c.dataset.x = i % 9;
+      c.dataset.y = (i / 9) | 0;   // 第33轮: 拖拽落点定位用 (池内坐标恒定)
       boardEl.appendChild(c);
       list.push(c);
     }
@@ -81,6 +150,7 @@
     var snap = engine.snapshot();
     var boardEl = view.boardEl;
     var cells = cellPool(boardEl);
+    view._liveEngine = engine;   // 第33轮: 拖拽 pointerdown 时读实时棋局
 
     var selected = view.selected;
     var legalList = (selected && !engine.isOver()) ? engine.legalTargets(selected.x, selected.y) : [];
@@ -156,7 +226,18 @@
         c.classList.toggle('in-check', !engine.isOver() && !!p && p.type === 'king' && p.color === snap.turn && engine.inCheck(snap.turn));
         if (!c._clickBound) {   // 第24轮: 池化后 onclick 只绑一次 (原每帧重建 90 个闭包; 坐标恒定, 重复绑定是纯浪费)
           c._clickBound = true;
-          (function (rx, ry) { c.onclick = function () { view.onCellClick(rx, ry); }; })(x, y);
+          (function (rx, ry) {
+            c.onclick = function () { if (Date.now() < _suppressUntil) return; view.onCellClick(rx, ry); };   // 第33轮: 拖拽松手后抑制合成 click
+            /* 第33轮: pointerdown 拖拽走子入口 (有己方棋子才可拖; 终局/AI 思考中/复盘栈中由 onCellClick 语义兜底) */
+            c.addEventListener('pointerdown', function (ev) {
+              if (ev.button !== 0 && ev.pointerType === 'mouse') return;
+              var engLive = view._liveEngine;
+              if (!engLive || engLive.isOver() || view.aiThinking || _drag) return;
+              var pd = engLive.pieceAt(rx, ry);
+              if (!pd || pd.color !== engLive.turn()) return;
+              startDrag(rx, ry, engLive.pieceAt(rx, ry) && c.querySelector('.piece'), ev, view);
+            });
+          })(x, y);
         }
       }
     }
@@ -256,6 +337,7 @@
     e.title = Tl('log_entry_title', { n: n }) + (cn ? ' · ' + cn : '');   // v1.7: 中文记谱
     e.innerHTML = '<span class="log-dot ' + side + '">●</span><span class="log-num">' + n + '. </span><span class="' + (side === 'red' ? 'log-red' : 'log-black') + '">'
       + pieceChar + '</span> ' + name + (capturedChar ? ' ×' + capturedChar : '')
+      + (cn ? '<span class="log-cn">' + cn + '</span>' : '')   // 第33轮: 行内中文记谱 (原只在悬停 title)
       + (secs ? '<span class="log-secs"> ⏱' + secs + 's</span>' : '');
     log.appendChild(e);
     var entries = log.querySelectorAll('.log-entry');
@@ -416,7 +498,7 @@
         + '<div class="d-head"><span class="d-move">#' + e.n + ' ' + esc(e.name) + '</span>'
         + (e.voterName ? '<span class="d-voter" title="' + esc(e.voterName) + '">✦' + esc(String(e.voterName).split(':').pop()) + '</span>' : '')   // 第32轮: 胜出选民
         + (e.evaluation ? '<span class="d-eval">' + esc(e.evaluation) + '</span>' : '')
-        + (hasReason ? '<button class="d-toggle" data-ply="' + e.n + '">💭</button>' : '')
+        + (hasReason ? '<button class="d-toggle" data-ply="' + e.n + '" aria-label="reasoning" aria-expanded="false">💭</button>' : '')
         + '</div>'
         + (e.plan ? '<div class="d-plan">📌 ' + esc(e.plan) + '</div>' : '')
         + (e.summary ? '<div class="d-sum">' + esc(e.summary === '兑底·安全着法' ? T('fb_summary') : e.summary) + '</div>' : '')   // 第27轮 i18n: 兑底摘要是数据标记 (app.js:295 按 zh 串比对), 渲染层按标记本地化, 数据不动
@@ -439,6 +521,7 @@
         var open = r.style.display !== 'none';
         r.style.display = open ? 'none' : 'block';
         b.classList.toggle('on', !open);
+        b.setAttribute('aria-expanded', open ? 'false' : 'true');   // 第33轮: 展开态读屏可感知
       }
     });
   });

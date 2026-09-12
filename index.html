@@ -41,6 +41,10 @@ h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0
 .piece::before{content:"";position:absolute;top:2px;left:2px;right:2px;bottom:2px;border-radius:50%;border:1.5px solid rgba(122,92,30,.3);pointer-events:none}
 .piece.red{color:#c0392b;border-color:#8b4513;background:radial-gradient(circle at 35% 35%,#fff5ee,#f0c898)}
 .piece.black{color:#1a1a1a;border-color:#2c1810;background:radial-gradient(circle at 35% 35%,#fafafa,#ddd0a8)}
+.piece{touch-action:none}   /* 第33轮: 触屏拖棋子不触发滚屏 */
+.piece.drag-src{opacity:.32}
+.drag-ghost{position:fixed;z-index:999;pointer-events:none;transform:scale(1.08);filter:drop-shadow(0 8px 16px rgba(0,0,0,.55))}
+.cell.drag-over{box-shadow:inset 0 0 0 3px rgba(0,207,255,.7)}
 .piece:hover{transform:scale(1.08);box-shadow:0 3px 10px rgba(0,0,0,.5),inset 0 1px 3px rgba(255,255,255,.6)}
 @keyframes piece-place{0%{transform:scale(.9)}50%{transform:scale(1.12)}70%{transform:scale(.98)}100%{transform:scale(1)}}
 .piece.just-placed{animation:piece-place .25s cubic-bezier(.22,1,.36,1)}
@@ -396,6 +400,16 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 .piece.slide-in{animation:piece-slide var(--slide-dur,.3s) cubic-bezier(.3,.86,.32,1) backwards;z-index:6}
 .cell.sliding-cell{z-index:5}
 .piece.ghost-out{animation-delay:.07s}
+/* ═══ 第33轮: 面板宽度分隔条 (拖 170-300px, localStorage 记忆; 窄屏横条布局忽略) ═══ */
+#panel-splitter-r{width:7px;cursor:col-resize;align-self:stretch;min-height:200px;border-radius:4px;background:linear-gradient(180deg,transparent,rgba(255,224,138,.22),transparent);transition:background .2s}
+#panel-splitter-r:hover{background:linear-gradient(180deg,transparent,rgba(255,224,138,.55),transparent)}
+.think-panel{width:var(--panel-w,200px)}
+@media(max-width:1020px){.think-panel{width:100%}}
+/* 第33轮: 最新决策卡入场 (仅新卡动画, rebuild 旧卡不动) */
+@keyframes dcardIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.d-new{animation:dcardIn .18s ease-out}
+/* 第33轮: 走法行内中文记谱 */
+.log-cn{color:#8a7550;margin-left:4px;font-family:"KaiTi","STKaiti",serif}
 </style>
 </head>
 <body>
@@ -476,6 +490,8 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                     </div>
                     <div class="set-row llm-only"><label data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
                         <select id="ai-red-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
+                        <button type="button" class="btn" id="ai-red-testconn" data-i18n="test_conn" style="margin-top:5px;width:100%;font-size:11px">⚡ 试连</button>
+                        <span id="ai-red-testres" style="font-size:11px"></span>
                     </div>
                     <div class="set-row llm-only"><label data-i18n="model">模型名称</label>
                         <input type="text" id="ai-red-model" list="model-datalist" data-i18n="model_placeholder" placeholder="选或填模型名">
@@ -492,6 +508,8 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                     </div>
                     <div class="set-row llm-only"><label data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
                         <select id="ai-black-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
+                        <button type="button" class="btn" id="ai-black-testconn" data-i18n="test_conn" style="margin-top:5px;width:100%;font-size:11px">⚡ 试连</button>
+                        <span id="ai-black-testres" style="font-size:11px"></span>
                     </div>
                     <div class="set-row llm-only"><label data-i18n="model">模型名称</label>
                         <input type="text" id="ai-black-model" list="model-datalist" data-i18n="model_placeholder" placeholder="选或填模型名">
@@ -518,11 +536,13 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
             <div class="eo-sub" id="eo-sub"></div>
 <div class="eo-stats" id="eo-stats"></div>
             <button class="btn eo-btn" onclick="XQApp.restart()" data-i18n="btn_again">🔁 再来一局</button>
+            <button class="btn eo-btn" id="eo-export" data-i18n="eo_export_btn" style="margin-left:8px">💾 导出本局</button>
         </div>
     </div>
   </div><!-- /board-container -->
   </div><!-- /board-wrap -->
 
+  <div id="panel-splitter-r" aria-hidden="true"></div>
   <div id="think-black" class="think-panel think-black idle">
       <div class="think-head"><span class="think-dot">⚫</span><span id="think-black-name" data-i18n="side_black">黑方</span><span class="think-stat" id="think-black-stat"></span></div>
       <div class="think-info" id="think-black-info"></div>

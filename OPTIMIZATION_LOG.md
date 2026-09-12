@@ -1133,3 +1133,52 @@
 - 边界: llm_agent.js 未动 (合并流在 committee 层完成, 流式协议零改动); server.js 未动; 零新依赖; systemPrompt 未动
 - 触点: ai/committee_agent.js / ui/app.js (onProgress 渲染 + 模型卡) / ui/renderer.js (d-voter/d-cand-win) / index.html (CSS) / test/_committee_agent.js (20→28 断言) / README×2 / ARCHITECTURE / CHANGELOG
 - 教训: 套件内共享全局状态 (callN/引擎) 跨用例漂移 — 每用例自带独立引擎 + 显式归零; SSE 桩的行分隔必须是真实换行
+
+## 2026-09-12 ~12:30 第33轮 (v1.0.daily, zcode — 指令「针对GUI做30个优化」)
+
+基线 15/15 全绿。30 项全部 GUI 侧:
+
+【拖拽走子系统 (1-8) — 纯输入层, 语义完全复用 onCellClick】
+1. **拖拽状态机**: pointerdown 选取 (己方棋子) → 移动阈值 7px 进入拖拽 → 落点松手
+2. **幽灵棋子**: 克隆跟随指针 (scale 1.08 + 投影), 原子淡化 0.32
+3. **拖起即选中**: 复用 onCellClick(起点) → 合法落点高亮自动亮出, 零新逻辑
+4. **落点定位**: cellAtPoint (elementFromPoint + closest) + cellPool 一次性写入坐标 dataset
+5. **取消语义**: 原地放下/拖出棋盘 = onCancelSelect (app 新钩子: 清选中+refresh)
+6. **合成 click 抑制**: 松手后 280ms 抑制窗 — 防拖拽走子后浏览器补发 click 造成双走子
+7. **触屏统一**: pointer events + .piece touch-action:none (拖棋子不滚屏, 空格仍可滚)
+8. **守卫**: 终局/AI 思考中/已有拖拽时不进入 (aiBusy 下拖拽被正确拒绝 — 实测中意外验证)
+
+【面板与布局 (9-12)】
+9. **面板宽度分隔条**: board 与黑面板间 #panel-splitter-r, 拖拽同调两侧思考面板宽 (170-300px clamp)
+10. 宽度持久化: localStorage xq_panel_w, 初始化恢复
+11. .think-panel 宽改 var(--panel-w,200px) + 窄屏横条布局 100% 回退
+12. 分隔条视觉: 暗金渐变 hover 提亮 + aria-hidden (I8 守护抓出装饰 title 漏 i18n → 去除, 守护实证)
+
+【设置试连 (13-15)】
+13. 服务商行新增 ⚡ 试连按钮 ×2 (1-token 探活: max_tokens=1 + ping)
+14. 结果行: ✓ 延迟ms 绿 / ✗ HTTP 状态码+耗时 红 / 本地服务未启动
+15. 实测错误路径: 指向不存在服务商 → ✗ HTTP 400 (24ms) 红显 (正路径同管线, 零 token 消耗验证)
+
+【终局/走法/快捷键 (16-19)】
+16. 终局卡 💾 导出本局按钮 (downloadFile, 与存棋谱同格式)
+17. **走法行内中文记谱**: log-cn span (KaiTi 暗金, 原只在悬停 title)
+18. **U 键悔棋** (与人机撤对逻辑一致) + 横幅反馈
+19. 悔棋/存棋谱按钮动态禁用 (syncArchive 扩展: 无手可悔/无谱可存时禁用)
+
+【a11y/微交互 (20-22)】
+20. 决策卡 💭 按钮 aria-label + aria-expanded (展开态读屏可感知)
+21. **最新决策卡入场动画**: d-new 类仅标记本轮新卡 (rebuild 旧卡不重播; reduced-motion 全局豁免)
+22. 会诊 reasoning 失败选民显示改为 '模型 失败' (原 ✗ 弱记号)
+
+【测试/文档/验证 (23-30)】
+23. IAB 实机: 合成 PointerEvent 驱动拖拽全链路 (幽灵创建/走子 ply0→1/行内记谱 炮二平五); CUA 像素拖拽不达 pointerdown 为工具注入差异 (合成事件即浏览器标准事件形态)
+24. IAB 实机: 分隔条拖拽 200→225px + localStorage 持久化 ✓
+25. IAB 实机: U 键 ply1→0 + 横幅 ✓; 试连错误路径 ✓
+26. 意外发现注记: 验证时残留设置自启了真实 LLM 对局 (烧少量 key) — 立即清设置止血; 非本轮引入 (历轮浏览器验证遗留习惯), 此后验证前必清 xq_v1_settings
+27. i18n +5 键 (test_conn/test_run/test_ok/test_no_relay/eo_export_btn; 263 键 parity 过) + btn_undo 重复键去重
+28. 回归: npm run check ALL PASS + npm test 15/15 全绿
+29. README 双语新增「交互与面板」特性段 (拖拽/分隔条/试连/导出/U 键)
+30. LOG/CHANGELOG 记录
+- 边界: llm_agent.js 未动; server.js 未动; 零新依赖; systemPrompt 未动
+- 触点: ui/renderer.js (拖拽状态机+绑定+行内记谱+aria) / ui/app.js (onCancelSelect/分隔条/试连/导出/U 键/syncArchive/d-new) / index.html (按钮+CSS) / ui/i18n.js / README×2 / CHANGELOG
+- 教训: 浏览器验证前必须清 localStorage 对局设置 (历轮验证残留会在新会话自启真实 LLM 对局消耗 key)
