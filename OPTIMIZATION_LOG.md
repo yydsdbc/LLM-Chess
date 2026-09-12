@@ -1105,3 +1105,31 @@
 - ai/llm_agent.js 仅重构 evalMove2 位置 (行为不变, 提示词/dump 无涉); server.js 未动; 零新依赖
 - 设计取舍: 辩论制 (主模型出招+同侪点评改着) 需要 llm_agent 注入外部上下文 — 会破坏前缀缓存不变式, 本轮不做 (列下轮候选, 可在 committee 层用一次性实例绕过但丢缓存)
 - meta.reasoning/summary 中会诊标记为数据性中文 (与兑底标记同口径, EN 用户可见中文标记 — 记录数据语言先例)
+
+## 2026-09-12 ~11:20 第32轮 (v1.0.daily, zcode — 指令「优化 GUI 显示多LLM的思考」)
+
+聚焦多 LLM 思考的 GUI 呈现。原状: 会诊期间面板只显示首选民一家的思考流, 其余选民不可见; 进度只有数字。20 项:
+
+1. **会诊并行流式思考合并**: 每选民流写入独立缓冲, 合并为【provider:model】分段 (空段显示 …) 经 onThinking 推面板 — 全体选民思考同屏直播, 不再只有首选民一家
+2. rotate 模式单路直通保持 (单选民无需合并)
+3. 流缓冲每次 next() 重置 (跨手不串流)
+4. onProgress 增 voters 全体实时状态数组 (pending/ok/fail)
+5. onProgress 增实时票型 tally (已应答选民落点计票)
+6. **进度卡 GUI 重构**: ✓绿(应答)/✗红(失败)/⏳灰(等待) 选民标记行 + ▪落点×N 实时票型行 (模型名短显去 provider 前缀)
+7. usage perVoter 逐选民 token 分解
+8. **模型卡逐选民 token 行**: 多选民时显示 'glm-a: 1.2ktok · glm-b: 0.8ktok' (单模型不显示)
+9. council 胜出选民 meta.voterName
+10. rotate 当前选民 meta.voterName
+11. 决策卡 ✦ 胜出选民标 (d-voter, 悬停看全名, 模型名短显)
+12. 会诊胜出候选金色样式 (d-cand-win: 边框与分数转金)
+13. C14 合并流式测试 — SSE 流式桩四连修: mkSSE 重写 (JSON.stringify 双重编码替代手工引号转义, 原替换串 3 字符致帧 JSON 非法) / SSE 分隔必须真实换行 (字面反斜杠n 致整包粘一行) / callN 归零 / C14 独立引擎隔离 (共享 eng 被前面用例走到中盘)
+14. C15 进度 payload voters/tally 断言
+15. C16 perVoter 断言
+16. C17 voterName 断言 (会诊胜出 + 轮换回绕两形态)
+17. **votes 收集时序修正**: 原在 Promise.all 后统一收集 → 进度回调时 tally 恒空 (测试抓出); 移入 done() 即时收集
+18. 回归: committee 套件 20→28 断言全绿 + 全量 15/15
+19. IAB 实机: SSE 分片流 (每帧 450ms) → 红面板双选民思考同屏直播 (【tokenrhythm:glm-a】…/【…glm-b】…, 轮询捕获面板文本演变), 落子卡片 [会诊 全票 2] + 胜出标记链路
+20. 文档: README 双语多 LLM 段补 思考分区直播/选民标记/票型; ARCHITECTURE committee 行补 (并补齐第31轮文档脚本中断漏改的 ARCHITECTURE 行)
+- 边界: llm_agent.js 未动 (合并流在 committee 层完成, 流式协议零改动); server.js 未动; 零新依赖; systemPrompt 未动
+- 触点: ai/committee_agent.js / ui/app.js (onProgress 渲染 + 模型卡) / ui/renderer.js (d-voter/d-cand-win) / index.html (CSS) / test/_committee_agent.js (20→28 断言) / README×2 / ARCHITECTURE / CHANGELOG
+- 教训: 套件内共享全局状态 (callN/引擎) 跨用例漂移 — 每用例自带独立引擎 + 显式归零; SSE 桩的行分隔必须是真实换行

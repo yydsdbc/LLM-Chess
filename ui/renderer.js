@@ -408,11 +408,13 @@
   function decisionCards(entries, total) {
     var cards = entries.map(function (e) {
       var cands = (e.candidates || []).map(function (c) {
-        return '<span class="d-cand">' + esc(c.move) + (c.score ? ' <b>' + esc(c.score) + '</b>' : '') + '</span>';
+        var isWin = String(c.move || '').indexOf('*') >= 0;   // 第32轮: 会诊胜出候选金色
+        return '<span class="d-cand' + (isWin ? ' d-cand-win' : '') + '">' + esc(c.move) + (c.score ? ' <b>' + esc(c.score) + '</b>' : '') + '</span>';
       }).join('');
       var hasReason = !!e.reasoning;
       return '<div class="dcard">'
         + '<div class="d-head"><span class="d-move">#' + e.n + ' ' + esc(e.name) + '</span>'
+        + (e.voterName ? '<span class="d-voter" title="' + esc(e.voterName) + '">✦' + esc(String(e.voterName).split(':').pop()) + '</span>' : '')   // 第32轮: 胜出选民
         + (e.evaluation ? '<span class="d-eval">' + esc(e.evaluation) + '</span>' : '')
         + (hasReason ? '<button class="d-toggle" data-ply="' + e.n + '">💭</button>' : '')
         + '</div>'

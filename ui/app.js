@@ -174,8 +174,17 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var model = (h && h.model) || (currentRecord && currentRecord[side] && currentRecord[side].model) || '';
     var prov = (h && h.provider) || (currentRecord && currentRecord[side] && currentRecord[side].provider) || '';
     if (!model) return '';
+    var perVoter = '';
+    if (h && h.agent && h.agent.usage) {
+      var uv = h.agent.usage();
+      if (uv && uv.perVoter && uv.perVoter.length > 1) {   // 第32轮: 会诊逐选民 token 分解
+        perVoter = '<div class="im-stat">' + uv.perVoter.map(function (pv) {
+          return esc2(pv.name) + ': ' + (pv.total > 999 ? (pv.total / 1000).toFixed(1) + 'k' : pv.total) + 'tok';
+        }).join(' · ') + '</div>';
+      }
+    }
     return '<div class="im-model">' + esc2((prov ? prov + ' · ' : '') + model) + '</div>'
-      + '<div class="im-stat">' + (XQ.I18N ? XQ.I18N.tArgs('think_total', { n: st.total || 0 }) : '总思考 ' + (st.total || 0) + 's') + tok + '</div>';   // 第27轮 i18n: 统计行原硬编码中文
+      + '<div class="im-stat">' + (XQ.I18N ? XQ.I18N.tArgs('think_total', { n: st.total || 0 }) : '总思考 ' + (st.total || 0) + 's') + tok + '</div>' + perVoter;   // 第27轮 i18n: 统计行原硬编码中文
   }
   function infoHTML(side, holder, evaluation) {
     var h = holder || agents[side];

@@ -22,19 +22,33 @@
         agent: XQ.LLMAgent.create({
           side: side, provider: spec.provider, model: spec.model,
           promptLevel: opts.promptLevel, thinking: opts.thinking,
-          onThinking: idx === 0 ? opts.onThinking : null,   // 只转发首选民的流式思考 (多路混流会互相踩)
+          /* 第32轮: 每选民流式思考写入各自缓冲, 合并带选民标签后推面板 (council 多路并行可见; rotate 单路直通) */
+          onThinking: mode === 'council'
+            ? function (s2, text) {
+                streams[idx] = text || '';
+                if (opts.onThinking) {
+                  opts.onThinking(side, agents.map(function (a2, j2) {
+                    return '【' + a2.name + '】' + (streams[j2] != null && streams[j2] !== '' ? streams[j2] : '…');
+                  }).join('\n\n'));
+                }
+              }
+            : (idx === 0 ? opts.onThinking : null),
           onRetry: opts.onRetry, signal: opts.signal
         })
       };
     });
     var rotation = 0;
+    var streams = [];     // 第32轮: 会诊并行流式思考缓冲 (每次 next() 重置)
     var errStreak = {};   // 第31轮: 连续失败计数 (rotate 模式连续 2 失败的选民本轮跳过, 成功即清零)
 
     function usage() {
-      var u = { total: 0, prompt: 0, cacheHit: 0, blocked: 0, attempts: 0 };
+      var u = { total: 0, prompt: 0, cacheHit: 0, blocked: 0, attempts: 0, perVoter: [] };
       agents.forEach(function (a) {
         var x = a.agent.usage && a.agent.usage();
-        if (x) { u.total += x.total || 0; u.prompt += x.prompt || 0; u.cacheHit += x.cacheHit || 0; u.blocked += x.blocked || 0; u.attempts += x.attempts || 0; }
+        var tot = x ? (x.total || 0) : 0;
+        u.total += tot; u.prompt += x ? (x.prompt || 0) : 0; u.cacheHit += x ? (x.cacheHit || 0) : 0;
+        u.blocked += x ? (x.blocked || 0) : 0; u.attempts += x ? (x.attempts || 0) : 0;
+        u.perVoter.push({ name: a.name.split(':').pop(), total: tot });   // 第32轮: 逐选民 token 分解 (模型卡展示)
       });
       return u;
     }
@@ -42,6 +56,7 @@
     function confOf(mv) { return (mv.meta && typeof mv.meta.confidence === 'number') ? mv.meta.confidence : 0.5; }
 
     function next(engine, history) {
+      streams = [];   // 第32轮: 每手重置流缓冲
       if (mode === 'rotate') {
         var pick = null;
         for (var tries = 0; tries < agents.length; tries++) {
@@ -53,6 +68,7 @@
         return pick.agent.next(engine, history).then(function (mv) {
           errStreak[pick.name] = 0;
           mv.meta = mv.meta || {};
+          mv.meta.voterName = pick.name;   // 第32轮: 轮换选民 (决策卡 ✦ 标)
           mv.meta.reasoning = '[轮换 ' + pick.name + '] ' + (mv.meta.reasoning || '');
           return mv;
         }).catch(function (e) {
@@ -65,6 +81,12 @@
       var answered = 0;
       var votes = [];   // 第31轮: 结构化投票明细 [{model, from, to, conf, ms, ok|fail}]
       var t0 = Date.now();
+      var vstate = agents.map(function () { return 'pending'; });   // 第32轮: 每选民实时状态
+      function liveTally() {   // 第32轮: 已应答选民的实时票型
+        var t = {};
+        votes.forEach(function (v) { if (v.ok) t[v.to] = (t[v.to] || 0) + 1; });
+        return t;
+      }
       var calls = agents.map(function (a, idx) {
         return new Promise(function (res) {
           var settled = false;
@@ -72,7 +94,19 @@
             if (settled) return;
             settled = true;
             answered++;
-            if (opts.onProgress) { try { opts.onProgress({ answered: answered, total: agents.length, voter: a.name, ok: !!v.mv }); } catch (eP) {} }
+            vstate[idx] = v.mv ? 'ok' : 'fail';
+            votes.push(v.mv   // 第32轮修正: 即时收集 (原在 Promise.all 后统一收, 进度回调时 tally 恒空)
+              ? { model: a.name, from: XQ.Move.sqName(v.mv.from), to: XQ.Move.sqName(v.mv.to), conf: confOf(v.mv), ms: Date.now() - t0, ok: true }
+              : { model: a.name, fail: String((v.err && v.err.message) || v.err || 'failed').slice(0, 60), ok: false });
+            if (opts.onProgress) {
+              try {
+                opts.onProgress({
+                  answered: answered, total: agents.length, voter: a.name, ok: !!v.mv,
+                  voters: agents.map(function (a2, j2) { return { name: a2.name, state: vstate[j2] }; }),
+                  tally: liveTally()
+                });
+              } catch (eP) {}
+            }
             res(v);
           };
           setTimeout(function () {
@@ -86,11 +120,6 @@
       });
       return Promise.all(calls).then(function (rs) {
         var good = rs.filter(function (r) { return r.mv; });
-        rs.forEach(function (r) {   // 第31轮: 结构化投票明细 (含失败选民)
-          votes.push(r.mv
-            ? { model: r.name, from: XQ.Move.sqName(r.mv.from), to: XQ.Move.sqName(r.mv.to), conf: confOf(r.mv), ms: Date.now() - t0, ok: true }
-            : { model: r.name, fail: String((r.err && r.err.message) || r.err || 'failed').slice(0, 60), ok: false });
-        });
         if (!good.length) throw (rs[0] && rs[0].err) || new Error('committee: all voters failed');
         var tally = {};
         good.forEach(function (r) {
@@ -137,6 +166,7 @@
         }
         var mv = winMv;
         mv.meta = mv.meta || {};
+        mv.meta.voterName = winName;   // 第32轮: 胜出选民 (决策卡 ✦ 标)
         mv.meta.votes = votes;   // 第31轮: 结构化投票明细 (回放/排障可读)
         mv.meta.candidates = good.map(function (r) {   // 复用决策卡候选位: 全体选民一览 (*=胜出)
           return {

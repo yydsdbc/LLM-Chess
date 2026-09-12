@@ -27,7 +27,7 @@ flowchart LR
 
 - **core/** — the engine. Standalone-usable (perft-verified, alpha-beta friendly): `engine.js` (board state, make/unmake, repetition + perpetual-check + natural-draw clocks), `rules.js` / `generator.js` / `move.js` / `board.js` / `piece.js`, `judge.js` (move semantics: mate / stalemate / check tagging).
 - **evaluation/** — static evaluation + knowledge layer. `position.js` (material, mobility, positional terms) and `xiangqi_knowledge.js` (domain heuristics). Feeds both the safety valve and the spectating evaluation bar.
-- **ai/** — agents. `llm_agent.js` builds prompts, calls the relay, parses/retries/falls back; `random_agent.js` for zero-config play; `committee_agent.js` (round 29) fields several LLMs on one side — rotation or parallel council voting.
+- **ai/** — agents. `llm_agent.js` builds prompts, calls the relay, parses/retries/falls back; `random_agent.js` for zero-config play; `committee_agent.js` (round 29) fields several LLMs on one side — rotation or parallel council voting, per-voter states/tally in progress, merged per-voter reasoning streams.
 - **server.js** — static file server + provider relay (OpenAI protocol, plus Anthropic protocol conversion). API keys never leave the server; default bind `127.0.0.1`.
 - **ui/** + **replay/** — spectating HUD, decision cards, i18n (zh/en), full replay system that re-drives a saved record without calling the LLM.
 - **benchmark/** + **test/** — headless matches, ELO/record tooling, and the test suites.

@@ -18,9 +18,35 @@ function ok(cond, name) {
 let callN = 0;
 let scripted = [{ f: 'h3', t: 'e3', c: 0.5 }];
 let failAll = false;
+let sseMode = false;            // 第32轮: SSE 流式桩 (按调用序给各选民不同 reasoning)
+let sseSets = [];
+let thinkTexts = [];            // onThinking 捕获
+let progPayloads = [];          // onProgress 捕获
+const TE = new TextEncoder();
+function mkSSE(reason, moveObj) {   // 单选民 SSE 帧: reasoning → content(内嵌 JSON 字符串) → DONE; moveObj 为普通对象
+  var nl = String.fromCharCode(10);
+  var f1 = JSON.stringify({ choices: [{ delta: { reasoning_content: reason } }] });
+  var f2 = JSON.stringify({ choices: [{ delta: { content: JSON.stringify(moveObj) } }] });
+  var fU = JSON.stringify({ choices: [], usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 } });
+  return [
+    'data: ' + f1 + nl + nl,
+    'data: ' + f2 + nl + nl,
+    'data: ' + fU + nl + nl,
+    'data: [DONE]' + nl + nl
+  ];
+}
 globalThis.fetch = function (url, opts) {
   if (failAll) return Promise.reject(new Error('stub down'));
   callN++;
+  if (sseMode) {
+    const frames = sseSets[Math.min(callN - 1, sseSets.length - 1)];
+    let i = 0;
+    return Promise.resolve({
+      ok: true, status: 200,
+      headers: { get: function () { return 'text/event-stream'; } },
+      body: { getReader: function () { return { read: function () { return Promise.resolve(i < frames.length ? { done: false, value: TE.encode(frames[i++]) } : { done: true }); } }; } }
+    });
+  }
   const mv = scripted[Math.min(callN - 1, scripted.length - 1)];
   const content = JSON.stringify({ from: mv.f, to: mv.t, summary: 'stub' + callN, confidence: mv.c });
   return Promise.resolve({
@@ -134,6 +160,51 @@ function resetStub(script) { callN = 0; scripted = script; }
   const mvD = await cD.next(eng);
   ok(Array.isArray(mvD.meta.votes) && mvD.meta.votes.length === 2 && mvD.meta.votes[0].model === 'stub:d1' && mvD.meta.votes[0].ok === true, 'C13 meta.votes 结构化明细');
   ok(mvD.meta.votes[0].to === 'e3' && typeof mvD.meta.votes[0].conf === 'number', 'C13 votes 含落点/信心');
+
+  // C14 合并流式思考: 两选民不同 reasoning, onThinking 最后一次合并含双方标签与片段   第32轮
+  {
+    sseMode = true;
+    callN = 0;   // 第32轮: 共享调用计数归零 (否则两选民都取 v2 帧)
+    const eng14 = XQ.Engine.create();   // 第32轮: 独立新引擎 (共享 eng 已走到中盘, h3-e3 不再合法 → 选民全灭)
+    sseSets = [mkSSE('红车占肋控制中路', { from: 'h3', to: 'e3', summary: 's1', confidence: 0.7 }), mkSSE('上马保住中兵', { from: 'h3', to: 'e3', summary: 's2', confidence: 0.6 })];
+    thinkTexts = [];
+    const cS = XQ.CommitteeAgent.create({
+      side: 'red', provider: 'stub', models: ['s1', 's2'], mode: 'council',
+      onThinking: function (side2, text) { thinkTexts.push(text); }
+    });
+    await cS.next(eng14);
+    const last = thinkTexts[thinkTexts.length - 1] || '';
+    ok(last.indexOf('【stub:s1】') >= 0 && last.indexOf('【stub:s2】') >= 0, 'C14 合并流含双选民标签');
+    ok(last.indexOf('红车占肋控制中路') >= 0 && last.indexOf('上马保住中兵') >= 0, 'C14 合并流含双选民思考片段');
+    sseMode = false;
+  }
+
+  // C15 进度 payload: voters 状态数组 + 实时票型   第32轮
+  {
+    resetStub([{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.5 }]);
+    progPayloads = [];
+    const cP2 = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['w1', 'w2', 'w3'], mode: 'council', onProgress: function (p) { progPayloads.push(p); } });
+    await cP2.next(eng);
+    const lastP = progPayloads[progPayloads.length - 1];
+    ok(lastP && lastP.voters && lastP.voters.length === 3 && lastP.voters.every(function (v) { return v.state === 'ok'; }), 'C15 进度 payload 含全体选民 ok 态');
+    ok(lastP && lastP.tally && lastP.tally.e3 === 2 && lastP.tally.g3 === 1, 'C15 实时票型 e3×2/g3×1');
+  }
+
+  // C16 usage perVoter: 逐选民 token 分解   第32轮
+  resetStub([{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.5 }]);
+  const cV2 = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['t1', 't2'], mode: 'council' });
+  await cV2.next(eng);
+  const uv = cV2.usage();
+  ok(uv.perVoter && uv.perVoter.length === 2 && uv.perVoter[0].name === 't1' && uv.perVoter[1].name === 't2', 'C16 perVoter 逐选民分解');
+
+  // C17 meta.voterName: 会诊胜出 / 轮换当前   第32轮
+  resetStub([{ f: 'h3', t: 'e3', c: 0.9 }, { f: 'h3', t: 'g3', c: 0.5 }]);
+  const cN = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['n1', 'n2'], mode: 'council' });
+  const mvN = await cN.next(eng);
+  ok(mvN.meta.voterName === 'stub:n1', 'C17 会诊 meta.voterName = 胜出选民');
+  resetStub([{ f: 'h3', t: 'e3', c: 0.5 }]);
+  const mvN2 = await r2.next(eng);   // r2 = C3 的轮换委员会 (m1/m2, 已走到 m2)
+  ok(mvN2.meta.voterName === 'stub:m1', 'C17 轮换 meta.voterName = 当前选民 (回绕)');
 
   console.log(failed ? '_committee_agent: ' + failed + ' FAIL' : '_committee_agent: ALL PASS');
   process.exit(failed ? 1 : 0);
