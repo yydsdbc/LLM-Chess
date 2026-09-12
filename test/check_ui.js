@@ -59,9 +59,9 @@ console.log('localStorage keys:', lsLiteral.size, 'literal | 非 xq_ 前缀:', b
 if (missingSrc.length || badLs.length) process.exit(1);
 
 // 7) 发布文件存在性守护 (v1.0.daily 第14轮: 四件套扩容 4→6, +CHANGELOG/SUPPORT)
-const pubFiles = ['.gitignore', 'LICENSE', 'package.json', 'config/keys.example.json', 'CHANGELOG.md', '.github/SUPPORT.md'];
+const pubFiles = ['.gitignore', 'LICENSE', 'package.json', 'config/keys.example.json', 'CHANGELOG.md', '.github/SUPPORT.md', 'manifest.json', 'sw.js'];
 const missingPub = pubFiles.filter(f => !fs.existsSync(__dirname + '/../' + f));
-console.log('发布文件:', missingPub.length ? '缺失 ' + missingPub.join(', ') : '6/6 (gitignore/LICENSE/package.json/keys.example/CHANGELOG/SUPPORT)');
+console.log('发布文件:', missingPub.length ? '缺失 ' + missingPub.join(', ') : '8/8 (gitignore/LICENSE/package.json/keys.example/CHANGELOG/SUPPORT/manifest/sw)');
 if (missingPub.length) process.exit(1);
 
 // 8) v1.0.daily README 双语版本一致性 + package.json 版本对齐 (防主/中文档版本漂移)
@@ -72,6 +72,18 @@ const vEn = (tEn.match(/v(\d+\.\d+)/) || [])[1];
 const vZh = (tZh.match(/v(\d+\.\d+)/) || [])[1];
 console.log('README version:', 'EN=' + vEn, 'ZH=' + vZh, 'pkg=' + pkg.version);
 if (!vEn || !vZh || vEn !== vZh || pkg.version.indexOf(vEn) !== 0) process.exit(1);
+
+// 13) 第28轮 套件挂链守护: 单元/守护套件必须都出现在 run_all.js 的 SUITES 里 (防死测试; 排除需服务器/浏览器的冒烟与调试脚本)
+const runAllSrc = fs.readFileSync(__dirname + '/../test/run_all.js', 'utf8');
+const mustWire = ['run_tests.js', 'test_evaluation.js', 'test_llm_convo.js', 'replay_smoke.js', '_clean_reason_check.js',
+  'cn_notation_check.js', 'i18n_check.js', 'link_check.js', 'check_ui.js', '_replay_edge.js', '_logic_layer.js',
+  '_server_http.js', '_prompt_level_smoke.js', 'replay_risk_check.js'];
+const unwired = mustWire.filter(function (f) { return runAllSrc.indexOf("'" + f + "'") < 0; });
+const phantom = [];
+runAllSrc.split("'").forEach(function (seg, qi) {
+  if (qi % 2 === 1 && seg.length > 3 && seg.slice(-3) === '.js' && seg !== 'run_all.js' && !fs.existsSync(__dirname + '/' + seg)) phantom.push(seg);
+});
+if (unwired.length || phantom.length) process.exit(1);
 
 // 9) v1.0.daily 第22轮 HTML 净化守护: PowerShell 转义残留 (`n/`r/`t 等) 与双重转义实体
 //    根因: 第16轮 PowerShell 编辑把换行转义原样写进 HTML (`652a770`), 静态裸文本无 data-i18n 标记,

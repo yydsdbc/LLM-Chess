@@ -6,6 +6,7 @@
   function create(opts) {
     opts = opts || {};
     var side = opts.side || 'red';
+    var rng = typeof opts.rng === 'function' ? opts.rng : Math.random;   // 第28轮: 可注入随机源 (测试/对局复现)
     var lastInfo = null;
     return {
       name: opts.name || 'RandomAI',
@@ -15,7 +16,7 @@
       next: function (engine) {
         var moves = engine.generateLegalMoves(side);
         if (!moves.length) throw new Error('no legal moves for ' + side);
-        var m = moves[(Math.random() * moves.length) | 0];
+        var m = moves[(rng() * moves.length) | 0];
         lastInfo = { from: { x: m.from.x, y: m.from.y }, to: { x: m.to.x, y: m.to.y } };
         return lastInfo;
       },

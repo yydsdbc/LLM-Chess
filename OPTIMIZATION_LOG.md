@@ -886,3 +886,83 @@
   (+I9) / test/check_ui.js (+第12节) / test/_server_http.js (+4) / README.md / README.zh-CN.md /
   docs/ARCHITECTURE.md / CHANGELOG
 - 门禁: npm run check ALL PASS + npm test 并行 12/12 全绿
+
+## 2026-09-12 ~05:30 第28轮 (v1.0.daily, zcode — 指令「测试项目, 并作出至少50个优化」)
+
+基线: npm test 12/12 → 本轮后 14 套件全绿。第26/27轮已占 i18n/a11y/PWA/服务端测试主矿区,
+本轮转攻 Elo 战绩 / 回放功能 / 录制校验 / 兜底质量 / 性能微优 / 工具链 / 测试基建。50 项如下:
+
+【Elo 战绩接入实时对局 (1-6)】
+1. afterMove 终局分支接入 XQ.Elo.applyResult — 双方均非人类席位才记账 (人类执子不污染模型胜率表)
+2. elo.js 新增 previewDelta 纯函数 (记账前预览 ±delta, 不落表)
+3. 终局卡新增 Elo 行 (🔴 +X / ⚫ -Y, i18n eo_elo)
+4. _logic_layer +L6 Elo 数学 6 断言 (期望 0.5 / 零和 / 与 update 同口径 / 同分和 0 / 高分掉分)
+5. IAB 实机验证: 页面内直驱 applyResult → 1500→1516/1484 (K=32 零和) + resetAll 清理
+6. README 双语新增「Elo 天梯」特性段
+
+【导入校验与错误处理 (7-10)】
+7. record.importFromFile 逐手坐标形状校验 (from/to 合法 a1-i10, 报错指明第 N 手 — 原只查数组, 坏手到回放才炸)
+8. 导入 10MB 上限防呆
+9. 主界面最后一个 alert() 下岗 → warnBanner + import_fail_banner 键
+10. 载入成功提示 import_ok (原静默)
+
+【回放增强 (11-19)】
+11. rpExportPGN 补标准头 Site/Round/Termination
+12. rpExportPGN 80 列折行 (PGN 惯例, 长注释不再撑超长单行)
+13. rpExportPGN 书签 {%bm N} 注释导出 (回放端可重建)
+14. rpExportPGN 富文件名 (红vs黑_日期, 与 Record.downloadFile 同款 safe 规则)
+15. 时间图书签金色竖线标记 (与走法列表 🔖 呼应)
+16. rpOnState ≥10x 时 时长/评值图与头部节流 (每 5 手或终态) — 长局 20x 主线程压力大降
+17. rpJump 越界钳制后回写输入框 (原先静默)
+18. 评值/时长图表滚轮步进 (复用棋盘节流器)
+19. picker 选项 手数 i18n (复用 rp_moves_unit) + title 悬停全信息
+
+【a11y 收尾 (20-23)】
+20. 倍速按钮 aria-pressed (rpPaintSpeeds)
+21. 循环按钮 aria-pressed (rpPaintLoop)
+22. rp range 进度条 aria-label (rp_jump_label)
+23. rp-info aria-live=polite (着法播报读屏可达)
+
+【性能微优 (24-26)】
+24. renderer 合法/危险落点 O(n) find → O(1) 哈希 (90 格 × 每帧)
+25. pieceGlyph localStorage 每格每帧读取 → 单帧缓存 (90 次 → 1 次)
+26. .d-reason 与 #replay-overlay 细滚动条 (第21轮漏面)
+
+【健壮性/服务端 (27-31, server 改动需重启)】
+27. server /api/chat Content-Type 门禁 (显式非 JSON → 415; 无声明宽松放行兼容旧行为)
+28. server 404/403 响应 Cache-Control no-store (负面响应不入中间层/浏览器缓存)
+29. sw.js navigate 请求离线兜底 /index.html 壳 (带 query 的首访离线不再白屏)
+30. Dockerfile 补 COPY manifest.json sw.js — Docker 内 PWA 两件套 404 实锤修复 (发布物守护此前只查仓库不查镜像)
+31. tools/start.js 健康探测 /api/health (最多 10s) 后才报「已就绪」— 子进程秒退不再误报, 失败指路日志
+
+【兜底质量 (32-33)】
+32. llm_agent evalMove2 兑底评分微知识: 过河兵推进 +0.3 / 炮占中线 +0.2 (确定性, 只影响 3 次失败兑底与安全阀, systemPrompt 未动)
+33. random_agent 可注入 rng (opts.rng) — 测试/对局可复现
+
+【测试基建 (34-46)】
+34. _prompt_level_smoke.js 陈旧绝对路径修复 (C:/Users/dukai/.openclaw/... 迁移前残留 — 从未随 npm test 跑过的死测试)
+35. _prompt_level_smoke 整文件重写为 ok()/退出码纪律 (原纯 console.log 无 fail 语义), 保留 8 断言意图 + 新增四级长度互异
+36. _prompt_level_smoke 挂链 run_all (第 13 套件)
+37. replay_risk_check.js 挂链 run_all (第 14 套件) — v1.7.6 起从未进并行 runner
+38. replay_risk_check 两处期望错误修复 (挂链首跑抓出): ① prev() 从 idx3 回退 idx2 却断言 3 键; ② 免责吃场景轮次盲点 (3 手后轮黑, moveRisk 以 eng.turn() 为行动方恒 0 → 改 2 手独立记录)
+39. _logic_layer 沙箱补载 benchmark/elo.js (L6 前置)
+40. _server_http +2 断言: text/plain → 415 / 404 no-store (26→28)
+41. check_ui 发布物守护 6→8 (+manifest.json/sw.js — 与 Dockerfile 修复互为姊妹防线)
+42. check_ui 新增第13节 套件挂链守护: mustWire 14 套件必须都在 run_all SUITES + run_all 引用套件文件必须存在 (双向; 开发中自身抓出 indexOf -1 短串假阳性并修正)
+43. 套件数文档 12→14 同步: README 双语徽章 + 目录树 + 测试表 2 行 / AGENTS ×2 / ARCHITECTURE
+44. i18n.js setLang 同值早退 (重复 apply/xq:i18n 事件风暴防护; persist 仍落盘)
+45. 新 i18n 键 6 个: eo_elo/import_fail_banner/import_ok/server_no_key/rp_eval_sparse/spark_latest (ZH/EN, 226→232)
+
+【杂项 (46-50)】
+46. window.onerror 轻量钩子: 首错 aiBanner err 态 + console 详情, 不重复轰炸观战
+47. 零 Key 提示: 中继可用但 providers 全无 apiKey → 设置面板 server-warn 区显示 server_no_key (原要到走子失败才暴露)
+48. #last-move-badge 显示态 pointer-events+cursor → 点击回看该手 (replayTo)
+49. sparkline title i18n (spark_latest — I9 规则 c 的 SVG <title> 漏网点)
+50. Record.remove 内聚清理 回放进度/书签孤儿键 (原只 rpDeleteRecord 手工清; saveImported 裁剪旧导入同步受益)
+
+【边界与教训】
+- ai/llm_agent.js systemPrompt 未动 (evalMove2 是兜底评分, dump 新鲜度 PASS); server.js 改动需重启生效
+- 修复类占比 ~40% (31/30/36/38/44/47/49/25 等) — 50 项压力下依然坚持「真实缺口优先, 宁少不凑」:
+  挂链的两个死测试共抓出 3 处问题 (陈旧路径/退出码缺失/期望错误), 印证「守护必须先真实跑再挂链」
+- 验证: npm run check ALL PASS + npm test 并行 14/14 全绿 + IAB 实机 (Elo applyResult 页面直驱 1516/1484 零和 + 对局 ply 流动 + 无错误横幅)
+- 环境伪象记录: IAB 后台标签 setTimeout 被钳制 ~1s (r26 已记), 随机对局终局等待不经济 → Elo 接线以「单测 + 页面直驱」双验证替代长等

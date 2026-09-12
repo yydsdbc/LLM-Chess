@@ -119,6 +119,12 @@
     rp_red_plus: '红+{n}', rp_black_plus: '黑+{n}', rp_longest: '最长 {s}s',
     rp_no_record: '⚠ 没有可回放的棋谱数据',
     rp_pick_empty: '暂无本地棋谱 — 完成一局 LLM/随机 对战后自动保存, 或先关闭本弹层, 在主界面用 载入棋谱 导入 JSON',
+    eo_elo: 'Elo: 🔴 {r} ({dr}) · ⚫ {b} ({db})',
+    import_fail_banner: '⚠️ 导入失败: {msg}',
+    import_ok: '✅ 已载入棋谱 ({n} 手) — 底部走法列表可点击复盘',
+    server_no_key: '⚠️ 中继可用但未配置任何 apiKey — 编辑 config/keys.json 填入后即可用 LLM 对手 (随机AI 无需 Key)',
+    rp_eval_sparse: '(评值数据不足, 需至少 2 手含数字 evaluation)',
+    spark_latest: '最新 {v} (本方视角)',
     rp_replay_toast: '📌 已复盘到第 {n} 手, 点 ⟲ 还原', rp_restored: '✅ 已还原到最新局面',
     rp_restore: '⟲ 还原',
     rp_delete_title: '删除该棋谱', rp_delete_confirm: '删除这局棋谱? 该操作不可撤销。', rp_note: '📌 对局备注', rp_import_fail: '导入失败: ',
@@ -253,6 +259,12 @@
     rp_red_plus: 'Red+{n}', rp_black_plus: 'Black+{n}', rp_longest: 'longest {s}s',
     rp_no_record: '⚠ No replay data available',
     rp_pick_empty: 'No local games yet — finished LLM/Random games are saved automatically; or close this panel and use Load Game on the main screen to import JSON',
+    eo_elo: 'Elo: 🔴 {r} ({dr}) · ⚫ {b} ({db})',
+    import_fail_banner: '⚠️ Import failed: {msg}',
+    import_ok: '✅ Game imported ({n} moves) — click the move log below to review',
+    server_no_key: '⚠️ Relay is up but no apiKey is configured — edit config/keys.json, restart, then use LLM opponents (Random AI needs no key)',
+    rp_eval_sparse: '(Not enough eval data — needs 2+ moves with numeric evaluation)',
+    spark_latest: 'Latest {v} (own perspective)',
     rp_replay_toast: '📌 Replayed to move {n} — click ⟲ Restore', rp_restored: '✅ Restored to the latest position',
     rp_restore: '⟲ Restore',
     rp_delete_title: 'Delete this game', rp_delete_confirm: 'Delete this game record? This cannot be undone.', rp_note: '📌 Game notes', rp_import_fail: 'Import failed: ',
@@ -294,7 +306,9 @@
     return s.replace(/\{(\w+)\}/g, function (_, n) { return a[n] != null ? a[n] : ('{' + n + '}'); });
   }
   function setLang(lang, persist) {
-    cur = has(lang);
+    var next = has(lang);
+    if (next === cur && !persist) return;   // 第28轮: 同值早退 (重复 apply / xq:i18n 事件风暴防护); persist 仍落盘
+    cur = next;
     if (persist) { try { root.localStorage.setItem(LS_KEY, cur); } catch (e) {}
     }
     apply();

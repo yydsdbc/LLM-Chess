@@ -101,6 +101,20 @@ async function main() {
     log('!', '未检测到任何 apiKey — 零配置试玩: 对战设置执方选「随机AI」; 或编辑 config/keys.json 填入 key 后重启');
   }
 
+  log('!', '[3.5/4] 健康探测 /api/health ...');
+  let healthy = false;
+  for (let i = 0; i < 20 && !healthy; i++) {   // 第28轮: 最多等 10s, server 秒退 (端口占用等) 不再误报已就绪
+    await new Promise(r => setTimeout(r, 500));
+    try {
+      const res = await fetch(URL + '/api/health');
+      healthy = res.ok;
+    } catch (e) { /* 未起再等 */ }
+  }
+  if (!healthy) {
+    log('-', '服务健康探测失败 - 查日志: ' + LOG_FILE + ' (常见: 端口被占用)');
+    process.exit(1);
+  }
+
   log('!', '[4/4] 打开浏览器...');
   const url = `${URL}?nocache=${Math.random().toString(36).slice(2, 10)}`;
   spawn('cmd', ['/c', 'start', '""', url], { detached: true, stdio: 'ignore' }).unref();

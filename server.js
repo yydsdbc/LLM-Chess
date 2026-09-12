@@ -74,9 +74,9 @@ function serveStatic(req, res, urlPath) {
   if (p === '/' || p === '') p = '/index.html';
   const full = path.normalize(path.join(ROOT, p));
   // 第27轮: 前缀穿越加固 — 裸 startsWith(ROOT) 会放行同名前缀兄弟目录 (…/LLM-chess-backup/…), 必须按路径段比对
-  if (full !== ROOT && !full.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end('forbidden'); }
+  if (full !== ROOT && !full.startsWith(ROOT + path.sep)) { res.writeHead(403, { 'Cache-Control': 'no-store' }); return res.end('forbidden'); }   // 第28轮: no-store
   fs.readFile(full, (err, buf) => {
-    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('404 Not Found'); }
+    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('404 Not Found'); }   // 第28轮: 404 不入缓存
     // v1.0.3: ETag/304 — 文件未变时浏览器用本地副本 (对局中 F5 秒开, 省带宽); api/keys 动态路径不走这里
     const etag = '"' + require('crypto').createHash('sha1').update(buf).digest('hex').slice(0, 16) + '"';
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, { ETag: etag }); return res.end(); }
@@ -304,6 +304,12 @@ const server = http.createServer(async (req, res) => {
     if (!chatRateLimit(req)) {
       res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60' });
       return res.end(JSON.stringify({ error: 'rate limited: max 30 requests/min per IP' }));
+    }
+    // 第28轮: Content-Type 门禁 (显式声明非 JSON 直接 415; 无声明宽松放行兼容旧行为)
+    const ct = (req.headers['content-type'] || '').toLowerCase();
+    if (ct && ct.indexOf('application/json') < 0) {
+      res.writeHead(415, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(JSON.stringify({ error: 'unsupported media type: use application/json' }));
     }
     const body = await readBody(req);
     if (!body) {

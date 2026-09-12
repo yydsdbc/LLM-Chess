@@ -12,7 +12,7 @@ var path = require('path');
 var ROOT = path.join(__dirname, '..');
 var sandbox = { console: console, setTimeout: setTimeout, clearTimeout: clearTimeout, Date: Date };
 sandbox.globalThis = sandbox;
-['core/piece.js', 'core/move.js', 'core/board.js', 'core/rules.js', 'core/generator.js', 'core/judge.js', 'core/engine.js', 'benchmark/record.js', 'replay/replay.js', 'replay/replay_controller.js']
+['core/piece.js', 'core/move.js', 'core/board.js', 'core/rules.js', 'core/generator.js', 'core/judge.js', 'benchmark/elo.js', 'core/engine.js', 'benchmark/record.js', 'replay/replay.js', 'replay/replay_controller.js']
   .forEach(function (f) { vm.runInNewContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), sandbox, { filename: f }); });
 var XQ = sandbox.XQ;
 var fails = [];
@@ -79,6 +79,18 @@ ok(c0.s.idx() === 0, 'L4 空谱控制器全操作不炸');
 var one = ctrlFor([{ n: 1, side: 'red', from: 'h3', to: 'e3', piece: 'cannon' }]);
 one.c.toEnd(); one.c.stepNextCapture(); one.c.dispose();
 ok(one.s.idx() === 1, 'L4 单手谱 toEnd=1 不炸');
+
+// L6 Elo 数学 (第28轮 接入实时对局的前置纯函数)
+var E = XQ.Elo;
+ok(typeof E.previewDelta === 'function', 'L6 previewDelta 导出');
+ok(Math.abs(E.expected(1500, 1500) - 0.5) < 1e-9, 'L6 同分期望胜率 0.5');
+var d1 = E.previewDelta(1500, 1500, 1);
+ok(d1.dra > 0 && d1.drb < 0 && Math.abs(d1.dra + d1.drb) < 0.01, 'L6 胜方加分/负方减分 (零和)');
+ok(d1.dra === E.update({ ra: 1500, rb: 1500, scoreA: 1 }).ra - 1500, 'L6 previewDelta 与 update 口径一致');
+var d2 = E.previewDelta(1500, 1500, 0.5);
+ok(d2.dra === 0 && d2.drb === 0, 'L6 同分和棋 delta=0');
+var d3 = E.previewDelta(1700, 1500, 0);
+ok(d3.dra < 0 && d3.drb > 0, 'L6 高分输棋掉分/低分赢棋加分');
 
 console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
 process.exit(fails.length ? 1 : 0);

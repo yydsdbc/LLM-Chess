@@ -132,6 +132,12 @@ async function main() {
   const optStatic = await req('OPTIONS', '/');
   ok(optStatic.status === 204 && !!optStatic.headers['access-control-allow-origin'], 'OPTIONS / (静态路径) → 204 + ACAO (预检处理器全局, 不限 /api)');
 
+  // 第28轮五期: Content-Type 门禁 + 404 no-store
+  const ctBad = await req('POST', '/api/chat', '{"provider":"x"}', { 'Content-Type': 'text/plain' });
+  ok(ctBad.status === 415, 'POST /api/chat text/plain → 415 (Content-Type 门禁, 无声明仍宽松放行)');
+  const nf404 = await req('GET', '/no-such-page-' + process.pid);
+  ok(nf404.status === 404 && nf404.headers['cache-control'] === 'no-store', '404 → Cache-Control no-store (负面响应不入缓存)');
+
   // 限流秒窗: 连发 12 个请求 (8/s 上限), 至少一个 429
   // (前 8 个可能 400/429 交错, 只断言出现 429 — 限流先于业务校验执行)
   const burst = [];

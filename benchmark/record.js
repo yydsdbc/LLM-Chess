@@ -81,6 +81,9 @@
   function remove(id) {
     var all = list().filter(function (r) { return r.id !== id; });
     try { localStorage.setItem(LS_KEY, JSON.stringify(all)); } catch (e) {}
+    // 第28轮: 孤儿键内聚清理 (回放进度/书签随棋谱删除; 原只 rpDeleteRecord 手工清, 其它调用方漏网)
+    try { localStorage.removeItem('xq_replay_pos_' + id); } catch (e2) {}
+    try { localStorage.removeItem('xq_replay:bm:' + id); } catch (e3) {}
   }
 
   /* ── 文件导入导出 (浏览器) ── */
@@ -102,8 +105,17 @@
       var fr = new FileReader();
       fr.onload = function () {
         try {
-          var r = JSON.parse(fr.result);
+          var txt = String(fr.result || '');
+          if (txt.length > 10 * 1024 * 1024) throw new Error('文件超过 10MB 上限');
+          var r = JSON.parse(txt);
           if (!r.moves || !Array.isArray(r.moves)) throw new Error('缺少 moves 字段');
+          for (var i = 0; i < r.moves.length; i++) {   // 第28轮: 逐手形状校验 (旧版只查数组, 坏手到回放才炸且难定位)
+            var mv = r.moves[i];
+            if (!mv || typeof mv.from !== 'string' || typeof mv.to !== 'string'
+              || !/^[a-i](10|[1-9])$/.test(mv.from) || !/^[a-i](10|[1-9])$/.test(mv.to)) {
+              throw new Error('第 ' + (i + 1) + ' 手坐标无效 (需 a1-i10 形如 e3/h10)');
+            }
+          }
           resolve(r);
         } catch (e) { reject(e); }
       };

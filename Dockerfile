@@ -17,7 +17,8 @@ ENV NODE_ENV=production \
 
 # App is dependency-free: copy source directly (config/ ships keys.example.json only,
 # keys.json is gitignored and generated on first run). test/ is not baked into the runtime image.
-COPY package.json server.js index.html ./
+# 第28轮: PWA 两件套入镜像 (原 Docker 内 manifest/sw 404)
+COPY package.json server.js index.html manifest.json sw.js ./
 COPY ai benchmark config core evaluation replay tools ui ./
 
 EXPOSE 8788

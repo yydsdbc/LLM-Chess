@@ -38,12 +38,26 @@ ok('第1-3手 不标注 (<3)', (risks[1] || 0) < 3 && (risks[2] || 0) < 3 && (ri
   'r1=' + risks[1] + ' r2=' + risks[2] + ' r3=' + risks[3]);
 s.goto(4);
 ok('state().risk 字段暴露', s.state().risk >= 3, 'risk=' + s.state().risk);
+/* 第28轮挂链修复: 原版两处期望错误 — ① prev() 从 idx3 回退到 idx2 却断言 3 键 (rebuild(2) 应 2 键);
+   ② 免责吃检测在 prev 之后取引擎 (炮尚未走到 e3, 恒 0)。修正流程: goto(3) 先测, prev 期望 2 键 */
 s.goto(3);
-ok('prev 后 risks 表仍可用', s.prev() === true && Object.keys(s.risks()).length === 3, 'keys=' + Object.keys(s.risks()).length);
+ok('goto(3) 后 risks 表 3 键', Object.keys(s.risks()).length === 3, 'keys=' + Object.keys(s.risks()).length);
 
-/* 免费吃子 = 负风险 (不标): 前3手局面, 红炮 e3xe7 吃黑无保护中卒 (1 屏: e4 兵) — 无反吃 → risk = -1 */
-const rFree = XQ.Replay.moveRisk(s.engine(), XQ.Move.parseSq('e3'), XQ.Move.parseSq('e7'));
+/* 免费吃子 = 负风险 (不标): 红炮 e3xe7 吃黑无保护中卒 (1 屏: e4 兵) — 无反吃 → risk = -1
+   第28轮挂链修复②: moveRisk 以 eng.turn() 为行动方 — 3 手后轮黑, 红炮着法不在合法表恒 0;
+   改用 2 手独立记录 (走完轮红) 承载该场景 */
+const sFree = XQ.Replay.create({
+  id: 'free_case', date: new Date().toISOString(),
+  red: { name: '红', kind: 'llm' }, black: { name: '黑', kind: 'llm' },
+  moves: [
+    { n: 1, side: 'red', piece: 'cannon', from: 'h3', to: 'e3' },
+    { n: 2, side: 'black', piece: 'cannon', from: 'b8', to: 'a8' }
+  ]
+});
+sFree.goto(2);
+const rFree = XQ.Replay.moveRisk(sFree.engine(), XQ.Move.parseSq('e3'), XQ.Move.parseSq('e7'));
 ok('免费吃卒 负风险', rFree < 0, 'risk=' + rFree);
+ok('prev 回退后 risks 表仍可用', s.prev() === true && Object.keys(s.risks()).length === 2, 'keys=' + Object.keys(s.risks()).length);
 
 /* 真实棋谱 (match_headless) 全程检测不崩 + 风险值非 NaN */
 const recReal = JSON.parse(fs.readFileSync('logs/match_headless.json', 'utf8'));

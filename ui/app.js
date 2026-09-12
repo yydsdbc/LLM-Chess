@@ -90,6 +90,7 @@
   var aiBusy = false;
   var currentRecord = null;
   var relayAvailable = false;
+  var _noKeysConfigured = false;   // 第28轮: 中继活但零 Key (server-warn 提示条件)
   var thinkStat = { red: { total: 0, moves: 0 }, black: { total: 0, moves: 0 } };
   var decisionLog = { red: [], black: [] };   // v1.3 决策日志 (漏声明会炸 startRecord → 对局永不启动) // 思考耗时/手数
   var thinkStart = { red: 0, black: 0 };     // 当前思考开始时刻
@@ -111,6 +112,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     aiThinkingSide: null,
     onCellClick: onCellClick
   };
+
+  /* 第28轮: 全局脚本错误轻量钩子 — 首错横幅 (err 态) + console 详情; 不重复轰炸观战 */
+  var _errShown = false;
+  window.addEventListener('error', function (ev) {
+    console.warn('[LLM-chess] script error:', ev.message, ev.filename + ':' + ev.lineno);
+    if (_errShown) return;
+    _errShown = true;
+    try { XQ.UI.aiBanner('err', '⚠ ' + String(ev.message || 'script error').slice(0, 60), null); } catch (eE) {}
+  });
 
   /* ── 交互 ── */
   function onCellClick(x, y) {
@@ -336,6 +346,17 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         });
         XQ.Record.finish(currentRecord, res.status, Date.now() - startTime);
         XQ.Record.save(currentRecord);
+        // 第28轮: Elo 实时记账 (双方均非人类才入表 — 人类执子成绩不污染模型对战胜率表)
+        var eloHtml = '';
+        if (agents.red && agents.black && agents.red.kind !== 'human' && agents.black.kind !== 'human'
+          && XQ.Elo && XQ.Elo.previewDelta && XQ.Elo.applyResult) {
+          var eR = currentRecord.red.name, eB = currentRecord.black.name;
+          var eScore = res.status.winner === 'red' ? 1 : res.status.winner === 'black' ? 0 : 0.5;
+          var eD = XQ.Elo.previewDelta(XQ.Elo.ratingOf(eR), XQ.Elo.ratingOf(eB), eScore);
+          XQ.Elo.applyResult(eR, eB, res.status.winner);
+          var eFmt = function (v) { return (v > 0 ? '+' : '') + v; };
+          eloHtml = '<br>' + TAe('eo_elo', { r: XQ.Elo.ratingOf(eR), dr: eFmt(eD.dra), b: XQ.Elo.ratingOf(eB), db: eFmt(eD.drb) });
+        }
         // v1.7 终局结算数据
         var eo = document.getElementById('eo-stats');
         if (eo) {
@@ -352,7 +373,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           };
           eo.innerHTML = TAe('eo_stats_total', { n: engine.ply(), s: Math.round((Date.now() - startTime) / 1000) })
             + '<br>' + eoLine('🔴', 'red')
-            + '<br>' + eoLine('⚫', 'black');
+            + '<br>' + eoLine('⚫', 'black') + eloHtml;
           // v2.4 终局一键回放本局 (对局→录像闭环, 免去回放选择器翻找; Record 已在上方落 localStorage)
           eo.insertAdjacentHTML('beforeend', '<div style="margin-top:8px"><button class="btn" id="eo-replay">' + Te('eo_replay_btn') + '</button></div>');   // 第26轮 i18n
           var eob = eo.querySelector('#eo-replay');
@@ -645,6 +666,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       .then(function (j) {
         var list = (j && j.providers) || [];
         if (!list.length) return false;
+        _noKeysConfigured = !list.some(function (pk) { return pk.hasKey; });   // 第28轮: 零 Key 探测 (设置面板给可操作提示)
         PROVIDER_MODELS = {};
         list.forEach(function (p) { PROVIDER_MODELS[p.id] = p.models || []; });
         Object.keys(SIDE_DEFS).forEach(function (side) {
@@ -769,8 +791,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
     var swEl = document.getElementById('server-warn');
     if (swEl) {
-      swEl.style.display = relayAvailable ? 'none' : 'block';
-      swEl.innerHTML = (XQ.I18N ? XQ.I18N.t('server_warn') : '') + '<b>http://' + location.host + '</b>';   // v1.0.daily: 动态端口 (替换原硬编码 8788)
+      var noKey = relayAvailable && typeof _noKeysConfigured !== 'undefined' && _noKeysConfigured;   // 第28轮: 中继活但零 Key → 给可操作提示 (原先只在走子失败时暴露)
+      swEl.style.display = (!relayAvailable || noKey) ? 'block' : 'none';
+      swEl.innerHTML = noKey
+        ? (XQ.I18N ? XQ.I18N.t('server_no_key') : '')
+        : (XQ.I18N ? XQ.I18N.t('server_warn') : '') + '<b>http://' + location.host + '</b>';
     }
     document.getElementById('settings-overlay').classList.add('show');
     // 第23轮 a11y: focus 延到下一渲染帧 — visibility 过渡起帧前元素仍按 hidden 计算, 同步/强制 reflow 的 focus 都被静默忽略 (实测定位)
@@ -978,8 +1003,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             }
           });
           syncArchive();   // 回放导入不存新档 → 存棋谱保持禁用
+          warnBanner((XQ.I18N ? XQ.I18N.tArgs('import_ok', { n: rec.moves.length }) : '已载入 ' + rec.moves.length + ' 手'), null);   // 第28轮: 成功提示 (原静默)
           refresh();
-        }).catch(function (e) { alert('导入失败: ' + e.message); });
+        }).catch(function (e) {
+          warnBanner((XQ.I18N ? XQ.I18N.tArgs('import_fail_banner', { msg: e && e.message || e }) : '导入失败: ' + (e && e.message || e)), null);   // 第28轮: 最后一个 alert 下岗
+        });
       };
       input.click();
     };
@@ -1128,7 +1156,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '      <div style="position:absolute;left:50%;top:0;bottom:0;width:2px;background:#f0d9a0;opacity:.5"></div>'
       + '      <span class="rp-eb-val" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#f0d9a0;font-size:11px;font-weight:bold;text-shadow:0 1px 2px rgba(0,0,0,.8);min-width:42px;text-align:center" data-i18n="rp_even">均势</span>'
       + '    </div>'
-      + '    <div id="rp-info" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:10px 12px;color:#f0e0c0;font-size:13px;line-height:1.7;min-height:160px"></div>'
+      + '    <div id="rp-info" aria-live="polite" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:10px 12px;color:#f0e0c0;font-size:13px;line-height:1.7;min-height:160px"></div>'
       + '    <input id="rp-moves-filter" data-i18n="rp_filter_placeholder" placeholder="🔍 过滤走法 (summary / 坐标)">'
       + '    <ol id="rp-moves" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:6px 8px;margin:0;color:#e8d5ae;font-size:12px;line-height:1.5;max-height:140px;overflow-y:auto"></ol>'
       + '    <div id="rp-timechart" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:6px 10px;font-size:11px;color:#c4a56e"><div class="rp-tc-cap" style="margin-bottom:4px"></div></div>'
@@ -1308,7 +1336,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           Array.prototype.forEach.call(sel.options, function (op) { if (op.value === 'file:import') sel.removeChild(op); });   // 清理旧版占位项
           var o = document.createElement('option');
           o.value = 'ls:' + saved.id;
-          o.textContent = '📂 ' + (saved.red && saved.red.name || '?') + ' vs ' + (saved.black && saved.black.name || '?') + ' (' + saved.moves.length + '手)';
+          o.textContent = '📂 ' + (saved.red && saved.red.name || '?') + ' vs ' + (saved.black && saved.black.name || '?') + ' (' + (XQ.I18N ? XQ.I18N.tArgs('rp_moves_unit', { n: saved.moves.length }) : saved.moves.length + '手') + ')';   // 第28轮 i18n
+          o.title = (saved.date || '') + (saved.redModel ? ' [' + saved.redModel + ']' : '') + (saved.blackModel ? ' [' + saved.blackModel + ']' : '');   // 第28轮: 长名悬停看全
           sel.insertBefore(o, sel.firstChild);
           sel.value = o.value;
           try { history.replaceState(null, '', '#rp=' + encodeURIComponent(o.value)); } catch (eH5) {}   // v3.9: 导入也写深链 (与 rpPickLoad 同款)
@@ -1319,19 +1348,24 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       };
       input.click();
     };
+    rpEl.range.setAttribute('aria-label', XQ.I18N ? XQ.I18N.t('rp_jump_label') : '跳转');   // 第28轮: 进度条读屏语义
     rpEl.movelist.addEventListener('click', function (e) {
       var li = e.target.closest('li[data-ply]');
       if (li && rpCtrl) rpCtrl.gotoPly(parseInt(li.dataset.ply, 10));
     });
     /* 滚轮步进: 棋盘上 wheel 下=next 上=prev, 180ms 节流 */
     var rpWheelLock = 0;
-    rb.addEventListener('wheel', function (e) {
+    function rpWheelStep(e) {
       e.preventDefault();
       var now = Date.now();
       if (now - rpWheelLock < 180 || !rpCtrl) return;
       rpWheelLock = now;
       if (e.deltaY > 0) rpCtrl.stepNext(); else if (e.deltaY < 0) rpCtrl.stepPrev();
-    }, { passive: false });
+    }
+    rb.addEventListener('wheel', rpWheelStep, { passive: false });
+    /* 第28轮: 评值/时长图表上同样滚轮步进 (长图表浏览免挪手到棋盘) */
+    rpEl.timechart.addEventListener('wheel', rpWheelStep, { passive: false });
+    rpEl.evalchart.addEventListener('wheel', rpWheelStep, { passive: false });
     rpPaintSpeeds();
     rpPaintLoop();
     rpPaintChartCaptions();
@@ -1353,6 +1387,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     rpEl.btnLoop.style.background = on ? '#e0a030' : '';
     rpEl.btnLoop.style.color = on ? '#1a0e08' : '';
     rpEl.btnLoop.style.fontWeight = on ? 'bold' : '';
+    rpEl.btnLoop.setAttribute('aria-pressed', on ? 'true' : 'false');   // 第28轮: 循环开关读屏可感知
   }
   function rpPaintSpeeds() {
     var cur = rpCtrl ? rpCtrl.speed() : 1;
@@ -1361,11 +1396,17 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       b.style.background = active ? '#e0a030' : '';
       b.style.color = active ? '#1a0e08' : '';
       b.style.fontWeight = active ? 'bold' : '';
+      b.setAttribute('aria-pressed', active ? 'true' : 'false');   // 第28轮: 倍速按钮按下态读屏可感知
     });
   }
   function rpJump() {
     var n = parseInt(rpEl.jump.value, 10);
-    if (!isNaN(n)) rpCtrl && rpCtrl.gotoPly(n);
+    if (!isNaN(n) && rpCtrl) {
+      var tot = rpSession ? rpSession.total() : 0;
+      var clamped = Math.max(0, Math.min(tot, n));
+      rpEl.jump.value = clamped;   // 第28轮: 越界输入回落到钳制值 (可见反馈, 原先静默)
+      rpCtrl.gotoPly(clamped);
+    }
   }
   function rpFillPicker() {
     var sel = rpEl.pick;
@@ -1437,8 +1478,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (!rec || !rec.id) return;
     var T9 = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
     if (!window.confirm(T9('rp_delete_confirm'))) return;
-    XQ.Record.remove(rec.id);
-    try { localStorage.removeItem('xq_replay_pos_' + rec.id); localStorage.removeItem(XQ.Replay.bookmarkKey(rec.id)); } catch (eD) {}
+    XQ.Record.remove(rec.id);   // 第28轮: 进度/书签孤儿键清理已内聚到 Record.remove
     rpFillPicker().then(function () {
       if (rpEl.pick.options.length && rpEl.pick.options[0].value !== '') { rpEl.pick.selectedIndex = 0; rpPickLoad(); }
       else rpEl.info.innerHTML = '<span style="color:#e67e22">' + T9('rp_pick_empty') + '</span>';   // 全删光 → 引导导入
@@ -1553,7 +1593,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var d0 = document.createElement('div');
       d0.className = 'rp-ec-ph';
       d0.style.cssText = 'color:#7a5a2a;padding:6px 0';
-      d0.textContent = '(评值数据不足, 需至少 2 手含数字 evaluation)';
+      d0.textContent = XQ.I18N ? XQ.I18N.t('rp_eval_sparse') : '(评值数据不足, 需至少 2 手含数字 evaluation)';   // 第28轮 i18n
       rpEl.evalchart.appendChild(d0);
       return;
     }
@@ -1590,29 +1630,44 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       : (rec.result === 'repetition' || rec.result === 'natural' || rec.result === 'draw' || rec.result === 'agree') ? '1/2-1/2' : '*';   // v3.8: 和棋局 (重复/自然限着判和) 用 PGN 标准记号, 与未完成局 '*' 区分
     var lines = [
       '[Event "LLM-chess Replay"]',
+      '[Site "LLM-chess (github.com/yydsdbc/LLM-Chess)"]',   // 第28轮: PGN 标准头补全 (Site/Round/Termination)
       '[Date "' + date + '"]',
+      '[Round "' + (rec.id || '-') + '"]',
       '[Red "' + (rec.red && rec.red.name || '?') + '"] [RedModel "' + (rec.red && rec.red.model || '?') + '"]',
       '[Black "' + (rec.black && rec.black.name || '?') + '"] [BlackModel "' + (rec.black && rec.black.model || '?') + '"]',
-      '[Result "' + pgnRes + '"]'
+      '[Result "' + pgnRes + '"]',
+      '[Termination "' + (rec.result || 'unterminated') + '"]'
     ];
-    var body = '';
+    var bmKeys = rpBookmarks || [];
+    var tokens = [];
     for (var i = 0; i < rec.moves.length; i++) {
       var m = rec.moves[i];
-      /* v3.9.2 PGN 加中文记谱: 同一手追加 {cn: 炮八平五} (与 {summary} 并列) — 中文观战者可一眼看走子, 国际象棋 PGN 应用忽略额外 {} 字段 */
+      /* v3.9.2 PGN 加中文记谱 (与 {summary} 并列) — 国际象棋 PGN 应用忽略额外 {} 字段 */
       var cnN = (m.side && m.piece && m.from && m.to && typeof cnNotation === 'function') ? cnNotation(m.side, m.piece, m.from, m.to) : '';
       var cmts = [];
       if (cnN) cmts.push('cn:' + cnN);
       if (m.summary) cmts.push(m.summary);
-      body += (i % 2 === 0 ? Math.floor(i / 2) + 1 + '. ' : '') + m.from + '-' + m.to + (cmts.length ? ' {' + cmts.join(' | ') + '}' : '') + ' ';
+      if (i % 2 === 0) tokens.push(Math.floor(i / 2) + 1 + '.');
+      tokens.push(m.from + '-' + m.to + (cmts.length ? ' {' + cmts.join(' | ') + '}' : ''));
+      if (bmKeys.indexOf(i + 1) >= 0) tokens.push('{%bm ' + (i + 1) + '}');   // 第28轮: 书签随 PGN 导出 ({%bm N} 自定义注释)
     }
-    /* v1.6.4 PGN 修复: 原黑方手前插 '*' (终局标记) 会被解析器当对局结束截断; 改标准 "1. 红手 黑手 2. ..." 格式, 末尾追加结果标记 (v3.8: 结果记号统一由 pgnRes 计算, 和棋局 1/2-1/2) */
-    lines.push((body.trim() + ' ' + pgnRes).trim());
+    tokens.push(pgnRes);
+    /* v1.6.4 PGN 修复 + v3.8 结果记号统一由 pgnRes 计算; 第28轮: 80 列折行 (PGN 惯例), 长注释不撑超长单行 */
+    var curL = '';
+    for (var ti = 0; ti < tokens.length; ti++) {
+      if (curL.length && (curL + ' ' + tokens[ti]).length > 80) { lines.push(curL); curL = tokens[ti]; }
+      else curL = curL ? curL + ' ' + tokens[ti] : tokens[ti];
+    }
+    if (curL) lines.push(curL);
     var blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'xq_' + (rec.id || Date.now()) + '.pgn';
+    var safeN = function (s2) { return String(s2 || '?').replace(/[^\w.-]+/g, '-').slice(0, 24); };   // 第28轮: 富文件名 (双方名+日期)
+    var dN = rec.date ? new Date(rec.date) : new Date();
+    var stampN = dN.getFullYear() + ('0' + (dN.getMonth() + 1)).slice(-2) + ('0' + dN.getDate()).slice(-2);
+    a.download = 'xq_' + safeN(rec.red && rec.red.name) + '_vs_' + safeN(rec.black && rec.black.name) + '_' + stampN + '.pgn';
     a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    
   }
   function rpShowHelp() {
     if (document.getElementById('rp-help-overlay')) return;

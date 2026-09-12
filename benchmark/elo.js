@@ -46,6 +46,11 @@
     saveTable(t);
     return { red: next.ra, black: next.rb };
   }
+  /** 第28轮: 预览分数变动 (不落表) — 终局卡展示 ±delta 用; 纯函数 node 可测 */
+  function previewDelta(ra, rb, scoreA, k) {
+    var next = update({ ra: ra, rb: rb, scoreA: scoreA, k: k });
+    return { dra: Math.round((next.ra - ra) * 10) / 10, drb: Math.round((next.rb - rb) * 10) / 10 };
+  }
   function leaderboard() {
     var t = table();
     return Object.keys(t).map(function (n) { return { name: n, rating: t[n] }; })
@@ -56,7 +61,7 @@
   XQ.Elo = {
     BASE: BASE, DEFAULT_K: DEFAULT_K,
     expected: expected, update: update,
-    ratingOf: ratingOf, applyResult: applyResult,
+    ratingOf: ratingOf, applyResult: applyResult, previewDelta: previewDelta,
     leaderboard: leaderboard, resetAll: resetAll
   };
 })(typeof window !== 'undefined' ? window : globalThis);

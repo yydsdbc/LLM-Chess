@@ -279,6 +279,13 @@
       var score = 0;
       var tgt = eng.pieceAt(toSq.x, toSq.y);
       if (tgt && tgt.color !== side) score += (V[tgt.type] || 0) * 10;
+      // 第28轮 兑底微知识: 过河兵推进 +0.3 / 炮占中线 +0.2 — 兜底不再纯吃子导向 (确定性, 不动 systemPrompt)
+      var mover0 = eng.pieceAt(fromSq.x, fromSq.y);
+      if (mover0 && mover0.type === 'pawn') {
+        var crossed0 = side === 'red' ? toSq.y <= 4 : toSq.y >= 5;
+        if (crossed0 && toSq.y !== fromSq.y) score += 0.3;
+      }
+      if (mover0 && mover0.type === 'cannon' && toSq.x === 4) score += 0.2;
       try {
         var b2 = eng.cloneBoard();
         var l2 = XQ.Generator.generateLegalMoves(b2, side);

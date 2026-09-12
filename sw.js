@@ -34,6 +34,11 @@ self.addEventListener('fetch', function (e) {
       }
       return res;
     }).catch(function () {
+      if (req.mode === 'navigate') {                   // 第28轮: 导航请求离线兜底壳 (带 query 的首访不再白屏)
+        return caches.match('/index.html').then(function (shell) {
+          return shell || Response.error();
+        });
+      }
       return caches.match(req, { ignoreSearch: false }).then(function (hit) {
         return hit || Response.error();                // 无缓存且离线: 交给浏览器错误页
       });

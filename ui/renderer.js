@@ -7,10 +7,15 @@
   function TA(k, a) { return XQ.I18N ? XQ.I18N.tArgs(k, a) : k; }   // 第27轮 i18n: tArgs 模块级别名 (d-more 折叠行等)
 
   // v1.0.daily 棋子记谱切换: localStorage xq_pieces = 'cn' 汉字 (默认) | 'en' 西文字母 — 仅棋盘显示层
+  var _glyphMode = null, _glyphTable = null;
+  function glyphTable() {
+    if (_glyphTable && _glyphMode === (root.localStorage && root.localStorage.getItem('xq_pieces') || 'cn')) return _glyphTable;   // 第28轮: 90 格 × 每帧 localStorage 读取 → 单次渲染缓存
+    try { _glyphMode = (root.localStorage && root.localStorage.getItem('xq_pieces')) || 'cn'; } catch (e) { _glyphMode = 'cn'; }
+    _glyphTable = _glyphMode === 'en' ? XQ.Piece.LETTERS : XQ.Piece.CHARS;
+    return _glyphTable;
+  }
   function pieceGlyph(p) {
-    var mode = 'cn';
-    try { mode = (root.localStorage && root.localStorage.getItem('xq_pieces')) || 'cn'; } catch (e) {}
-    var table = mode === 'en' ? XQ.Piece.LETTERS : XQ.Piece.CHARS;
+    var table = glyphTable();
     return (table[p.color] || {})[p.type] || XQ.Piece.CHARS[p.color][p.type];
   }
 
@@ -78,10 +83,12 @@
     var cells = cellPool(boardEl);
 
     var selected = view.selected;
-    var legal = (selected && !engine.isOver()) ? engine.legalTargets(selected.x, selected.y) : [];
+    var legalList = (selected && !engine.isOver()) ? engine.legalTargets(selected.x, selected.y) : [];
+    var legal = {};   // 第28轮: 90 格 × O(n) find → O(1) 哈希命中
     var danger = {};
+    for (var li = 0; li < legalList.length; li++) legal[legalList[li].x + ',' + legalList[li].y] = legalList[li];
     if (selected && !engine.isOver()) {
-      engine.dangerTargets(selected.x, selected.y).forEach(function (d) { danger[d.x + ',' + d.y] = true; });
+      engine.dangerTargets(selected.x, selected.y).forEach(function (d) { danger[d.x + ',' + d.y] = d; });
     }
 
     for (var y = 0; y < 10; y++) {
@@ -140,7 +147,7 @@
         c.classList.toggle('selected', !!(selected && selected.x === x && selected.y === y));
         // v1.0.daily a11y: 键盘走子光标 (app 键盘事件维护 view.kbCursor, 方向键移动 + Enter 选子走子)
         c.classList.toggle('kb-cursor', !!(view.kbCursor && view.kbCursor.x === x && view.kbCursor.y === y));
-        var hit = legal.find(function (t) { return t.x === x && t.y === y; });
+        var hit = legal[x + ',' + y];
         c.classList.toggle('legal-capture', !!(hit && hit.isCapture));
         c.classList.toggle('legal-target', !!(hit && !hit.isCapture));
         c.classList.toggle('illegal-target', !hit && !!danger[x + ',' + y]);
@@ -475,7 +482,7 @@
       + '<polygon points="' + areaPts + '" fill="url(#spark-fill-' + side + ')"/>'
       + '<line x1="0" y1="' + h / 2 + '" x2="' + w + '" y2="' + h / 2 + '" stroke="rgba(240,217,160,.25)" stroke-width="1" stroke-dasharray="3,3"/>'
       + '<polyline points="' + pts + '" fill="none" stroke="' + lineCol + '" stroke-width="1.6"/>'
-      + '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="2.4" fill="#ffd54a"><title>最新 ' + arr[li].toFixed(1) + ' (本方视角)</title></circle>'
+      + '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="2.4" fill="#ffd54a"><title>' + (XQ.I18N ? XQ.I18N.tArgs('spark_latest', { v: arr[li].toFixed(1) }) : ('最新 ' + arr[li].toFixed(1))) + '</title></circle>'
       + '</svg>';
   }
 
