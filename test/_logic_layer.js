@@ -47,6 +47,8 @@ sandbox.localStorage = {
 sandbox.XQ = {};   // 保留 XQ? 直接再 runInNewContext record.js 会覆盖 XQ.Record — 用原 sandbox.XQ 上的 module 引用已过期, 需重载整链太繁; 改为测试 record 在真实 node localStorage 缺失下仍可 list (走 try/catch)
 var recE = XQ.Record.blank({ redName: 'A', blackName: 'B' });
 ok(recE.moves.length === 0 && recE.result === null, 'L2 blank 空谱默认值');
+var recB2 = XQ.Record.blank({ redName: 'A', blackName: 'B', redModels: ['a', 'b'] });
+ok(recB2.red.models && recB2.red.models.join('+') === 'a+b', 'L2 blank 委员会阵容字段 (redModels 入谱)');
 var eng = XQ.Engine.create();
 var m1 = { from: { x: 7, y: 6 }, to: { x: 7, y: 4 }, piece: { color: 'red', type: 'cannon' } };
 XQ.Record.addMove(recE, eng, m1, 1234);

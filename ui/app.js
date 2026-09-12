@@ -630,8 +630,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
 
   /* ── 设置 ── */
   var SIDE_DEFS = {
-    red: { checkbox: 'ai-red-enabled', type: 'ai-red-type', provider: 'ai-red-provider', model: 'ai-red-model', style: 'ai-red-style', quick: 'ai-red-quick', label: '红方' },
-    black: { checkbox: 'ai-black-enabled', type: 'ai-black-type', provider: 'ai-black-provider', model: 'ai-black-model', style: 'ai-black-style', quick: 'ai-black-quick', label: '黑方' }
+    red: { checkbox: 'ai-red-enabled', type: 'ai-red-type', provider: 'ai-red-provider', model: 'ai-red-model', style: 'ai-red-style', quick: 'ai-red-quick', multi: 'ai-red-multi', label: '红方' },
+    black: { checkbox: 'ai-black-enabled', type: 'ai-black-type', provider: 'ai-black-provider', model: 'ai-black-model', style: 'ai-black-style', quick: 'ai-black-quick', multi: 'ai-black-multi', label: '黑方' }
   };
   var CFG_KEY = 'xq_v1_settings';
 
@@ -715,8 +715,6 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
 
   function readSettings() {
     var s = { red: {}, black: {} };
-    var multiEl = document.getElementById('ui-multi');
-    s.multi = multiEl ? multiEl.value : 'off';   // 第29轮: 同方多 LLM 模式 (随 CFG_KEY 持久化)
     Object.keys(SIDE_DEFS).forEach(function (side) {
       var d = SIDE_DEFS[side];
       s[side] = {
@@ -725,22 +723,23 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         provider: document.getElementById(d.provider).value,
         model: document.getElementById(d.model).value,
         style: document.getElementById(d.style) ? document.getElementById(d.style).value : 'mid',
-        quick: document.getElementById(d.quick) ? document.getElementById(d.quick).checked : false
+        quick: document.getElementById(d.quick) ? document.getElementById(d.quick).checked : false,
+        multi: document.getElementById(d.multi) ? document.getElementById(d.multi).value : 'off'   // 第31轮: 逐侧多 LLM 模式
       };
     });
     return s;
   }
   function fillSettings(saved) {
-    var multiEl = document.getElementById('ui-multi');
-    if (multiEl) multiEl.value = saved.multi || 'off';
     Object.keys(SIDE_DEFS).forEach(function (side) {
       var d = SIDE_DEFS[side], v = saved[side] || {};
+      if (!v.multi && saved.multi) v.multi = saved.multi;   // 第31轮: 旧全局 multi 迁移到逐侧
       document.getElementById(d.checkbox).checked = !!v.enabled;
       document.getElementById(d.type).value = v.type || 'human';
       document.getElementById(d.provider).value = v.provider || 'deepseek';
       document.getElementById(d.model).value = v.model || '';
       if (document.getElementById(d.style)) document.getElementById(d.style).value = v.style || 'mid';
       if (document.getElementById(d.quick)) document.getElementById(d.quick).checked = !!v.quick;
+      if (document.getElementById(d.multi)) document.getElementById(d.multi).value = v.multi || 'off';
     });
   }
   function saveAISettings() {
@@ -768,23 +767,30 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           warnBanner((XQ.I18N ? XQ.I18N.t('warn_llm_no_server') : '⚠️ LLM 需要本地服务: 请运行 node server.js 后访问本页地址') + ' <b>http://' + location.host + '</b>');   // v1.0.daily: 端口随实际服务端口 (server.js 支持 argv 端口)
           agents[side] = null; return;
         }
-        /* 第29轮 同方多 LLM: 模型框逗号/分号分隔多模型 (支持 provider:model 跨厂商); 模式 off/rotate/council */
+        /* 第29轮 同方多 LLM: 模型框逗号/分号分隔多模型 (支持 provider:model 跨厂商); 第31轮: 逐侧模式 + 重复模型去重 */
         var specs = [];
         String(v.model || '').split(/[,，;；]/).forEach(function (tok) {
           tok = tok.trim();
-          if (tok) specs.push(tok);
+          if (tok && specs.indexOf(tok) < 0) specs.push(tok);
         });
-        var multiMode = (s.multi === 'rotate' || s.multi === 'council') && specs.length > 1 ? s.multi : 'off';
+        var multiMode = (v.multi === 'rotate' || v.multi === 'council') && specs.length > 1 ? v.multi : 'off';
         var onThink = function (s2, text) { if (aiBusy && s2 === side) showThinking(s2, text); };
         var onRetry2 = function (info) { view.aiRetries = view.aiRetries || {}; view.aiRetries[side] = info.attempt; };   // v2.5: 重试实时可见 (状态条 重试N次)
-        var agent, modelName;
+        var onProg = function (p) {   // 第31轮: 会诊进度实时上卡 (⚡ 思考中卡片文字替换)
+          if (!aiBusy || p.side !== side) return;
+          var dc = document.querySelector('#think-' + side + '-body .dcard.d-thinking');
+          if (dc) dc.textContent = '⚡ 会诊中 (' + p.answered + '/' + p.total + ' 已应答)…';
+        };
+        var agent, modelName, modelsOut = null;
         if (multiMode !== 'off') {
           agent = XQ.CommitteeAgent.create({
             side: side, provider: v.provider, models: specs, mode: multiMode,
             promptLevel: v.style || 'mid', thinking: v.quick ? 'disabled' : 'enabled',
-            onThinking: onThink, onRetry: onRetry2
+            onThinking: onThink, onRetry: onRetry2, onProgress: onProg,
+            voterBudgetMs: 90000
           });
           modelName = specs.join('+');
+          modelsOut = specs;
         } else {
           agent = XQ.LLMAgent.create({
             side: side, provider: v.provider, model: specs[0] || v.model, promptLevel: v.style || 'mid',
@@ -793,7 +799,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           });
           modelName = specs[0] || v.model;
         }
-        agents[side] = { kind: 'llm', label: modelName || 'LLM', model: modelName, provider: v.provider, quick: !!v.quick, style: v.style || 'mid', agent: agent };
+        agents[side] = { kind: 'llm', label: modelName || 'LLM', model: modelName, provider: v.provider, quick: !!v.quick, style: v.style || 'mid', models: modelsOut, agent: agent };
       }
     });
     paintGear();
@@ -848,8 +854,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     currentRecord = XQ.Record.blank({
       redName: agents.red ? (agents.red.model || agents.red.label) : '人类',
       redKind: agents.red ? agents.red.kind : 'human', redModel: agents.red && agents.red.model, redStyle: agents.red && agents.red.style,
+      redModels: agents.red && agents.red.models || null,   // 第31轮: 委员会阵容入谱
       blackName: agents.black ? (agents.black.model || agents.black.label) : '人类',
-      blackKind: agents.black ? agents.black.kind : 'human', blackModel: agents.black && agents.black.model, blackStyle: agents.black && agents.black.style
+      blackKind: agents.black ? agents.black.kind : 'human', blackModel: agents.black && agents.black.model, blackStyle: agents.black && agents.black.style,
+      blackModels: agents.black && agents.black.models || null
     });
     // 思考面板表头: 长名字截短显示 (悬停看全名), 防止挤掉 stat
     function short(n) { n = String(n || ''); return n.length > 11 ? n.slice(0, 10) + '…' : n; }
@@ -1916,8 +1924,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var tag = s.winner === 'red' ? T('rp_tag_red_win') : s.winner === 'black' ? T('rp_tag_black_win') : (s.result ? (resTag[s.result] || s.result) : T('rp_tag_ongoing'));
     rpEl.head.innerHTML = '<b>' + esc2(s.stamp) + '</b> · '
       + esc2(s.red) + (s.redModel ? ' <span style="color:#c4a56e;font-size:11px">[' + esc2(s.redModel) + ']</span>' : '')
+      + (s.redModels && s.redModels.length ? ' <span style="color:#ffd76a;font-size:11px">[' + esc2((XQ.I18N ? XQ.I18N.tArgs('rp_committee_tag', { n: s.redModels.join(' + ') }) : s.redModels.join(' + '))) + ']</span>' : '')   // 第31轮: 委员会阵容
       + ' <span style="color:#7a5a2a">vs</span> '
       + esc2(s.black) + (s.blackModel ? ' <span style="color:#c4a56e;font-size:11px">[' + esc2(s.blackModel) + ']</span>' : '')
+      + (s.blackModels && s.blackModels.length ? ' <span style="color:#ffd76a;font-size:11px">[' + esc2((XQ.I18N ? XQ.I18N.tArgs('rp_committee_tag', { n: s.blackModels.join(' + ') }) : s.blackModels.join(' + '))) + ']</span>' : '')   // 第31轮: 委员会阵容
       + ' ' + TA('rp_head_plies', { n: s.plies }) + ' ' + tag
       + (s.durationMs ? ' · ' + TA('rp_total_time', { s: Math.round(s.durationMs / 1000) }) : '')
       + rpHeadSideStats()

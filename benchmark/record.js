@@ -9,8 +9,8 @@
     return {
       id: 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       date: new Date().toISOString(),
-      red: { name: opts.redName || 'Red', kind: opts.redKind || 'human', model: opts.redModel || null, style: opts.redStyle || null },
-      black: { name: opts.blackName || 'Black', kind: opts.blackKind || 'human', model: opts.blackModel || null, style: opts.blackStyle || null },
+      red: { name: opts.redName || 'Red', kind: opts.redKind || 'human', model: opts.redModel || null, style: opts.redStyle || null, models: opts.redModels || null },
+      black: { name: opts.blackName || 'Black', kind: opts.blackKind || 'human', model: opts.blackModel || null, style: opts.blackStyle || null, models: opts.blackModels || null },
       moves: [],          // {n, side, from, to, piece, captured, name, timeMs}
       result: null,       // 'checkmate' | 'stalemate' | 'perpetual' (v2.0 长将判负) | 'repetition' (v2.2 三次重复判和) | 'natural' (v3.8 自然限着判和) | 'resign' | 'max_plies' | 'error'
       winner: null,       // 'red' | 'black' | null

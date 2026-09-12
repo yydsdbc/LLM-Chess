@@ -96,6 +96,45 @@ function resetStub(script) { callN = 0; scripted = script; }
   const mv5 = await c1.next(eng);
   ok(XQ.Move.sqName(mv5.to) === 'e3', 'C6 单模型会诊退化为普通单模型');
 
+  // C9 安全否决: 多数票投挂车吃卒 (黑马 c6 保护, 静态净损 9), 静态最优选民是上马 → 否决改选   第31轮
+  {
+    const bd = XQ.Engine.create().cloneBoard();   // startBoard 需要 Board 实例 (有 clone 方法)
+    bd.set(4, 5, { color: 'red', type: 'rook', id: 'red-rook-x' });   // 红车 e5 (Board 是 90 格一维, set(x,y,p))
+    bd.set(2, 4, { color: 'black', type: 'knight', id: 'bk-c6' });   // 黑马 c6 保护 e7 卒 (吃卒被马反吃, 净损 9)
+    const engV = XQ.Engine.create({ startBoard: bd });
+    resetStub([{ f: 'e5', t: 'e7', c: 0.9 }, { f: 'e5', t: 'e7', c: 0.9 }, { f: 'b1', t: 'c3', c: 0.5 }]);
+    const cV = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['v1', 'v2', 'v3'], mode: 'council' });
+    const mvV = await cV.next(engV);
+    ok(XQ.Move.sqName(mvV.to) === 'c3', 'C9 安全否决: 多数送车改静态最优 c3 (得 ' + XQ.Move.sqName(mvV.to) + ')');
+    ok((mvV.meta.reasoning || '').indexOf('安全否决') >= 0, 'C9 reasoning 记录否决原因');
+  }
+
+  // C10 全票标记: 两选民同落点 → [会诊 全票 2]   第31轮
+  resetStub([{ f: 'h3', t: 'e3', c: 0.8 }, { f: 'h3', t: 'e3', c: 0.7 }]);
+  const cU = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['u1', 'u2'], mode: 'council' });
+  const mvU = await cU.next(eng);
+  ok((mvU.meta.summary || '').indexOf('[会诊 全票 2]') >= 0, 'C10 全票标记 (得 ' + (mvU.meta.summary || '').slice(-12) + ')');
+
+  // C11 进度回调: answered 1→2→3   第31轮
+  resetStub([{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.5 }, { f: 'h3', t: 'c3', c: 0.5 }]);
+  const prog = [];
+  const cP = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['p1', 'p2', 'p3'], mode: 'council', onProgress: function (p) { prog.push(p.answered); } });
+  await cP.next(eng);
+  ok(JSON.stringify(prog) === '[1,2,3]', 'C11 onProgress answered 序列 1,2,3 (得 ' + JSON.stringify(prog) + ')');
+
+  // C12 minVotes: 两选民互不相同 → 回落最高信心   第31轮
+  resetStub([{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.92 }]);
+  const cM = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['q1', 'q2'], mode: 'council', minVotes: 2 });
+  const mvM = await cM.next(eng);
+  ok(XQ.Move.sqName(mvM.to) === 'g3', 'C12 minVotes=2 未达 → 最高信心 g3 (得 ' + XQ.Move.sqName(mvM.to) + ')');
+
+  // C13 votes 明细结构   第31轮
+  resetStub([{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.5 }]);
+  const cD = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['d1', 'd2'], mode: 'council' });
+  const mvD = await cD.next(eng);
+  ok(Array.isArray(mvD.meta.votes) && mvD.meta.votes.length === 2 && mvD.meta.votes[0].model === 'stub:d1' && mvD.meta.votes[0].ok === true, 'C13 meta.votes 结构化明细');
+  ok(mvD.meta.votes[0].to === 'e3' && typeof mvD.meta.votes[0].conf === 'number', 'C13 votes 含落点/信心');
+
   console.log(failed ? '_committee_agent: ' + failed + ' FAIL' : '_committee_agent: ALL PASS');
   process.exit(failed ? 1 : 0);
 })().catch(function (e) { console.error('suite crashed:', e); process.exit(1); });

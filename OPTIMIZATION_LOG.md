@@ -1054,3 +1054,54 @@
 - 边界: systemPrompt 未动; server.js 未动本轮 (max_tokens 钳制在 server.js! → 需重启生效); 零新依赖
 - 触点: ui/app.js / ui/renderer.js? (无) / index.html / ui/i18n.js (+20 键) / benchmark/elo.js / benchmark/record.js / ai/committee_agent.js / server.js / test/_committee_agent.js / test/_logic_layer.js / test/_server_http.js / docs/ARCHITECTURE.md / CHANGELOG
 - 修正声明: 第28轮 LOG 第21项 (回放节流) 当时未实际落地 (脚本中断静默丢弃), 本轮补上并在上文如实注记
+
+## 2026-09-12 ~10:10 第31轮 (v1.0.daily, zcode — 指令「测试并给多LLM作出至少30个优化」)
+
+基线 15/15 全绿。30 项全部围绕第29轮的多 LLM 同方推理 (committee) 展开:
+
+【核心增强 (1-8)】
+1. **evalMove2Static 模块级纯函数**: 静态交换评分从 create 闭包提升为模块级 (create 内委托, 行为不变; test_llm_convo 149 项回归全绿)
+2. **会诊安全否决** (safetyCheck 默认 static): 多数票落点静态净损 ≥3 分 → 改采静态最优选民 — 防「多数暴走送大子」(两个模型都说送车就真送车)
+3. 否决原因写进 reasoning ([安全否决: 多数落点静态净损 X → 改静态最优 voter])
+4. **meta.votes 结构化投票明细**: 全体选民 model/from/to/conf/ms/失败原因 — 回放/排障可读
+5. **全票标记**: 全体同落点 → [会诊 全票 N] (区分于 N/M)
+6. **minVotes 选项**: 赢家票数不足时回落最高信心单一应答 (两选民互不相同时有意义)
+7. **onProgress 进度回调**: answered/total/voter 每选民应答即触发
+8. **rotate 跳坏选民**: 连续 2 次失败自动跳过 (成功清零; 全体异常回退原轮换不卡死)
+
+【逐侧配置 + 工程 (9-14)】
+9. **逐侧多 LLM 模式**: 红/黑各自独立选择 off/rotate/council (原全局单选移除, 一侧会诊另一侧可轮换)
+10. 设置面板重构: 全局 ui-multi → 红/黑列内 ai-red-multi/ai-black-multi
+11. readSettings/fillSettings 逐侧读写 + 旧全局 multi 值自动迁移 (旧存档/备份兼容)
+12. 重复模型去重 (同一模型写两遍 → 单选民)
+13. 委员会阵容入谱: Record.blank 新增 redModels/blackModels → 回放头可展示
+14. voterBudgetMs 上层调参 (app 侧 90s)
+
+【展示 (15-16)】
+15. 回放头委员会阵容 chip (金色 [会诊 a + b], i18n rp_committee_tag ZH/EN)
+16. 会诊进度实时上卡: ⚡ 会诊中 (n/m 已应答)… 替换思考中卡片文字
+
+【测试 (17-23)】
+17. C9 安全否决测试: 自定义盘面 (startBoard 需 Board 实例 + Board.set 一维 API + e7 卒补黑马保护 — 三处调试) 多数送车 → 否决改 c3 上马
+18. C10 全票标记测试
+19. C11 进度回调序列测试 (answered 1,2,3)
+20. C12 minVotes 测试 (互不相同 → 最高信心)
+21. C13 votes 结构测试 (model/to/conf/ok)
+22. _logic_layer +L2 redModels 入谱断言
+23. committee 套件 14→20 断言全绿 (重构后 llm_convo 149 项回归全绿 — evalMove2 委托无行为变化)
+
+【文档 (24-26)】
+24. README EN 多 LLM 段重写 (逐侧模式/跳坏选民/安全否决/实时进度/预算)
+25. README zh 同步
+26. ARCHITECTURE committee 行更新 (否决/预算/进度/逐侧)
+
+【杂项 (27-30)】
+27. 会诊 reasoning 失败选民显示 '模型 失败' (原 ✗ 记号弱)
+28. i18n +1 键 rp_committee_tag (255→256... 实 257 含上轮; parity 守护过)
+29. IAB 实机验证: 红会诊 (glm-a, glm-b) + 黑轮换 (glm-c, glm-d) 同场对局 — 决策卡 [会诊 全票 2] 全程 + 轮换侧独立运转 + 模型卡各自阵容; 完整走到三次重复判和 → Elo 记账 (延续第30轮验证链)
+30. 门禁: npm run check ALL PASS + npm test 并行 15/15 全绿 (257 键 i18n parity 过)
+
+【边界与注记】
+- ai/llm_agent.js 仅重构 evalMove2 位置 (行为不变, 提示词/dump 无涉); server.js 未动; 零新依赖
+- 设计取舍: 辩论制 (主模型出招+同侪点评改着) 需要 llm_agent 注入外部上下文 — 会破坏前缀缓存不变式, 本轮不做 (列下轮候选, 可在 committee 层用一次性实例绕过但丢缓存)
+- meta.reasoning/summary 中会诊标记为数据性中文 (与兑底标记同口径, EN 用户可见中文标记 — 记录数据语言先例)

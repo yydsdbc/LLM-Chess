@@ -16,6 +16,8 @@
       black: (rec.black && rec.black.name) || '黑方',
       redModel: (rec.red && rec.red.model) || null,
       blackModel: (rec.black && rec.black.model) || null,
+      redModels: (rec.red && rec.red.models) || null,
+      blackModels: (rec.black && rec.black.models) || null,
       plies: (rec.moves && rec.moves.length) || 0,
       result: rec.result || null,
       winner: rec.winner || null,

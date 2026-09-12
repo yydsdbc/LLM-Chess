@@ -28,6 +28,7 @@
       };
     });
     var rotation = 0;
+    var errStreak = {};   // 第31轮: 连续失败计数 (rotate 模式连续 2 失败的选民本轮跳过, 成功即清零)
 
     function usage() {
       var u = { total: 0, prompt: 0, cacheHit: 0, blocked: 0, attempts: 0 };
@@ -42,20 +43,38 @@
 
     function next(engine, history) {
       if (mode === 'rotate') {
-        var pick = agents[rotation % agents.length];
-        rotation++;
+        var pick = null;
+        for (var tries = 0; tries < agents.length; tries++) {
+          var cand = agents[rotation % agents.length];
+          rotation++;
+          if ((errStreak[cand.name] || 0) < 2) { pick = cand; break; }   // 第31轮: 连续 2 失败的选民跳过 (全体跳过则回退原轮换)
+        }
+        if (!pick) pick = agents[rotation % agents.length];
         return pick.agent.next(engine, history).then(function (mv) {
+          errStreak[pick.name] = 0;
           mv.meta = mv.meta || {};
           mv.meta.reasoning = '[轮换 ' + pick.name + '] ' + (mv.meta.reasoning || '');
           return mv;
+        }).catch(function (e) {
+          errStreak[pick.name] = (errStreak[pick.name] || 0) + 1;
+          throw e;
         });
       }
       // council: 并行作答 (错峰发车) → 落点投票; 选民预算超时按弃权 (第30轮, opts.voterBudgetMs 默认 60s)
       var budget = typeof opts.voterBudgetMs === 'number' ? opts.voterBudgetMs : 60000;
+      var answered = 0;
+      var votes = [];   // 第31轮: 结构化投票明细 [{model, from, to, conf, ms, ok|fail}]
+      var t0 = Date.now();
       var calls = agents.map(function (a, idx) {
         return new Promise(function (res) {
           var settled = false;
-          var done = function (v) { if (!settled) { settled = true; res(v); } };
+          var done = function (v) {
+            if (settled) return;
+            settled = true;
+            answered++;
+            if (opts.onProgress) { try { opts.onProgress({ answered: answered, total: agents.length, voter: a.name, ok: !!v.mv }); } catch (eP) {} }
+            res(v);
+          };
           setTimeout(function () {
             // 第30轮修正: 预算从选民开始作答起算 (错峰等待不计入)
             if (budget > 0) setTimeout(function () { done({ err: new Error('voter budget ' + budget + 'ms exceeded'), name: a.name, timeout: true }); }, budget);
@@ -67,6 +86,11 @@
       });
       return Promise.all(calls).then(function (rs) {
         var good = rs.filter(function (r) { return r.mv; });
+        rs.forEach(function (r) {   // 第31轮: 结构化投票明细 (含失败选民)
+          votes.push(r.mv
+            ? { model: r.name, from: XQ.Move.sqName(r.mv.from), to: XQ.Move.sqName(r.mv.to), conf: confOf(r.mv), ms: Date.now() - t0, ok: true }
+            : { model: r.name, fail: String((r.err && r.err.message) || r.err || 'failed').slice(0, 60), ok: false });
+        });
         if (!good.length) throw (rs[0] && rs[0].err) || new Error('committee: all voters failed');
         var tally = {};
         good.forEach(function (r) {
@@ -80,20 +104,53 @@
           var t = tally[k];
           if (!best || t.votes > best.votes || (t.votes === best.votes && t.conf > best.conf)) best = t;
         });
-        var win = best.first;
-        var mv = win.mv;
+        var winName = best.first.name;
+        var winMv = best.first.mv;
+        var vetoNote = '';
+        // 第31轮: minVotes — 赢家票数不足时回落到信心最高的单一应答
+        var minVotes = typeof opts.minVotes === 'number' ? opts.minVotes : 1;
+        if (best.votes < minVotes) {
+          var top = good[0];
+          good.forEach(function (r) { if (confOf(r.mv) > confOf(top.mv)) top = r; });
+          if (top.name !== winName) {
+            winName = top.name; winMv = top.mv; best = tally[XQ.Move.sqName(winMv.to)];
+            vetoNote = ' [minVotes ' + minVotes + ' 未达 → 改最高信心 ' + winName + ']';
+          }
+        }
+        // 第31轮: 安全否决 — 多数票落点静态净损 ≥3 分时改采静态最优选民 (防多数暴走送大子)
+        if (opts.safetyCheck !== 'off' && XQ.LLMAgent && XQ.LLMAgent.evalMove2Static) {
+          var uniq = {}, order = [];
+          good.forEach(function (r) {
+            var k2 = XQ.Move.sqName(r.mv.from) + XQ.Move.sqName(r.mv.to);
+            if (!uniq[k2]) { uniq[k2] = true; order.push(r); }
+          });
+          var bestS = null, winS = null, alt = null;
+          order.forEach(function (r) {
+            var sc = XQ.LLMAgent.evalMove2Static(engine, side, r.mv.from, r.mv.to);
+            if (bestS === null || sc > bestS) { bestS = sc; alt = r; }
+            if (r.name === winName) winS = sc;
+          });
+          if (winS != null && bestS != null && bestS - winS >= 3 && alt && alt.name !== winName) {
+            winName = alt.name; winMv = alt.mv; best = tally[XQ.Move.sqName(winMv.to)];
+            vetoNote = ' [安全否决: 多数落点静态净损 ' + (bestS - winS).toFixed(1) + ' → 改静态最优 ' + winName + ']';
+          }
+        }
+        var mv = winMv;
         mv.meta = mv.meta || {};
+        mv.meta.votes = votes;   // 第31轮: 结构化投票明细 (回放/排障可读)
         mv.meta.candidates = good.map(function (r) {   // 复用决策卡候选位: 全体选民一览 (*=胜出)
           return {
-            move: XQ.Move.sqName(r.mv.from) + '-' + XQ.Move.sqName(r.mv.to) + (r.name === win.name ? '*' : ''),
+            move: XQ.Move.sqName(r.mv.from) + '-' + XQ.Move.sqName(r.mv.to) + (r.name === winName ? '*' : ''),
             score: confOf(r.mv).toFixed(2)
           };
         });
-        if (mv.meta.summary) mv.meta.summary = mv.meta.summary + ' [会诊 ' + best.votes + '/' + good.length + ']';
-        else mv.meta.summary = '会诊 ' + best.votes + '/' + good.length + ' 同侪同选 ' + best.sq;
+        var unanimity = good.length > 1 && Object.keys(tally).length === 1;
+        var tag = unanimity ? ' [会诊 全票 ' + good.length + ']' : ' [会诊 ' + best.votes + '/' + good.length + ']';
+        if (mv.meta.summary) mv.meta.summary = mv.meta.summary + tag;
+        else mv.meta.summary = '会诊 ' + best.votes + '/' + good.length + ' 同侪同选 ' + best.sq + tag;
         mv.meta.reasoning = '同侪会诊 ' + good.length + '/' + agents.length + ' 应答: '
-          + good.map(function (r) { return r.name + '→' + XQ.Move.sqName(r.mv.to); }).join(', ')
-          + ' (胜出: ' + win.name + ')';
+          + votes.map(function (v) { return v.ok ? (v.model + '→' + v.to) : (v.model + ' 失败'); }).join(', ')
+          + ' (胜出: ' + winName + ')' + vetoNote;
         mv.meta.confidence = Math.max(0, Math.min(1, good.reduce(function (s2, r) { return s2 + confOf(r.mv); }, 0) / good.length));
         return mv;
       });

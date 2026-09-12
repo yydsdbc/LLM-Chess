@@ -24,7 +24,53 @@
   // 子力基础值: 车9 / 马4 / 炮4.5 / 士象2 / 兵1 (过河2) / 将不计
   var VALUES = { rook: 9, knight: 4, cannon: 4.5, pawn: 1, advisor: 2, bishop: 2, king: 0 };
 
-  function create(opts) {
+    // ── 第31轮: 静态交换评分提升为模块级纯函数 (committee 会诊安全否决复用; create 内 evalMove2 委托至此, 行为不变) ──
+  function evalMove2Static(eng, side, fromSq, toSq) {
+    var V = { rook: 9, cannon: 4.5, knight: 4, advisor: 2, bishop: 2, king: 100, pawn: 1 };   // v1.7.6: elephant→bishop (引擎类型名, 原键永不命中 → 兑底评分把象当 0 分)
+    var op = side === 'red' ? 'black' : 'red';
+    var score = 0;
+    var tgt = eng.pieceAt(toSq.x, toSq.y);
+    if (tgt && tgt.color !== side) score += (V[tgt.type] || 0) * 10;
+    // 第28轮 兑底微知识: 过河兵推进 +0.3 / 炮占中线 +0.2 — 兜底不再纯吃子导向 (确定性, 不动 systemPrompt)
+    var mover0 = eng.pieceAt(fromSq.x, fromSq.y);
+    if (mover0 && mover0.type === 'pawn') {
+      var crossed0 = side === 'red' ? toSq.y <= 4 : toSq.y >= 5;
+      if (crossed0 && toSq.y !== fromSq.y) score += 0.3;
+    }
+    if (mover0 && mover0.type === 'cannon' && toSq.x === 4) score += 0.2;
+    try {
+      var b2 = eng.cloneBoard();
+      var l2 = XQ.Generator.generateLegalMoves(b2, side);
+      var picked = null;
+      for (var j = 0; j < l2.length; j++) {
+        var q = l2[j];
+        if (q.from.x === fromSq.x && q.from.y === fromSq.y && q.to.x === toSq.x && q.to.y === toSq.y) { picked = q; break; }
+      }
+      if (picked) {
+        b2.applyMove(picked);
+        var replies = XQ.Generator.generateLegalMoves(b2, op);
+        if (!replies.length) score += 1000;   // v1.7.9: 该着绝杀/困毙 = 直接取胜, 兑底/贪心优先杀 (压倒一切子力得失)
+        var worst = 0;
+        for (var k = 0; k < replies.length; k++) {
+          var rp = replies[k];
+          if (rp.captured && rp.to.x === toSq.x && rp.to.y === toSq.y) {
+            var loss = V[rp.captured.type] || 0;   // 我方被吃子
+            b2.applyMove(rp);   // v2.2 修复 (同款 gain 恒 0 bug): 先落对方吃子再算吃回, 有保护的大子不再被高估损失
+            var l3 = XQ.Generator.generateLegalMoves(b2, side);
+            var gain = 0;   // 我方吃回对方进攻子
+            for (var q3 = 0; q3 < l3.length; q3++) {
+              if (l3[q3].captured && l3[q3].to.x === rp.to.x && l3[q3].to.y === rp.to.y) gain = Math.max(gain, V[l3[q3].captured.type] || 0);
+            }
+            b2.undoMove(rp);
+            worst = Math.max(worst, loss - gain);
+          }
+        }
+        score -= worst * 10;
+      }
+    } catch (eE) {}
+    return score;
+  }
+function create(opts) {
     var side = opts.side || 'black';
     var provider = opts.provider || 'moonshot';
     var model = opts.model || '';
@@ -272,52 +318,9 @@
         + '## 你的合法着法(唯一选项来源, 共 ' + legal.split(' ').length + ' 个)' + mateHint + ':\n' + legal + '\n'
         + retry;   // v2.6: 重试块绝对居末 (同左)
     }
+
     // ── v2.9 静态交换评分 (v1.7.5b 兑底安全阀同款, 提升至 create 层供 legalAnnotated 复用): 1 层贪心 (吃子价值 - 被吃净损), 确定性 ──
-    function evalMove2(eng, fromSq, toSq) {
-      var V = { rook: 9, cannon: 4.5, knight: 4, advisor: 2, bishop: 2, king: 100, pawn: 1 };   // v1.7.6: elephant→bishop (引擎类型名, 原键永不命中 → 兑底评分把象当 0 分)
-      var op = side === 'red' ? 'black' : 'red';
-      var score = 0;
-      var tgt = eng.pieceAt(toSq.x, toSq.y);
-      if (tgt && tgt.color !== side) score += (V[tgt.type] || 0) * 10;
-      // 第28轮 兑底微知识: 过河兵推进 +0.3 / 炮占中线 +0.2 — 兜底不再纯吃子导向 (确定性, 不动 systemPrompt)
-      var mover0 = eng.pieceAt(fromSq.x, fromSq.y);
-      if (mover0 && mover0.type === 'pawn') {
-        var crossed0 = side === 'red' ? toSq.y <= 4 : toSq.y >= 5;
-        if (crossed0 && toSq.y !== fromSq.y) score += 0.3;
-      }
-      if (mover0 && mover0.type === 'cannon' && toSq.x === 4) score += 0.2;
-      try {
-        var b2 = eng.cloneBoard();
-        var l2 = XQ.Generator.generateLegalMoves(b2, side);
-        var picked = null;
-        for (var j = 0; j < l2.length; j++) {
-          var q = l2[j];
-          if (q.from.x === fromSq.x && q.from.y === fromSq.y && q.to.x === toSq.x && q.to.y === toSq.y) { picked = q; break; }
-        }
-        if (picked) {
-          b2.applyMove(picked);
-          var replies = XQ.Generator.generateLegalMoves(b2, op);
-          if (!replies.length) score += 1000;   // v1.7.9: 该着绝杀/困毙 = 直接取胜, 兑底/贪心优先杀 (压倒一切子力得失)
-          var worst = 0;
-          for (var k = 0; k < replies.length; k++) {
-            var rp = replies[k];
-            if (rp.captured && rp.to.x === toSq.x && rp.to.y === toSq.y) {
-              var loss = V[rp.captured.type] || 0;   // 我方被吃子
-              b2.applyMove(rp);   // v2.2 修复 (同款 gain 恒 0 bug): 先落对方吃子再算吃回, 有保护的大子不再被高估损失
-              var l3 = XQ.Generator.generateLegalMoves(b2, side);
-              var gain = 0;   // 我方吃回对方进攻子
-              for (var q3 = 0; q3 < l3.length; q3++) {
-                if (l3[q3].captured && l3[q3].to.x === rp.to.x && l3[q3].to.y === rp.to.y) gain = Math.max(gain, V[l3[q3].captured.type] || 0);
-              }
-              b2.undoMove(rp);
-              worst = Math.max(worst, loss - gain);
-            }
-          }
-          score -= worst * 10;
-        }
-      } catch (eE) {}
-      return score;
-    }
+    function evalMove2(eng, fromSq, toSq) { return evalMove2Static(eng, side, fromSq, toSq); }   // 第31轮: 委托模块级纯函数 (行为不变)
 
     // ── v1.7.8 合法列表标注: 每手附加 吃X/将/杀 标记 — 模型不必逐格扫盘即可看见每手的吃子/将军/绝杀机会
     //    v1.7.9: 将→Judge.moveTag 统一判定 (杀=绝杀无解, 困=困毙取胜); legal 由调用方传入免二次生成
@@ -779,5 +782,5 @@
     };
   }
 
-  XQ.LLMAgent = { create: create, retryWaitMs: retryWaitMs };   // v3.8: retryWaitMs 导出供测试/调用方复用
+  XQ.LLMAgent = { create: create, retryWaitMs: retryWaitMs, evalMove2Static: evalMove2Static };   // 第31轮: 供 committee 安全否决复用   // v3.8: retryWaitMs 导出供测试/调用方复用
 })(typeof window !== 'undefined' ? window : globalThis);
