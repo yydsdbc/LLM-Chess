@@ -462,13 +462,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   var thinkTimer = null, warnTimer = null;
   function bannerThinking(modelName, side) {
     var start = Date.now();
+    var gid = gameId;   // 第39轮: 世代快照 — 旧局 ticker 到期自清 (只清自己的句柄, 不误清新局定时器)
     thinkStart[side] = start;
     view.aiThinkingSide = side;
     view.aiRetries = view.aiRetries || {}; view.aiRetries[side] = 0;   // v2.5: 每手重试计数归零
     thinkWarned = false;
     if (thinkTimer) clearInterval(thinkTimer);
     var TI = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };   // 第26轮 i18n (ticker/慢思考横幅)
+    var selfTimer = null;
     var tick = function () {
+      if (gid !== gameId) { if (selfTimer) clearInterval(selfTimer); return; }
       var s = Math.floor((Date.now() - start) / 1000);           // 当前思考时间 → 顶部状态条
       var g = Math.floor((Date.now() - startTime) / 1000);       // 全局时间
       var info = document.getElementById('status-info');
@@ -485,7 +488,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       }
     };
     tick();
-    thinkTimer = setInterval(tick, 1000);
+    selfTimer = setInterval(tick, 1000);   // 第39轮: 句柄本地化 — 旧局 tick 到期时只清自己的 interval
+    thinkTimer = selfTimer;
   }
   function bannerClear() {
     if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null; }
@@ -495,7 +499,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   function warnBanner(msg, side) {
     XQ.UI.aiBanner('warn', msg, side);
     clearTimeout(warnTimer);
-    warnTimer = setTimeout(function () { XQ.UI.aiBanner('', ''); }, 6000);   // 警告 6s 后自动消失
+    var wg = gameId;   // 第39轮: 世代 — 旧局定时器不得清掉新局横幅
+    warnTimer = setTimeout(function () { if (wg !== gameId) return; XQ.UI.aiBanner('', ''); }, 6000);   // 警告 6s 后自动消失
   }
   // v1.5.5: LLM 错误分类提示 (常驻 15s, 区分网络/鉴权/格式/上游限流) — 第26轮: 分类文案全部走字典
   function errBanner(model, errMsg, side) {
@@ -517,7 +522,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       abEl.addEventListener('click', function () { clearTimeout(warnTimer); XQ.UI.aiBanner('', ''); });   // v1.0.daily: 点击横幅立即关闭 (取消残留定时器)
     }
     clearTimeout(warnTimer);
-    warnTimer = setTimeout(function () { XQ.UI.aiBanner('', ''); }, 15000);   // 错误提示延长 15s
+    var wgE = gameId;   // 第39轮: 同上 — 世代守卫 (错误横幅 15s 后自清, 不跨局)
+    warnTimer = setTimeout(function () { if (wgE !== gameId) return; XQ.UI.aiBanner('', ''); }, 15000);   // 错误提示延长 15s
   }
 
   /* v1.5.5: 复盘 — 点击 move-log 中任一手跳到该局面 (支持 还原 到最新) */
@@ -619,6 +625,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         else { warnBanner((XQ.I18N ? XQ.I18N.tArgs('warn_move_rejected', { m: holder.model, r: res.reason }) : '⚠️ ' + holder.model + ' 走法被拒: ' + res.reason), side); }   // 第26轮 i18n
         refresh();
       }).catch(function (err) {
+        if (gid !== gameId) return;   // 第39轮: 旧世代失败作废 — startRecord 触发的 abort 也会走到这里, 不得清掉新局的 aiBusy/横幅或把旧局错误写进新谱
         var secs = thinkStart[side] ? Math.round((Date.now() - thinkStart[side]) / 1000) : 0;
         aiBusy = false;
         view.aiThinking = null;
@@ -810,8 +817,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             side: side, provider: v.provider, models: specs, mode: multiMode,
             promptLevel: v.style || 'mid', thinking: v.quick ? 'disabled' : 'enabled',
             onThinking: onThink, onRetry: onRetry2, onProgress: onProg,
+            signal: function () { return gameAbort ? gameAbort.signal : undefined; },   // 第39轮: 取值函数 — applyAgents 先于 startRecord, 固化实例拿到的是随即被 abort 的旧代控制器 (每手请求被秒拒 → LLM 退化为随机走子)
             voterBudgetMs: 90000,
-            signal: gameAbort ? gameAbort.signal : undefined,   // 第38轮: 对局级中止
             jitter: true                                         // 第38轮: 退避抖动 (多选民错峰不撞限流窗)
           });
           modelName = specs.join('+');
@@ -821,7 +828,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             side: side, provider: v.provider, model: specs[0] || v.model, promptLevel: v.style || 'mid',
             thinking: v.quick ? 'disabled' : 'enabled',
             onThinking: onThink, onRetry: onRetry2,
-            signal: gameAbort ? gameAbort.signal : undefined,   // 第38轮: 对局级中止
+            signal: function () { return gameAbort ? gameAbort.signal : undefined; },   // 第39轮: 同上 — 取值函数解耦控制器换代
             jitter: true
           });
           modelName = specs[0] || v.model;

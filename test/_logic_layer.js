@@ -117,5 +117,101 @@ var w = lb.filter(function (x) { return x.name === 'L8-W'; })[0];
 ok(w && w.games === 2 && w.win === 1 && w.draw === 1 && w.loss === 0, 'L8 战绩计数 2局1胜1和 (得 ' + JSON.stringify(w) + ')');
 ok(lb.every(function (x) { return x.name.indexOf('stats:') !== 0; }), 'L8 leaderboard 不泄漏 stats 内部键');
 
+// L9 第39轮: engine legalTargets/dangerTargets memo (同盘面同格 → 同数组引用; 走子/undo 换代即重算)
+var engM = XQ.Engine.create();
+var b1 = XQ.Move.parseSq('b1');   // 红马 (y=9 底线)
+var m1a = engM.legalTargets(b1.x, b1.y);
+var m1b = engM.legalTargets(b1.x, b1.y);
+ok(m1a === m1b, 'L9 legalTargets 同盘面同格 → 同一数组引用 (memo 命中)');
+var d1a = engM.dangerTargets(b1.x, b1.y);
+var d1b = engM.dangerTargets(b1.x, b1.y);
+ok(d1a === d1b, 'L9 dangerTargets memo 命中 (第39轮新增)');
+ok(engM.legalTargets(0, 0).length === 0 && engM.dangerTargets(0, 0).length === 0, 'L9 空格/非本方 → 空数组 (不进 memo)');
+// 走一回合 (红一手中, 黑一手) 回到红方 → 同格同执子方但盘面已变, 必须重算
+var rm = engM.generateLegalMoves('red').filter(function (m) { return !(m.from.x === b1.x && m.from.y === b1.y); })[0];
+engM.applyPlayerMove(rm.from.x, rm.from.y, rm.to.x, rm.to.y);
+var bm = engM.generateLegalMoves('black')[0];
+engM.applyPlayerMove(bm.from.x, bm.from.y, bm.to.x, bm.to.y);
+var m2 = engM.legalTargets(b1.x, b1.y);
+ok(m2 !== m1a, 'L9 走子 (一回合) 后同格重算 — 状态版本键失效 (第39轮)');
+// undo → 换代 → 不复用 (修复原 history.length 键在 undo 后换着法重演回同一手数的过期命中)
+engM.undoPly();
+var m3 = engM.legalTargets(b1.x, b1.y);
+ok(m3 !== m2, 'L9 undo 后重算 — 键改状态版本, 不依手数 (第39轮)');
+
+// L10 第39轮: renderer 热路径 (DOM 桩) — 渲染层此前无 DOM 级自动化覆盖
+var DOC_MAP = {};
+function mkEl(tag) {
+  var el = {
+    tagName: tag, children: [], dataset: {}, textContent: '', className: '', _attrs: {}, _cls: {},
+    style: { setProperty: function () {}, cssText: '' },
+    appendChild: function (c) { this.children.push(c); c.parentNode = this; return c; },
+    insertBefore: function (c) { this.children.unshift(c); c.parentNode = this; return c; },
+    removeChild: function (c) { var i = this.children.indexOf(c); if (i >= 0) this.children.splice(i, 1); return c; },
+    setAttribute: function (k, v) { this._attrs[k] = v; if (k === 'id') { this.id = v; } },
+    getAttribute: function (k) { return this._attrs[k]; },
+    addEventListener: function () {}, removeEventListener: function () {},
+    querySelector: function () { return null; }, querySelectorAll: function () { return []; }
+  };
+  el.classList = {
+    add: function (c) { el._cls[c] = 1; },
+    remove: function (c) { delete el._cls[c]; },
+    toggle: function (c, on) { if (on === undefined) on = !el._cls[c]; if (on) el._cls[c] = 1; else delete el._cls[c]; return !!on; },
+    contains: function (c) { return !!el._cls[c]; }
+  };
+  Object.defineProperty(el, 'firstChild', { get: function () { return this.children[0] || null; } });
+  Object.defineProperty(el, 'id', { get: function () { return el._id || ''; }, set: function (v) { el._id = v; DOC_MAP[v] = el; } });
+  var _html = '';
+  Object.defineProperty(el, 'innerHTML', {
+    get: function () { return _html; },
+    set: function (v) { _html = v; el._htmlSets = (el._htmlSets || 0) + 1; }
+  });
+  return el;
+}
+sandbox.document = {
+  createElement: function (t) { return mkEl(t); },
+  createElementNS: function (ns, t) { return mkEl(t); },
+  getElementById: function (id) { return DOC_MAP[id] || null; },
+  querySelector: function () { return null; },
+  querySelectorAll: function () { return []; },
+  addEventListener: function () {},
+  body: mkEl('body'),
+  documentElement: { dataset: {} }
+};
+['status-text', 'sr-status', 'status-info', 'status-bar', 'btn-row', 'end-overlay'].forEach(function (id) { DOC_MAP[id] = mkEl('div'); });
+sandbox.XQ = XQ;   // L2 的 `sandbox.XQ = {}` 重置断了命名空间链 (本地 XQ 引用仍完整) — 挂回后再加载 renderer
+vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'ui', 'renderer.js'), 'utf8'), sandbox, { filename: 'ui/renderer.js' });
+ok(!!(sandbox.XQ.UI && sandbox.XQ.UI.render), 'L10 renderer 模块在 DOM 桩下加载并导出 render');
+var engR = XQ.Engine.create();
+var cnt = { snapshot: 0, isOver: 0 };
+var spy = {
+  snapshot: function () { cnt.snapshot++; return engR.snapshot(); },
+  isOver: function () { cnt.isOver++; return engR.isOver(); },
+  legalTargets: function (x, y) { return engR.legalTargets(x, y); },
+  dangerTargets: function (x, y) { return engR.dangerTargets(x, y); },
+  inCheck: function (c) { return engR.inCheck(c); },
+  naturalClock: function () { return engR.naturalClock(); },
+  result: function () { return engR.result(); }
+};
+var viewR = { boardEl: mkEl('div'), selected: null, flip: false, pendingAnim: null, startTime: Date.now(), arrow: true };
+viewR.boardEl.parentNode = mkEl('div');
+sandbox.XQ.UI.render(spy, viewR);
+ok(cnt.snapshot === 1, 'L10 render 每帧仅 1 次 snapshot (renderStatus 复用快照, 第39轮)');
+ok(cnt.isOver <= 4, 'L10 render 的 isOver 调用 O(1) 非 O(90) (第39轮提升, 实测 ' + cnt.isOver + ')');
+// 走一手 → 箭头绘制一次; 同 lastMove 重复渲染 (键盘光标移动场景) 不重建
+var mvR = engR.generateLegalMoves('red')[0];
+engR.applyPlayerMove(mvR.from.x, mvR.from.y, mvR.to.x, mvR.to.y);
+sandbox.XQ.UI.render(spy, viewR);
+var svgEl = DOC_MAP['move-arrow'];
+ok(!!svgEl && svgEl.innerHTML.indexOf('<line') >= 0, 'L10 最后着法箭头 SVG 绘制');
+var setsAfterDraw = svgEl._htmlSets || 0;
+sandbox.XQ.UI.render(spy, viewR);
+ok((svgEl._htmlSets || 0) === setsAfterDraw, 'L10 同 lastMove 重复渲染不重建箭头 SVG (第39轮去重)');
+// 键盘光标移动 (selected 变化) 也应保持 1 次 snapshot
+cnt.snapshot = 0; cnt.isOver = 0;
+viewR.selected = { x: 4, y: 9 };
+sandbox.XQ.UI.render(spy, viewR);
+ok(cnt.snapshot === 1, 'L10 选中态渲染同样仅 1 次 snapshot (legal/danger 走 memo)');
+
 console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
 process.exit(fails.length ? 1 : 0);

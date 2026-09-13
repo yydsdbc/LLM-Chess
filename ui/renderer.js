@@ -152,13 +152,14 @@
     var boardEl = view.boardEl;
     var cells = cellPool(boardEl);
     view._liveEngine = engine;   // 第33轮: 拖拽 pointerdown 时读实时棋局
+    var overNow = engine.isOver();   // 第39轮: 原 90 格循环内每格调用一次 → 提到循环外一次
 
     var selected = view.selected;
-    var legalList = (selected && !engine.isOver()) ? engine.legalTargets(selected.x, selected.y) : [];
+    var legalList = (selected && !overNow) ? engine.legalTargets(selected.x, selected.y) : [];
     var legal = {};   // 第28轮: 90 格 × O(n) find → O(1) 哈希命中
     var danger = {};
     for (var li = 0; li < legalList.length; li++) legal[legalList[li].x + ',' + legalList[li].y] = legalList[li];
-    if (selected && !engine.isOver()) {
+    if (selected && !overNow) {
       engine.dangerTargets(selected.x, selected.y).forEach(function (d) { danger[d.x + ',' + d.y] = d; });
     }
 
@@ -231,7 +232,7 @@
         c.classList.toggle('illegal-target', !hit && !!danger[x + ',' + y]);
         c.classList.toggle('last-start', !!(snap.lastMove && x === snap.lastMove.from.x && y === snap.lastMove.from.y));
         c.classList.toggle('last-move', !!(snap.lastMove && x === snap.lastMove.to.x && y === snap.lastMove.to.y));
-        c.classList.toggle('in-check', !engine.isOver() && !!p && p.type === 'king' && p.color === snap.turn && engine.inCheck(snap.turn));
+        c.classList.toggle('in-check', !overNow && !!p && p.type === 'king' && p.color === snap.turn && engine.inCheck(snap.turn));
         if (!c._clickBound) {   // 第24轮: 池化后 onclick 只绑一次 (原每帧重建 90 个闭包; 坐标恒定, 重复绑定是纯浪费)
           c._clickBound = true;
           (function (rx, ry) {
@@ -262,20 +263,26 @@
     }
     if (arrowSvg) {
       var m2 = snap.lastMove;
-      if (m2 && !view.pendingAnim && view.arrow !== false) {
-        var ax1 = dispX(m2.from.x) * 48 + 24, ay1 = dispY(m2.from.y) * 48 + 24;
-        var ax2 = dispX(m2.to.x) * 48 + 24, ay2 = dispY(m2.to.y) * 48 + 24;
-        var ang = Math.atan2(ay2 - ay1, ax2 - ax1);
-        var head = 11, wing = 5;
-        var x3 = ax2 - Math.cos(ang) * head * 1.6, y3 = ay2 - Math.sin(ang) * head * 1.6;
-        var col = m2.piece && m2.piece.color === 'red' ? 'rgba(192,57,43,.78)' : 'rgba(52,84,120,.8)';
-        arrowSvg.innerHTML = '<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="' + col + '"/></marker></defs>'
-          + '<line x1="' + ax1.toFixed(1) + '" y1="' + ay1.toFixed(1) + '" x2="' + x3.toFixed(1) + '" y2="' + y3.toFixed(1) + '" stroke="' + col + '" stroke-width="7" stroke-linecap="round" opacity=".55" marker-end="url(#ah)"/>';
-      } else if (arrowSvg.firstChild) {
-        arrowSvg.innerHTML = '';
+      // 第39轮: 箭头内容签名去重 — render 在键盘光标移动 (方向键) 时也触发, 原实现每帧重写 SVG innerHTML (无谓解析/重排)
+      var aSig = (m2 && !view.pendingAnim && view.arrow !== false)
+        ? (dispX(m2.from.x) + ',' + dispY(m2.from.y) + '>' + dispX(m2.to.x) + ',' + dispY(m2.to.y) + '|' + (m2.piece && m2.piece.color)) : '';
+      if (aSig !== arrowSvg._sig) {
+        arrowSvg._sig = aSig;
+        if (aSig) {
+          var ax1 = dispX(m2.from.x) * 48 + 24, ay1 = dispY(m2.from.y) * 48 + 24;
+          var ax2 = dispX(m2.to.x) * 48 + 24, ay2 = dispY(m2.to.y) * 48 + 24;
+          var ang = Math.atan2(ay2 - ay1, ax2 - ax1);
+          var head = 11, wing = 5;
+          var x3 = ax2 - Math.cos(ang) * head * 1.6, y3 = ay2 - Math.sin(ang) * head * 1.6;
+          var col = m2.piece && m2.piece.color === 'red' ? 'rgba(192,57,43,.78)' : 'rgba(52,84,120,.8)';
+          arrowSvg.innerHTML = '<defs><marker id="ah" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="' + col + '"/></marker></defs>'
+            + '<line x1="' + ax1.toFixed(1) + '" y1="' + ay1.toFixed(1) + '" x2="' + x3.toFixed(1) + '" y2="' + y3.toFixed(1) + '" stroke="' + col + '" stroke-width="7" stroke-linecap="round" opacity=".55" marker-end="url(#ah)"/>';
+        } else if (arrowSvg.firstChild) {
+          arrowSvg.innerHTML = '';
+        }
       }
     }
-    renderStatus(engine, view);
+    renderStatus(engine, view, snap);
     renderOverlay(engine, view);
   }
 
@@ -287,12 +294,12 @@
     } catch (e) { return ''; }
   }
 
-  function renderStatus(engine, view) {
-    var snap = engine.snapshot();
+  function renderStatus(engine, view, snap) {
+    snap = snap || engine.snapshot();   // 第39轮: 复用 render 已有的快照 (原每帧二次 90 格分配 + board.toText); 兜底保留独立调用形态
     var text = '', cls = '';
     var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
     var S18 = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
-    if (engine.isOver()) {
+    if (snap.over) {
       var r = snap.result;
       if (snap.winner === 'red') { text = T('status_win_red'); cls = 'status-win'; }
       else if (snap.winner === 'black') { text = T('status_win_black'); cls = 'status-win'; }
@@ -323,11 +330,11 @@
     try { if (engine.naturalClock && engine.naturalClock() >= 60) clockTxt = (XQ.I18N ? XQ.I18N.tArgs('status_limit', { n: engine.naturalClock() }) : ' · 限着 ' + engine.naturalClock() + '/120'); } catch (eNC) {}
     var mm = (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2);
     document.getElementById('status-info').textContent = XQ.I18N
-      ? XQ.I18N.tArgs('status_clock', { n: engine.ply(), t: mm, ph: ph ? ' · ' + ph : '', lim: clockTxt })
-      : '第' + engine.ply() + '手 · ' + mm + (ph ? ' · ' + ph : '') + clockTxt;
+      ? XQ.I18N.tArgs('status_clock', { n: snap.ply, t: mm, ph: ph ? ' · ' + ph : '', lim: clockTxt })
+      : '第' + snap.ply + '手 · ' + mm + (ph ? ' · ' + ph : '') + clockTxt;
     }
     document.getElementById('status-bar').className = cls;
-    document.getElementById('btn-row').classList.toggle('visible', engine.isOver());
+    document.getElementById('btn-row').classList.toggle('visible', snap.over);
   }
 
   function renderOverlay(engine, view) {

@@ -1444,3 +1444,34 @@
 
 - 边界: systemPrompt 未动 (2384 字, dump 新鲜度 PASS); server.js 改动 (keep-alive) 需重启; 零新依赖
 - 教训: (1) usage.requests 已被 countUsage 占用 — 新增计数改名 httpCalls 避免语义重叠 (测试当场抓出); (2) 行尾注释吞掉闭合大括号的拼接事故 (node --check 秒抓); (3) readStream 结构改造用整函数重写而非逐行替换, 避免残段
+
+## 2026-09-14 02:13 第39轮 (v1.0.daily, zcode — 指令「优化: 渲染性能 / 服务端行为测试 / PWA manifest / 文档对齐」; 14 项)
+
+基线 npm run check ALL PASS + npm test 15/15。主线: **抓出并修复第38轮 gameAbort 接线错序导致 LLM 对局静默退化为随机走子的致命回归** (headless 套件零覆盖 app.js DOM 层, 存活一轮发版); 补渲染热路径 + 生命周期世代守卫 + 服务端行为扩面。
+
+【对局生命周期 (1-4)】
+1. **致命修复 — LLM 信号接线错序**: `applyAgents()` 在初始化与 `saveAISettings` 中均先于 `startRecord()` 执行, 把当时那一个 `gameAbort.signal` **固化**进每个 agent; `startRecord()` 随即 `abort()` 同一控制器 → agent 持有已中止信号, 每手请求被 `外部中止: 对局已取消` 秒拒 → LLM 执子退化为随机走子。修复: signal 支持**取值函数**形态 (`signal: function(){ return gameAbort ? gameAbort.signal : undefined; }`), `llm_agent` 在 `chat()`/`next()` 的 catch 处逐次求值 — 与接线顺序/控制器换代彻底解耦。
+2. **scheduleAgent catch 世代守卫**: 重开/改设置触发的 abort 会让旧局在飞请求以失败形态回到 catch; 原实现无守卫, 会清掉新局 `aiBusy`/横幅并把旧局错误写进新谱 `currentRecord.note`。首行加 `if (gid !== gameId) return;`。
+3. **bannerThinking 1s ticker 世代自清**: 句柄本地化 (`selfTimer`), 旧局 tick 到期只清自己的 interval — 与 #2 成对 (只加 catch 守卫会留下旧局 interval 永久空转)。
+4. **横幅定时器世代守卫**: `warnBanner`(6s)/`errBanner`(15s) 的自动消失回调加 `gid` 判断, 旧局定时器不再清掉新局横幅。
+
+【引擎 memo / 渲染热路径 (5-9)】
+5. **dangerTargets memo**: 与 `legalTargets` 同款 ((选中格,状态版本) 键) — 选中一格后每帧重算静态交换的路径消除。
+6. **memo 键改显式盘面状态版本 `_stateVer`**: `applyPlayerMove`/`undoPly`/`newGame` 自增并失效双 memo, 取代原 `history.length` 键 — 消除「undo 后换着法重演回同一手数」的过期命中风险。
+7. **每帧仅 1 次 snapshot**: `renderStatus` 复用 `render` 的快照 (原二次 90 格分配 + `board.toText` 构造 posKey); 兜底保留独立调用形态。
+8. **isOver 提升到 90 格循环外**: 原循环内每格调用一次 → 每帧 1 次 (实测每帧 isOver 调用 2 次: render + renderOverlay)。
+9. **最后着法箭头 SVG 去重**: 内容签名 (起讫显示坐标 + 子色) 未变则不重写 `innerHTML` — 方向键移动光标会每帧渲染, 原来每次都重解析 SVG。
+
+【验证/守护 (10-14)】
+10. **_logic_layer 新增 L9/L10 (DOM 桩)**: L9 引擎 memo 命中/走子与 undo 换代失效; L10 渲染热路径 (单次 snapshot / isOver O(1) / 箭头去重 / 选中态也单次 snapshot) — **先红后绿实证** (临时还原二次 snapshot → L10 两项当场红)。
+11. **test_llm_convo 149→151**: signal 取值函数形态 — (a) 返回已中止控制器 → 立即"外部中止"; (b) 换代后旧代 abort 不误伤新代请求 (修复场景的单元锚点)。
+12. **_server_http 45→54 (server.js 零改动)**: 未配 apiKey → 400 可操作提示 / 缺 model·messages → 400 / **OpenAI 流式 SSE 直通** (stream:true → 内容 + [DONE], 实测 stub 分支) + no-store / 非流式中继带 ACAO / 反斜杠穿越非 200 且不泄源码 (平台无关断言) / 429 带 Retry-After: 60 / health.version == package.json / 目录请求 → 404 (EISDIR 不崩)。
+13. **check_ui 第14节 生命周期世代守卫** (源串层防线, 因 app.js 无 DOM 测试): catch 守卫 + 信号取值函数 ×2 + ticker 自清 + agent 侧支持 — 已证可证伪 (移除守卫立即不匹配); 第10节 PWA 扩展 (screenshots 在盘 + sizes/type 齐 + categories)。
+14. **PWA manifest 完善**: +`screenshots` (docs/ui.png 1600×1000, wide, 富安装卡片) + `categories: [games, entertainment]` + `dir`; README 双语测试表/PWA 段、ARCHITECTURE 测试地图与 ai 说明同步 (顺带修正 README 里 stale 的 _server_http 31 项/i18n 9 组)。
+
+【验证】
+- 门禁: `node --check` 全改文件 + `npm run check` ALL PASS + `npm test` 15/15 (i18n 10/10 组; _logic_layer L1-L10; _server_http 54/54; test_llm_convo 151 项)
+- 浏览器实机 (IAB, 预置 xq_v1_settings 双 random 自动开局): 90 格 + 32 子 + 对局自动推进 (log 增长) + 最后着法箭头已绘制 + 键盘光标 1 格 + **零 console error / unhandledrejection**; 并在真实浏览器包内验证 signal 取值函数 (已中止代 → 立即"外部中止", 证明 getter 被求值而非被当信号对象)
+- 教训: (1) 第38轮 AbortController 接线顺序错误在 headless 套件下完全不可见 — `ui/app.js` 无 DOM 级测试是系统性盲区, 本轮以「源串守卫 + DOM 桩渲染测试」两道补上; (2) 加 catch 世代守卫必须同时给 ticker 加世代自清, 否则旧局 interval 永久空转; (3) 守护测试先跑红再修绿。
+- 边界: systemPrompt 未动 (2384 字, dump 新鲜度 PASS); server.js 未改 (纯测试扩面, 无需重启); 套件数 15 不变 (徽章/目录树无需同步); 零新依赖
+- 触点: ai/llm_agent.js / ui/app.js / ui/renderer.js / core/engine.js / manifest.json / test/_logic_layer.js / test/test_llm_convo.js / test/_server_http.js / test/check_ui.js / README.md / README.zh-CN.md / docs/ARCHITECTURE.md / CHANGELOG.md / prompts_dump.md (仅时间戳)

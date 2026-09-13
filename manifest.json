@@ -3,6 +3,8 @@
   "short_name": "LLM-chess",
   "description": "Watch two LLMs play Chinese Chess (Xiangqi) with live thinking streams, decision cards and replays.",
   "lang": "zh-CN",
+  "dir": "ltr",
+  "categories": ["games", "entertainment"],
   "id": "./",
   "start_url": "./",
   "scope": "./",
@@ -11,6 +13,9 @@
   "theme_color": "#080607",
   "shortcuts": [
     { "name": "新对局 · 双 AI 自动开局", "short_name": "新对局", "url": "./" }
+  ],
+  "screenshots": [
+    { "src": "docs/ui.png", "sizes": "1600x1000", "type": "image/png", "form_factor": "wide", "label": "对局 HUD: 双 LLM 思考流 / 决策卡 / 评值走势" }
   ],
   "icons": [
     { "src": "ui/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },

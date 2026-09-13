@@ -617,6 +617,29 @@ function ok(cond, name) {
     ok(maErr && /外部中止/.test(maErr.message), '中途外部中止 → 拒绝并归因外部中止 (不误报超时, v3.9a)');
     ok(agentMA.usage().attempts === 1, '外部中止不烧重试 (attempts 停在 1, v3.9a)');
   }
+  {
+    // 第39轮: signal 取值函数形态 — app 侧 applyAgents 早于 startRecord, 固化实例拿到的是随即被 abort 的旧代控制器
+    // (浏览器里表现为每手请求被"外部中止"秒拒 → LLM 退化为随机走子; 无 DOM 测试覆盖, 故在 agent 层锁死函数形态语义)
+    // a) 取值函数返回已中止控制器 → 与对象形态同语义: 立即拒绝并归因外部中止
+    const acFn = new AbortController();
+    acFn.abort();
+    const agentFn = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'mock-fn-abort', signal: function () { return acFn.signal; } });
+    let fnErr = null;
+    try { await agentFn.next(XQ.Engine.create(), null); } catch (e) { fnErr = e; }
+    ok(fnErr && /外部中止/.test(fnErr.message), 'signal 取值函数返回已中止控制器 → 立即拒绝 (第39轮)');
+    // b) 换代: 取值函数始终指向"当前代"控制器 — 旧代 abort 不误伤新代请求 (修复的正是接线错序场景)
+    const acOld = new AbortController();
+    const acCur = { c: acOld };
+    const agentFn2 = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'mock-fn-swap', signal: function () { return acCur.c.signal; } });
+    globalThis.fetch = async function () {
+      return { ok: true, headers: { get: (k) => (k.toLowerCase() === 'content-type' ? 'application/json' : null) },
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({ from: 'b3', to: 'e3', summary: '换代可用', evaluation: '+0.2', confidence: 0.8 }) } }] }) };
+    };
+    acOld.abort();                        // 旧代作废 (等价 startRecord 的 abort)
+    acCur.c = new AbortController();      // 新代控制器 (等价 gameAbort 换代)
+    const mvFn = await agentFn2.next(XQ.Engine.create(), null);
+    ok(mvFn && mvFn.from.x === 1 && mvFn.to.x === 4, 'signal 取值函数换代后请求正常 (旧代 abort 不误伤新代, 第39轮)');
+  }
 
   // ── 开局硬保护回归: 炮吃马被代码拦截 (v2.3 修复: 引擎类型是 knight/bishop, 原 horse/elephant 永不命中 → 拦截失效) ──
   {

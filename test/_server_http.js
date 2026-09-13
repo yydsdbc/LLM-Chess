@@ -72,6 +72,12 @@ async function main() {
         uRes.writeHead(200, { 'Content-Type': 'application/json' });
         return uRes.end(JSON.stringify({ content: [{ type: 'text', text: '{"from":"h3","to":"e3","summary":"anthropic-ok","confidence":0.7}' }], usage: { input_tokens: 12, output_tokens: 6 } }));
       }
+      if (jb.stream) {   // 第39轮: OpenAI 流式透传路径 (原测试只用非流式, SSE 直通零覆盖)
+        uRes.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
+        uRes.write('data: ' + JSON.stringify({ choices: [{ delta: { content: 'stream-chunk' } }] }) + '\n\n');
+        uRes.write('data: [DONE]\n\n');
+        return uRes.end();
+      }
       var echo = jb.max_tokens || 0;
       uRes.writeHead(200, { 'Content-Type': 'application/json' });
       uRes.end(JSON.stringify({ echo_max_tokens: echo, choices: [{ message: { content: '{"from":"h3","to":"e3","summary":"upstream-ok","confidence":0.8}' } }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }));
@@ -82,7 +88,7 @@ async function main() {
   const fS = require('fs');   // 第29轮: 文件级 const fs 在 133 行 (TDZ), main 顶部先取独立引用
   const keysFile = path.join(ROOT, 'temp', 'guard-keys-' + process.pid + '.json');
   fS.mkdirSync(path.dirname(keysFile), { recursive: true });
-  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key' }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', protocol: 'anthropic', apiKey: 'anthropic-test-key' } } }));
+  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key' }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', protocol: 'anthropic', apiKey: 'anthropic-test-key' }, stubnokey: { name: 'StubNoKey', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: '' } } }));
 
   server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile }) });
   const up = await waitHealth(40);   // ~6s 上限
@@ -191,6 +197,24 @@ async function main() {
   ok(antErr.status === 400 && antErr.body.indexOf('boom-claude') >= 0, 'anthropic 中继: 上游 type:error → 客户端 4xx + JSON error 原文 (不合成虚假成功帧)');
   ok(!!antErrUp && Array.isArray(antErrUp.messages) && antErrUp.messages.length === 2 && antErrUp.messages[0].role === 'user' && antErrUp.messages[0].content === '(开局)' && antErrUp.messages[1].role === 'assistant', 'anthropic 中继: 首条 assistant 前 unshift user (开局) — 交替约束补位不吞原消息');
 
+  // 第39轮: 请求侧校验缺口 (未配 Key / 缺字段) + OpenAI 流式透传 + 目录与反斜杠边界 (server.js 零改动)
+  const noKey = await postChat({ provider: 'stubnokey', model: 'x', messages: [{ role: 'user', content: 'x' }] });
+  ok(noKey.status === 400 && /未配置 apiKey/.test(noKey.body), '未配置 apiKey 的服务商 → 400 + 可操作提示 (不触上游)');
+  const missModel = await postChat({ provider: 'stubprov', messages: [{ role: 'user', content: 'x' }] });
+  ok(missModel.status === 400, '缺 model/messages → 400 (参数校验先于中继)');
+  const streamRes = await postChat({ provider: 'stubprov', model: 'stub-model', messages: [{ role: 'user', content: 's' }], stream: true });
+  ok(streamRes.status === 200 && /text\/event-stream/.test(streamRes.headers['content-type'] || '') && streamRes.body.indexOf('stream-chunk') >= 0 && streamRes.body.indexOf('[DONE]') >= 0, 'openai 中继流式: stream:true → 上游 SSE 帧直通 (含内容与 [DONE])');
+  ok(streamRes.headers['cache-control'] === 'no-store', 'openai 中继流式: Cache-Control no-store (流式响应不缓存)');
+  ok(relayRes.headers['access-control-allow-origin'] === '*', 'openai 中继非流式: 响应带 ACAO (无 Origin → *)');
+  let healthVer = '', pkgVer = '';
+  try { healthVer = JSON.parse(health.body).version; } catch (eV1) {}
+  try { pkgVer = JSON.parse(require('fs').readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version; } catch (eV2) {}
+  ok(!!healthVer && healthVer === pkgVer, '/api/health.version == package.json version (' + healthVer + ')');
+  const dirReq = await req('GET', '/ui');
+  ok(dirReq.status === 404, 'GET /ui (目录) → 404 (EISDIR 不崩连接)');
+  const bslash = await req('GET', '/' + encodeURIComponent('..\\') + 'server.js');
+  ok(bslash.status !== 200 && bslash.body.indexOf('API Key 只保存在服务端') < 0, '反斜杠穿越 (..\\server.js) → 非 200 且不泄露源码 (Windows/POSIX 双向断言)');
+
   // 第37轮: CORS 策略 (req_origin_safe 零覆盖) — localhost 回显 / 异源与无 Origin 均 '*' (走 OPTIONS 预检, 不耗限流窗)
   const or1 = await req('OPTIONS', '/api/chat', null, { Origin: 'http://localhost:5173' });
   ok(or1.status === 204 && or1.headers['access-control-allow-origin'] === 'http://localhost:5173', 'CORS 策略: localhost Origin → ACAO 回显同源');
@@ -215,6 +239,7 @@ async function main() {
   for (let i = 0; i < 12; i++) burst.push(postChat({ provider: 'no-such-prov-' + i, model: 'x', messages: [] }));
   const burstRes = await Promise.all(burst);
   ok(burstRes.some(function (r) { return r.status === 429; }), '限流: 单秒 12 连发出现 429 (8/s 窗)');
+  ok(burstRes.some(function (r) { return r.status === 429 && r.headers['retry-after'] === '60'; }), '限流 429 带 Retry-After: 60 (客户端退避依据)');
 
   finish();
 }

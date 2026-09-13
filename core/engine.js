@@ -39,6 +39,9 @@
     var history = [];        // Move[]
     var lastMove = null;
     var _tgtCache = null;   // 第37轮: legalTargets memo (任意盘面变更即由 apply/undo 重置)
+    var _dgrCache = null;   // 第39轮: dangerTargets memo (选中格每帧重算静态交换 → 记忆化)
+    var _stateVer = 0;      // 第39轮: 盘面变更版本 — memo 键用它 (原用 history.length: undo 后换着法重演回同一手数会过期命中)
+    function bumpVer() { _stateVer++; _tgtCache = null; _dgrCache = null; }
     var over = false, result = 'normal', winner = null;
     var listeners = [];
     var posCounts = {};      // v1.7.7 重复局面计数: key=盘面文本|执子方 — 三次重复判和/长将检测基础
@@ -99,14 +102,16 @@
       legalTargets: function (x, y) {
         var p = board.get(x, y);
         if (!p || p.color !== turn) return [];
-        if (_tgtCache && _tgtCache.key === x + ',' + y + '@' + history.length) return _tgtCache.list;   // 第37轮: (选中格,手数) memo
-        _tgtCache = { key: x + ',' + y + '@' + history.length, list: Generator.legalTargetsFrom(board, x, y) };
+        if (_tgtCache && _tgtCache.key === x + ',' + y + '@' + _stateVer) return _tgtCache.list;   // 第37轮 memo / 第39轮 键改状态版本
+        _tgtCache = { key: x + ',' + y + '@' + _stateVer, list: Generator.legalTargetsFrom(board, x, y) };
         return _tgtCache.list;
       },
       dangerTargets: function (x, y) {
         var p = board.get(x, y);
         if (!p || p.color !== turn) return [];
-        return Generator.dangerTargetsFrom(board, x, y);
+        if (_dgrCache && _dgrCache.key === x + ',' + y + '@' + _stateVer) return _dgrCache.list;   // 第39轮: 与 legalTargets 同款 memo (渲染热路径)
+        _dgrCache = { key: x + ',' + y + '@' + _stateVer, list: Generator.dangerTargetsFrom(board, x, y) };
+        return _dgrCache.list;
       },
 
       /**
@@ -129,6 +134,7 @@
         lastMove = m;
         turn = Piece.opponent(turn);
         bumpPos(1);
+        bumpVer();   // 第39轮: 盘面变更 → memo 失效
         var st = refreshStatus();
         // v1.7.8 长将追踪: 走完后对方被将军 → 该方连续将军计数+1, 否则清零
         if (st.result === 'check') checkStreaks[m.piece.color]++; else checkStreaks[m.piece.color] = 0;
@@ -167,6 +173,7 @@
         board.undoMove(m);
         turn = m.piece.color;
         bumpPos(-1);   // v1.7.7: 撤销走法同步回退重复计数
+        bumpVer();     // 第39轮: memo 失效 (undo 后重选/重演不复用旧盘面结果)
         // A2 v3.9 修复: 旧版从标准开局盘 Board.create() 重放 — 自定义起始局面 (opts.startBoard) 时 genesis 错位,
         // 长将计数/自然限着时钟在含将军/吃子的历史下全错; 改从真正的起始原像一次性重算 (与 applyPlayerMove 单步语义同源)
         var rs = replayStats(genesis, history);
@@ -188,6 +195,7 @@
         checkStreaks = { red: 0, black: 0 };   // v1.7.8: 长将计数随新局清零
         naturalClock = 0;   // v3.8: 自然限着计数随新局清零
         over = false; result = 'normal'; winner = null;
+        bumpVer();   // 第39轮: 新局 memo 失效
         emit('new', {});
       },
 
@@ -200,8 +208,7 @@
         return { v: 1, moves: history.map(function (m) { return [m.from.x, m.from.y, m.to.x, m.to.y]; }) };
       },
       loadSerialized: function (s) {
-        _tgtCache = null;   // 第37轮: 载入谱面即失效 targets memo (同长度异盘面边角)
-        this.newGame();
+        this.newGame();   // 第39轮: newGame 内 bumpVer 已使 memo 失效 (同长度异盘面边角一并覆盖)
         if (!s || !s.moves) return false;
         for (var i = 0; i < s.moves.length; i++) {
           var m = s.moves[i];

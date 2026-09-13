@@ -453,7 +453,7 @@ function create(opts) {
       usage.httpCalls = (usage.httpCalls || 0) + 1;   // 第38轮: HTTP 调用级计数 (独立于 requests: 后者仅计上报 usage 的应答, 本项含未上报上游)
       return new Promise(function (resolve, reject) {
         var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        var extSig = opts.signal || null;   // v3.9a: 外部中断 (对局取消/页面关闭) — 与内部看门狗共用 ctrl, 上抛时按 aborted 归因
+        var extSig = (typeof opts.signal === 'function' ? opts.signal() : opts.signal) || null;   // v3.9a: 外部中断 (对局取消/页面关闭) — 与内部看门狗共用 ctrl, 上抛时按 aborted 归因; 第39轮: signal 支持取值函数形态 (app 侧对局世代换代, 固化实例会被下一局的 abort 误伤)
         if (extSig && extSig.aborted) { reject(new Error('外部中止: 对局已取消')); return; }
         if (extSig && ctrl && typeof extSig.addEventListener === 'function') {
           extSig.addEventListener('abort', function () { try { ctrl.abort(); } catch (eA) {} });
@@ -771,7 +771,8 @@ function create(opts) {
             return mv;
           }).catch(function (err) {
             var msg = String(err && err.message || err);
-            if (opts.signal && opts.signal.aborted) throw err;   // v3.9a: 外部中止 — 调用方已放弃, 立即上抛不烧重试
+            var _extAbort = typeof opts.signal === 'function' ? opts.signal() : opts.signal;   // 第39轮: 取值函数形态同 chat
+            if (_extAbort && _extAbort.aborted) throw err;   // v3.9a: 外部中止 — 调用方已放弃, 立即上抛不烧重试
             if (/开局保护|送吃守卫/.test(msg)) usage.blocked = (usage.blocked || 0) + 1;   // v2.9: 代码级拦截计数 (match_headless 统计行用)
             // 强制思考型模型: 摘掉 thinking 字段重试 (400 REASONING_REQUIRED)
             if (thinkingMode && (/REASONING_REQUIRED|深度思考/.test(msg) || /UNKNOWN_FIELD/.test(msg))) {

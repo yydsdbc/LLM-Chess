@@ -87,7 +87,7 @@ Re-drive saved games on the board **without calling the LLM** (localStorage reco
 Captured tray, latest-move badge (4s fade), Chinese notation (炮八平五 / 砲8平5), evaluation sparkline (±3, own perspective), 60s think reminder, check banner + board pulse, endgame summary card, collapsible think panels. Obsidian × dark-gold full reskin.
 
 ### PWA (v1.0.daily)
-Installable (manifest + themed icon → standalone window / home-screen), plus a **network-first service worker**: online behavior is unchanged; offline (or with the server stopped) the shell keeps working for Random-AI play. `/api/*` responses are never cached.
+Installable (manifest + themed icon → standalone window / home-screen), plus a **network-first service worker**: online behavior is unchanged; offline (or with the server stopped) the shell keeps working for Random-AI play. `/api/*` responses are never cached. The manifest also carries a wide `screenshots` entry and store `categories` so browsers show a richer install card.
 
 ### Rule Closures (Asian rules, engine-level)
 - **Perpetual check loses**: 6 consecutive checks without changing the move → `result='perpetual'`, checker loses (`ruleEnforce:false` to disable for analysis/replay).
@@ -164,17 +164,17 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 | `npm test` | runs the full suite below |
 | `node test/run_tests.js` | engine, 49 checks (perft gold standard, repetition, perpetual-check tracking, moveTag, threefold draw, hanging guard, natural-rule draw) |
 | `node test/test_evaluation.js` | evaluation knowledge, 88 checks (phases / dynamic values / advisors / aged pawns / bare cannon / palace horse / central pawn / gate control / pawn-in-palace / bottom cannon / side+corner horse) |
-| `node test/test_llm_convo.js` | LLM agent, 149 checks (prompts / retries / fallback valve / opening guard / warnings / full-width rescue / confidence / attempts / external abort) |
+| `node test/test_llm_convo.js` | LLM agent, 151 checks (prompts / retries / fallback valve / opening guard / warnings / full-width rescue / confidence / attempts / external abort / signal-getter form) |
 | `node test/replay_smoke.js` | replay, 53 checks (data/control layers, speeds, seek, tolerance, parseEval direction, imported records, capture-jump) |
 | `node test/_clean_reason_check.js` | reasoning-stream cleaner, 10 checks |
 | `node test/cn_notation_check.js` | Chinese notation, 25 checks (classic anchors / file-disambiguation 前中后 / legacy-key sentinel) |
-| `node test/i18n_check.js` | i18n guards, 9 groups (zh/en key parity, placeholder parity, data-i18n / t() coverage, static & JS-side CJK attribute hooks) |
+| `node test/i18n_check.js` | i18n guards, 10 groups (zh/en key parity, placeholder parity, data-i18n / t() coverage, static & JS-side CJK attribute hooks, dynamic write-entry CJK) |
 | `node test/link_check.js` | docs link guard — relative links in all `.md` files must resolve to real files |
-| `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest + SW guard + replay-dialog semantics |
+| `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest (icons/screenshots/categories) + SW guard + replay-dialog semantics + life-cycle generation guards |
 | `node test/_prompt_level_smoke.js` | prompt-tier injection: each level constant + legacy style map + prefix-cache invariance |
 | `node test/replay_risk_check.js` | replay risk detector + record quota fallback |
 | `node test/_committee_agent.js` | same-side multi-LLM committee: council vote, tie-break, rotation, all-fail, usage sum |
-| `node test/_server_http.js` | server.js HTTP behavior, 31 checks (incl. real relay traversal via injected stub upstream) (spawns a real server: health shape / static+ETag/304 incl. sw.js / 404 / path-traversal 403 incl. sibling-prefix dir / malformed-encoding 400 / OPTIONS on api+static / bad-json 400 / empty body 400 / >2MB abort / unknown provider 400 / providers shape + no-key-leak / HEAD+ETag / manifest+icon+sw MIME / method guards / wrong-ETag 200 / 429 rate limit) |
+| `node test/_server_http.js` | server.js HTTP behavior, 54 checks (incl. real relay traversal via injected stub upstream) (spawns a real server: health shape+version / static+ETag/304 incl. sw.js / 404 / path-traversal 403 incl. sibling-prefix dir + backslash form / malformed-encoding 400 / OPTIONS on api+static / bad-json 400 / empty body 400 / >2MB abort / unknown provider 400 / missing-apiKey 400 / missing model-field 400 / providers shape + no-key-leak / HEAD+ETag / manifest+icon+sw MIME / method guards / wrong-ETag 200 / rate-limit 429 + Retry-After / OpenAI streaming SSE passthrough / directory 404) |
 | `node test/analyze_blunders.js <log.json>` | blunder detector (hanging moves, missed mates, shuffling; `--top=N --type=...`) |
 | `node test/match_headless.js <provider> <model> [n]` | headless LLM game, n moves |
 

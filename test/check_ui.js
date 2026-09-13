@@ -118,9 +118,16 @@ for (const ic of (man.icons || [])) {
   if (!fs.existsSync(__dirname + '/../' + ic.src)) manIssues.push('图标不在盘: ' + ic.src);
 }
 if (!(man.icons || []).length) manIssues.push('缺 icons');
+// 第39轮: 富安装卡片 — screenshots (文件在盘 + sizes/type 齐) + categories (应用商店分类)
+if (!Array.isArray(man.categories) || !man.categories.length) manIssues.push('缺 categories (第39轮)');
+if (!(man.screenshots || []).length) manIssues.push('缺 screenshots (第39轮: 安装卡片截图)');
+for (const sc of (man.screenshots || [])) {
+  if (!sc.src || !sc.sizes || !sc.type) manIssues.push('screenshot 缺 src/sizes/type: ' + JSON.stringify(sc).slice(0, 60));
+  else if (!fs.existsSync(__dirname + '/../' + sc.src)) manIssues.push('screenshot 不在盘: ' + sc.src);
+}
 const themeMeta = /<meta name="theme-color" content="([^"]+)"/.test(html);
 if (!themeMeta) manIssues.push('index.html 缺 theme-color meta');
-console.log('PWA manifest:', manIssues.length ? manIssues.join(' | ') : 'OK (' + manLink + ', icons ' + (man.icons || []).length + ')');
+console.log('PWA manifest:', manIssues.length ? manIssues.join(' | ') : 'OK (' + manLink + ', icons ' + (man.icons || []).length + ', shots ' + (man.screenshots || []).length + ', cat ' + (man.categories || []).join('/') + ')');
 if (manIssues.length) process.exit(1);
 
 // 11) 第24轮 PWA service worker 守护: 根级 sw.js 在盘 (作用域=/) + 三事件/API排除 + app.js 有注册调用
@@ -150,3 +157,16 @@ if (!/rpOpener\s*=\s*document\.activeElement/.test(appSrc)) rpIssues.push('app.j
 if (!/function rpClose[\s\S]*?rpOpener\.focus/.test(appSrc)) rpIssues.push('rpClose 缺焦点归还');
 console.log('回放层对话框:', rpIssues.length ? rpIssues.join(' | ') : 'OK (dialog 语义 + 焦点入层/归还)');
 if (rpIssues.length) process.exit(1);
+
+// 14) 第39轮 对局生命周期世代守卫: 无 DOM 环境下的源串层防线 —
+//     第38轮 gameAbort 接入后 (a) applyAgents 早于 startRecord 把旧代 signal 固化进 agent → 每手被"外部中止"秒拒;
+//     (b) startRecord 触发的 abort 会让旧局请求以失败形态回到 catch, 污染新局状态。四道锚点:
+const llmSrc = fs.readFileSync(__dirname + '/../ai/llm_agent.js', 'utf8');
+const lifeIssues = [];
+if (!/\.catch\(function \(err\) \{\s*\n\s*if \(gid !== gameId\) return;/.test(appSrc)) lifeIssues.push('scheduleAgent catch 缺 gid!==gameId 世代守卫');
+const sigFnCount = (appSrc.match(/signal: function \(\) \{ return gameAbort \? gameAbort\.signal : undefined; \}/g) || []).length;
+if (sigFnCount < 2) lifeIssues.push('LLM/委员会 signal 非取值函数形态 (' + sigFnCount + '/2)');
+if (!/if \(gid !== gameId\) \{ if \(selfTimer\) clearInterval\(selfTimer\); return; \}/.test(appSrc)) lifeIssues.push('bannerThinking tick 缺世代自清');
+if (!/typeof opts\.signal === 'function' \? opts\.signal\(\)/.test(llmSrc)) lifeIssues.push('llm_agent 未支持 signal 取值函数');
+console.log('生命周期世代守卫:', lifeIssues.length ? lifeIssues.join(' | ') : 'OK (catch 守卫 + 信号取值函数 x2 + ticker 自清 + agent 侧支持)');
+if (lifeIssues.length) process.exit(1);

@@ -67,7 +67,7 @@ LLM-chess/
 ├── replay/
 │   ├── replay.js            # 回放数据层: 棋谱 → 引擎状态机 (next增量/prev/goto重建, 脏数据容错)
 │   └── replay_controller.js # 回放控制层: 播放/暂停/步进/跳转/倍速7档/循环
-└── test/               # run_tests.js 49项(perft金标准+重复局面/长将追踪/moveTag杀标注/长将判负/三次重复判和/送吃守卫) · test_llm_convo.js 149项(提示词/重试/兑底安全阀/开局炮保护回归/对拉与长将警示/重复局面警示/合法列表杀标注/亏子标注/危子预标/全角容错/对手吃子标注/重试钩子/多轮缓存守护/HIST_CAP裁剪/reasoning打捞) · replay_smoke.js 53项 · test_evaluation.js 88项(含士象完整性/底线老兵/空头炮/窝心马/中炮矄中卒/开局任务提醒/出车提醒) · _clean_reason_check.js 10项 · analyze_blunders.js 瞎走检测器(含错失必杀) · check_ui.js 语法+ID+HTML净化+PWA守护 · _replay_edge/_logic_layer/_prompt_level_smoke/replay_risk_check/_committee_agent/_server_http.js 边界/分级注入/委员会/服务端行为守护 · smoke_ui.js UI冒烟13项
+└── test/               # run_tests.js 49项(perft金标准+重复局面/长将追踪/moveTag杀标注/长将判负/三次重复判和/送吃守卫) · test_llm_convo.js 151项(提示词/重试/兑底安全阀/开局炮保护回归/对拉与长将警示/重复局面警示/合法列表杀标注/亏子标注/危子预标/全角容错/对手吃子标注/重试钩子/多轮缓存守护/HIST_CAP裁剪/reasoning打捞/信号取值函数) · replay_smoke.js 53项 · test_evaluation.js 88项(含士象完整性/底线老兵/空头炮/窝心马/中炮矄中卒/开局任务提醒/出车提醒) · _clean_reason_check.js 10项 · analyze_blunders.js 瞎走检测器(含错失必杀) · check_ui.js 语法+ID+HTML净化+PWA守护+生命周期守卫 · _replay_edge/_logic_layer/_prompt_level_smoke/replay_risk_check/_committee_agent/_server_http.js 边界/分级注入/委员会/服务端行为/渲染热路径守护 · smoke_ui.js UI冒烟13项
 ```
 
 ## v1.5 观战直播平台
@@ -111,7 +111,7 @@ LLM-chess/
 - **v3.7 对局质量与观战小改 (未入日志轮, 从代码注释回补)**：①评价层将门/肋道控制检测（己方大子/过河兵占对方 d/f 路 → 双向点名“压将门可谋杀势/九宫吃紧”，仅提醒不评分）；②HUD 阶段徽章（状态条显示 开局/中局/残局）；③合法列表排序（杀/困→将→吃→普通→危/亏，首因偏置）+ 标注跨 attempt 缓存；④HIST_CAP 裁剪后手数由引擎步数推导（原 convo.length+1 裁剪后错显）；⑤analyze_blunders 开局三任务检测 + --selftest 回归；test_evaluation 64→70 / test_llm_convo 120→124
 - **v3.8 自动优化轮 (cron 第7轮)**：①自然限着判和规则闭环 — 连续 120 半回合 (60 回合, 亚洲棋规) 无吃子 → 自动终局 result="natural" 和棋（naturalCap 可配/0 关，吃子重置，将军着法不计入，ruleEnforce:false 不判，兜住换序拉锯不精确重复可无限延续的盲区）；②retryWaitMs 模块级纯函数导出，退避覆盖 429/50[234]/gateway（旧版 504 仅等 0.4s 重打）；③PGN 导出和棋标准记号 1/2-1/2；④兵临九宫知识（过河兵入对方九宫区 子力 ×1.2 + 双向摘要点名，与底线老兵互斥）；⑤回放 URL 深链 #rp=ls:<id>（刷新/分享续看）；run_tests 42→44 / test_evaluation 70→78 / test_llm_convo 124→130
 - **v3.9 三方并行大轮 (第8轮, 30 项)**：core 真 bug 双修（undoPly genesis 板重算 + naturalClock 将军不计入口径落地，新增 XQ.Engine.replayStats）+ snapshot 增量（ply/naturalClock/repetitionCount）+ E18-E22/make-unmake 对账/E1 永真修复/loadSerialized 失败重置；ai 解析健壮性（全角救回文案保原文 origTextField/confidenceRaw/裸键容错/attempts 计数/opts.signal 外部中止/retryBlock 自查）；ui 与回放（parseEval 迁 replay.js 方向修复/导入落库深链/Record.summarize 一行战绩/沉底炮知识/cnNotation 同列前中后消歧/键盘 [ ] ±5/match_headless 原子写/analyze_blunders --top --type/check_ui src+LS 守护/模型表同步 kimi-k2.6·MiniMax-M3·qwen3.5-plus）
-- **v1.0.daily PWA 可安装**：manifest.json (独立窗口/主屏图标, 暗金「弈」标) + 根级 service worker 网络优先离线壳 — 在线行为不变, 断网/server 未启动时随机AI 对战壳仍可用, /api/* 永不缓存；check_ui 第10/11节守护。
+- **v1.0.daily PWA 可安装**：manifest.json (独立窗口/主屏图标, 暗金「弈」标 + 宽屏截图 screenshots + 应用商店分类 categories → 富安装卡片) + 根级 service worker 网络优先离线壳 — 在线行为不变, 断网/server 未启动时随机AI 对战壳仍可用, /api/* 永不缓存；check_ui 第10/11节守护。
 - **自动优化代理**：cron 每 30 分钟自动实施不重复优化并追加 `OPTIMIZATION_LOG.md`（全套测试守护）。
 
 ## Elo 天梯 (v1.0.daily)
@@ -174,17 +174,17 @@ LLM-chess/
 |------|------|
 | `node test/run_tests.js` | 引擎 49 项 (perft 金标准 + 重复局面/长将追踪/moveTag 三态/长将判负/三次重复判和/送吃守卫/自然限着判和) |
 | `node test/test_evaluation.js` | 阶段性知识模型 81 项 (阶段判断/动态子力/摘要/士象完整性/底线老兵/空头炮/窝心马/中炮矄中卒/开局任务提醒/出车提醒/将门控制/兵临九宫/沉底炮) |
-| `node test/test_llm_convo.js` | LLM Agent 140 项 (提示词/重试/兑底安全阀/开局炮保护回归/必填校验/对拉与长将警示/重复局面警示/全角容错/信度归一/对手吃子标注/重试钩子/多轮缓存守护/HIST_CAP裁剪/亏子标注/危子预标/reasoning打捞/attempts/外部中止) |
+| `node test/test_llm_convo.js` | LLM Agent 151 项 (提示词/重试/兑底安全阀/开局炮保护回归/必填校验/对拉与长将警示/重复局面警示/全角容错/信度归一/对手吃子标注/重试钩子/多轮缓存守护/HIST_CAP裁剪/亏子标注/危子预标/reasoning打捞/attempts/外部中止/信号取值函数) |
 | `node test/replay_smoke.js` | 回放系统 45 项 (数据层/控制层/倍速/循环/跳转/容错/杀标注/parseEval方向/导入落库/战绩汇总) |
 | `node test/_clean_reason_check.js` | 思考流清洗 10 项 (垃圾压缩/记谱保留/复述删改) |
 | `node test/cn_notation_check.js` | 中文记谱 25 项 (经典谱锚点/同列多兵前中后消歧/同列多车马边界/旧键哨兵) |
-| `node test/i18n_check.js` | i18n 守护 9 组 (zh/en 键集一致/键值非空/占位符一致/静态与动态键覆盖(含T家族别名)/哨兵键/静态CJK文本漏挂/静态CJK属性漏挂/JS侧属性CJK挂载) |
+| `node test/i18n_check.js` | i18n 守护 10 组 (zh/en 键集一致/键值非空/占位符一致/静态与动态键覆盖(含T家族别名)/哨兵键/静态CJK文本漏挂/静态CJK属性漏挂/JS侧属性CJK挂载/JS动态写入口裸中文) |
 | `node test/link_check.js` | 文档链接守护 (全仓 .md 相对链接指向的文件必须存在) |
-| `node test/check_ui.js` | 语法 (17 文件) + getElementById/HTML 交叉核查 + script src/localStorage 前缀/发布文件/HTML 净化/PWA manifest+SW 守护 |
+| `node test/check_ui.js` | 语法 (17 文件) + getElementById/HTML 交叉核查 + script src/localStorage 前缀/发布文件/HTML 净化/PWA manifest(图标+截图+分类)+SW 守护/回放对话框语义/生命周期世代守卫 |
 | `node test/_prompt_level_smoke.js` | 提示词分级注入守护 (每级长度恒定 + legacy 兼容 + 前缀缓存不变式) |
 | `node test/replay_risk_check.js` | 回放疑误着法检测 + 存档配额兜底 |
 | `node test/_committee_agent.js` | 同方多 LLM 委员会: 会诊投票/平票决胜/轮换/全灭/用量聚合 |
-| `node test/_server_http.js` | server.js HTTP 行为 31 项 (含注入 stub 上游的真实中继穿越) | (真实起服务: 健康形状/静态+ETag/304含sw.js/404/路径穿越403含兄弟同名前缀目录/畸形编码400/OPTIONS含静态路径/非法JSON 400/空体400/超2MB中断/未知服务商400/providers形状+无密钥泄漏/HEAD+ETag/manifest+icon+sw MIME/方法守卫/错ETag全量200/限流429) |
+| `node test/_server_http.js` | server.js HTTP 行为 54 项 (含注入 stub 上游的真实中继穿越) | (真实起服务: 健康形状+版本/静态+ETag/304含sw.js/404/路径穿越403含兄弟同名前缀目录与反斜杠形态/畸形编码400/OPTIONS含静态路径/非法JSON 400/空体400/超2MB中断/未知服务商400/未配Key 400/缺model字段400/providers形状+无密钥泄漏/HEAD+ETag/manifest+icon+sw MIME/方法守卫/错ETag全量200/限流429+Retry-After/OpenAI流式SSE直通/目录请求404) |
 | `node test/analyze_blunders.js <log.json>` | 瞎走检测 (送吃/免费吃/漏吃/拉锯/错失必杀, 静态交换评估) |
 | `node test/smoke_relay.js` | 真实中继单发 (需 key) |
 | `node test/smoke_ui.js [model]` | 无头 Edge 冒烟 13 项 (自动开局/决策日志/分页哨兵/截图) |

@@ -27,7 +27,7 @@ flowchart LR
 
 - **core/** — the engine. Standalone-usable (perft-verified, alpha-beta friendly): `engine.js` (board state, make/unmake, repetition + perpetual-check + natural-draw clocks), `rules.js` / `generator.js` / `move.js` / `board.js` / `piece.js`, `judge.js` (move semantics: mate / stalemate / check tagging).
 - **evaluation/** — static evaluation + knowledge layer. `position.js` (material, mobility, positional terms) and `xiangqi_knowledge.js` (domain heuristics). Feeds both the safety valve and the spectating evaluation bar.
-- **ai/** — agents. `llm_agent.js` builds prompts, calls the relay, parses/retries/falls back; `random_agent.js` for zero-config play; `committee_agent.js` (round 29) fields several LLMs on one side — rotation or parallel council voting with voter budgets, safety veto, per-voter states/tally in progress, merged per-voter reasoning streams, Elo-weighted tallies (round 36).
+- **ai/** — agents. `llm_agent.js` builds prompts, calls the relay, parses/retries/falls back; `random_agent.js` for zero-config play; `committee_agent.js` (round 29) fields several LLMs on one side — rotation or parallel council voting with voter budgets, safety veto, per-voter states/tally in progress, merged per-voter reasoning streams, Elo-weighted tallies (round 36). The external abort signal may be passed as an **object or a getter function** (round 39) so a game-scoped controller can be swapped without re-creating agents.
 - **server.js** — static file server + provider relay (OpenAI protocol, plus Anthropic protocol conversion). API keys never leave the server; default bind `127.0.0.1`.
 - **ui/** + **replay/** — spectating HUD, decision cards, i18n (zh/en), full replay system that re-drives a saved record without calling the LLM. Board flip (black perspective, round 34), drag-move (round 33), keyboard travel + resizable think panels, undo (U), auto-save + resume, PGN import/export, backup/restore, Elo ladder (rounds 30–36).
 - **benchmark/** + **test/** — headless matches, ELO/record tooling, and the test suites.
@@ -60,9 +60,9 @@ flowchart LR
 | `test/_clean_reason_check.js` | thinking-stream cleaning rules |
 | `test/cn_notation_check.js` | Chinese move notation (disambiguation edge cases) |
 | `test/_replay_edge.js` | replay edge cases + bookmark pure logic |
-| `test/_logic_layer.js` | pure logic layer guards (notation, HUD helpers) |
-| `test/_server_http.js` | server.js HTTP behavior (spawns a real server: ETag/304, traversal 403, rate-limit 429, OpenAI + Anthropic protocol relay, CORS origin policy, …) |
-| `test/check_ui.js` | syntax sweep, ID cross-check, localStorage prefix, release files, README version parity, HTML hygiene, PWA manifest + SW guard, replay-dialog semantics |
+| `test/_logic_layer.js` | pure logic layer guards (notation, HUD helpers), engine `legalTargets`/`dangerTargets` memo + state-version invalidation, and a DOM-stub renderer hot-path guard (one `snapshot()` per render, O(1) `isOver`, arrow-SVG dedupe) |
+| `test/_server_http.js` | server.js HTTP behavior (spawns a real server: ETag/304, traversal 403 incl. backslash form, rate-limit 429 + Retry-After, request-side validation 400s, OpenAI non-stream + **streaming SSE** + Anthropic protocol relay, CORS origin policy, …) |
+| `test/check_ui.js` | syntax sweep, ID cross-check, localStorage prefix, release files, README version parity, HTML hygiene, PWA manifest + SW guard (icons/screenshots/categories), replay-dialog semantics, life-cycle generation guards |
 | `npm run check` | syntax sweep of every JS file + prompt hard gate |
 
 Run everything with `npm test` (15 suites) — CI runs `npm run check` + `npm test` on Node 18/20/22 (ubuntu) and Node 22 (windows).
