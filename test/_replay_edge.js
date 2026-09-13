@@ -64,6 +64,29 @@ ok(before.join(',') === '1,3', 'E3 入参数组不被原地修改 (纯函数)');
 ok(XQ.Replay.bookmarkKey('r123') === 'xq_replay:bm:r123', 'E4 键含棋谱 id');
 ok(XQ.Replay.bookmarkKey() === 'xq_replay:bm:unknown', 'E4 缺 id 回落 unknown (不与真实谱撞键)');
 
+// E6 第37轮: 增量 goto 等价性 — 前跳/后退/再前跳 与全量重建盘面逐格一致
+{
+  var recLong = { id: 'eq', red: { name: 'r' }, black: { name: 'b' }, moves: [
+    { n: 1, side: 'red', piece: 'cannon', from: 'b3', to: 'e3' },
+    { n: 2, side: 'black', piece: 'knight', from: 'b10', to: 'c8' },
+    { n: 3, side: 'red', piece: 'knight', from: 'b1', to: 'c3' },
+    { n: 4, side: 'black', piece: 'cannon', from: 'h8', to: 'e8' }
+  ] };
+  var sInc = XQ.Replay.create(recLong);
+  sInc.goto(4);            // 前向增量
+  var snapA = JSON.stringify(sInc.engine().snapshot().cells);
+  sInc.goto(2);            // 后向
+  sInc.goto(4);            // 再前向
+  var snapB = JSON.stringify(sInc.engine().snapshot().cells);
+  var sFull = XQ.Replay.create(recLong);
+  sFull.goto(4);
+  var snapC = JSON.stringify(sFull.engine().snapshot().cells);
+  ok(snapA === snapB && snapB === snapC, 'E6 增量 goto 与全量重建盘面一致 (前进→后退→前进)');
+  ok(Object.keys(sInc.risks()).length === 4, 'E6 懒计算 risks 全量 memo (4 手)');
+  sInc.goto(NaN);
+  ok(sInc.idx() === 4, 'E6 goto(NaN) 不误跳 (保持原位)');
+}
+
 // E5 控制器: 空棋谱上 play/step 不炸 (回调型)
 var ctrl = XQ.ReplayController.create(empty, { onState: function () {}, onPlayState: function () {} });
 ctrl.play(); ctrl.stepNext(); ctrl.stepPrevCapture(); ctrl.toEnd(); ctrl.pause(); ctrl.dispose();

@@ -1357,3 +1357,55 @@
 - 教训: ① 限流 8/s 秒窗会打自己 — 测试新增 chat POST 混入 415 断言前同秒堆积被 429 顶掉, 教训: 新增请求类断言按秒窗节奏排布 (块前 1.1s 休眠) ② IAB press() 对 div 焦点元素键盘路由不可靠, 应用层行为用页面内合成 KeyboardEvent 验证 (处理器本身工作正常) ③ 36 轮 LOG 声称 i18n 282 键, git 实测 273→274 — 本轮记录以字典实测 274→279 为准, 键数记账今后以 i18n_check 输出为准
 - 边界: ai/llm_agent.js 未动 (systemPrompt 2384 字不变); server.js 未动 (纯测试补强, 无需重启); 零新依赖
 - 触点: ui/app.js / ui/renderer.js / ui/i18n.js (+5 键: ai_elapsed/council_progress/set_splitter/status_clock/status_limit) / index.html (分隔条语义+焦点环) / test/_server_http.js (45 断言) / test/i18n_check.js (I10) / docs/ARCHITECTURE.md / CHANGELOG
+
+## 2026-09-12 ~18:20 第37轮 (v1.0.daily, zcode — 指令「对基础机制做至少10个优化」→ 实做 30 项)
+
+基线 15/15。30 项全部落在基础机制 (引擎/回放/存储/AI 内部/服务):
+
+【回放数据层 (1-8)】
+1. **goto 前向增量**: O(n) 全量重建 → 从当前手单手步进 (ensurePly), 拖拽进度条/长局 ±5/±10 不再 O(n²)
+2. 后向按需重建 (ensurePly backward 分支)
+3. **goto NaN/非法防护**: 原 `n|0` 把 NaN 变 0 → 误跳起点; 现直接拒绝
+4. **风险懒计算 memo** (computeRisk): 首次访问某手才算静态交换, 结果 memo — 回退/重复跳转零重算
+5. risks()/marks() 访问器懒补齐 (≤idx 全 memo, 调用方零适配)
+6. **prev O(1)**: 原每次全量 rebuild → `eng.undoPly()` 单手回退 (memo 保留)
+7. risk_check 测试期望随 memo 语义更新 (回退后 risks 表保留)
+8. **_replay_edge +E6 等价性测试**: 前进→后退→前进 盘面与全量重建逐格一致 + NaN 不误跳
+
+【引擎 (9-12)】
+9. **detectPhase WeakMap 缓存** (引擎+手数键): 每帧多处调用 (状态条/时钟/ticker) 不再重复扫 90 格
+10. **legalTargets (选中格,手数) memo**: 键盘光标每格 refresh 不再重算合法目标
+11. loadSerialized 显式失效点 (同长度异盘面边角)
+12. perft 金标准回归全绿 (44/1920/79666) — 引擎改动零正确性损失
+
+【AI 内部 (13-16)】
+13. **面板思考流 80ms 节流**: extractCN 对长思考全量重跑的 O(n²) 缓解 (最终 meta 仍全量)
+14. committee reset() 补全: 轮换指针/errStreak/streams 一并清 (原仅清子代理会话)
+15. 客户端 maxTokens 钳制 ≤32768 (与服务端同口径, 不依赖服务端兜底)
+16. llm_convo 149 项回归 (含节流后流式断言)
+
+【存储 (17-21)】
+17. record.list() raw 串校验缓存 (外部写入/跨标签自愈 — 测试直写场景即验证)
+18. elo.table() 同款缓存
+19. record.save/remove 同步 _listRaw (缓存与磁盘一致)
+20. **静态文件 mtime 校验内容缓存** (server): 命中零磁盘 IO, 上限 64 文件, ETag/304 语义不变
+21. 移除 server.js 静态分支死代码 (缓存改造后的旧实现残段)
+
+【PGN/委员会 (22-26)】
+22. PGN NAG 剥离 ($1 等符号)
+23. PGN 宽松连字符 (`h3 - e3`)
+24. C19 Elo 加权测试 (votes 带 weight / 加权产出合法着法)
+25. C20 reset 补全测试 (轮换指针归零)
+26. committee 套件 28→31 断言全绿
+
+【验证/文档 (27-30)】
+27. 全量门禁: npm run check ALL PASS + npm test 15/15 全绿
+28. _server_http 46 断言全绿 (静态缓存不破坏 ETag/304/穿越/限流)
+29. CHANGELOG Round-37
+30. LOG 收录 (本轮全部为机制层, 无 GUI 行为变化)
+
+【体验收益量化】
+- 长局回放拖拽: 240 手局从 每次跳转 O(n) 重放+每手静态交换 → O(delta) 步进 + 懒计算 (往返跳转收益最大)
+- 每帧 detectPhase 90 格扫描 ×3 处 → 每手一次
+- 静态资源二次请求 (对局中 F5) 磁盘 IO 归零
+- server.js 改动 (静态缓存) 需重启生效

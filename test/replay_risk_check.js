@@ -57,7 +57,7 @@ const sFree = XQ.Replay.create({
 sFree.goto(2);
 const rFree = XQ.Replay.moveRisk(sFree.engine(), XQ.Move.parseSq('e3'), XQ.Move.parseSq('e7'));
 ok('免费吃卒 负风险', rFree < 0, 'risk=' + rFree);
-ok('prev 回退后 risks 表仍可用', s.prev() === true && Object.keys(s.risks()).length === 2, 'keys=' + Object.keys(s.risks()).length);
+ok('prev 回退后 risks 表仍可用 (memo 保留)', s.prev() === true && Object.keys(s.risks()).length === 3, 'keys=' + Object.keys(s.risks()).length);   // 第37轮: 懒计算 memo 后退不丢
 
 /* 真实棋谱 (match_headless) 全程检测不崩 + 风险值非 NaN
    第29轮 CI 修复: 文件可能不存在 (logs/ 被 gitignore, 本地才有) — 缺文件时合成 4 手谱, 不再 ENOENT

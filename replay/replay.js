@@ -123,13 +123,46 @@ function parseEval(s) {
       risks = {};
       marks = {};
       for (var i = 0; i < n; i++) {
-        var m = moves[i];
-        if (!m || !m.from || !m.to) { skipped[i + 1] = 'missing_coord'; continue; }
-        var f = XQ.Move.parseSq(m.from), t = XQ.Move.parseSq(m.to);
-        risks[i + 1] = moveRisk(eng, f, t, marks, i + 1);
-        var res = eng.applyPlayerMove(f.x, f.y, t.x, t.y);
-        if (!res.ok) skipped[i + 1] = res.reason || 'illegal';
+        applyPly(i);
       }
+    }
+
+    /* 第37轮: 单手应用 + 风险懒计算 — goto 前向/后向 O(delta), 长局拖拽不再每次全量重放;
+       风险仍在首次访问某手时计算并 memo (risks/arks 结构不变, 调用方零适配) */
+    function applyPly(i) {
+      var m = moves[i];
+      if (!m || !m.from || !m.to) { skipped[i + 1] = 'missing_coord'; return; }
+      var f = XQ.Move.parseSq(m.from), t = XQ.Move.parseSq(m.to);
+      var res = eng.applyPlayerMove(f.x, f.y, t.x, t.y);
+      if (!res.ok) skipped[i + 1] = res.reason || 'illegal';
+    }
+    function ensurePly(n) {
+      if (n > idx) {
+        for (var i = idx; i < n; i++) applyPly(i);
+        idx = n;
+      } else if (n < idx) {
+        idx = n;
+        rebuild(n);
+      }
+    }
+    function computeRisk(ply) {
+      if (risks[ply] != null) return;
+      if (ply > idx) {   // 超前手的 risk 需先把引擎推进到该手 (懒计算按需重放)
+        var save = idx;
+        ensurePly(ply);
+        idx = save;
+        if (idx !== ply) {   // 被截断 (skip 手) — 直接前推
+          eng = XQ.Engine.create({ ruleEnforce: false });
+          skipped = {}; marks = {};
+          idx = 0;
+          for (var i = 0; i < ply; i++) applyPly(i);
+          idx = ply;
+        }
+      }
+      var m = moves[ply - 1];
+      if (!m || !m.from || !m.to) { risks[ply] = 0; return; }
+      var f = XQ.Move.parseSq(m.from), t = XQ.Move.parseSq(m.to);
+      risks[ply] = moveRisk(eng, f, t, marks, ply);
     }
 
     function next() {
@@ -173,17 +206,18 @@ function parseEval(s) {
       engine: function () { return eng; },
       entry: function () { return idx > 0 ? moves[idx - 1] : null; },
       skipped: function () { return skipped; },
-      risks: function () { return risks; },   // v1.7.6: {手号: 风险分} 供走法列表标注
-      marks: function () { return marks; },   // v1.7.9: {手号: '将'|'杀'|'困'} 供走法列表标注
+      risks: function () { for (var p2 = 1; p2 <= idx; p2++) computeRisk(p2); return risks; },   // v1.7.6: {手号: 风险分} 供走法列表标注
+      marks: function () { for (var p2 = 1; p2 <= idx; p2++) computeRisk(p2); return marks; },   // 第37轮: 懒计算 memo 同 risks
       RISK_MARK: function () { return RISK_MARK; },
       next: next,
-      prev: function () { if (idx <= 0) return false; idx--; rebuild(idx); return true; },
+      prev: function () { if (idx <= 0) return false; idx--; eng.undoPly(); delete skipped[idx + 1]; return true; },   // 第37轮: O(1) 后退 (undoPly 撤单手; 风险 memo 保留)
       goto: function (n) {
+        if (typeof n !== 'number' || isNaN(n)) return false;   // 第37轮: NaN/非法防护 (n|0 会把 NaN 变 0 误跳起点)
         n = Math.max(0, Math.min(moves.length, n | 0));
-        if (n === idx + 1) { next(); return true; }   // 相邻快路径
         if (n === idx) return false;
+        if (n === idx + 1) { next(); return true; }   // 相邻快路径
+        ensurePly(n);   // 第37轮: O(delta) 前向单步 / 后向重建 (拖拽长局不再 O(n²))
         idx = n;
-        rebuild(idx);
         return true;
       },
       state: state

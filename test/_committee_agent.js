@@ -4,7 +4,7 @@ const path = require('path');
 const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 for (const f of ['core/piece.js','core/move.js','core/board.js','core/rules.js','core/generator.js','core/judge.js','core/engine.js',
-  'evaluation/xiangqi_knowledge.js','evaluation/position.js','ai/llm_agent.js','ai/committee_agent.js']) {
+  'evaluation/xiangqi_knowledge.js','evaluation/position.js','benchmark/elo.js','ai/llm_agent.js','ai/committee_agent.js']) {
   vm.runInThisContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f });
 }
 const XQ = globalThis.XQ;
@@ -206,6 +206,29 @@ function resetStub(script) { callN = 0; scripted = script; }
   resetStub([{ f: 'h3', t: 'e3', c: 0.5 }]);
   const mvN2 = await r2.next(eng);   // r2 = C3 的轮换委员会 (m1/m2, 已走到 m2)
   ok(mvN2.meta.voterName === 'stub:m1', 'C17 轮换 meta.voterName = 当前选民 (回绕)');
+
+  // C19 Elo 加权翻盘: 低分选民 2 票 vs 高分选民 1 票 — 加权后高分方胜   第37轮
+  {
+    const engW = XQ.Engine.create();
+    resetStub([{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.5 }]);
+    const cW = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['whigh', 'wlow', 'wlow2'], mode: 'council', weightByElo: true });
+    const mvW = await cW.next(engW);
+    ok(XQ.Move.sqName(mvW.to) === 'e3' || XQ.Move.sqName(mvW.to) === 'g3', 'C19 加权投票产出合法着法 (得 ' + XQ.Move.sqName(mvW.to) + ')');
+    const votesW = mvW.meta.votes || [];
+    ok(votesW.length === 3 && votesW.every(function (v) { return typeof v.weight === 'number'; }), 'C19 votes 带 weight 字段');
+  }
+
+  // C20 reset 补全: 轮换指针/失败计数/流缓冲清空   第37轮
+  {
+    callN = 0; sseMode = false;
+    resetStub([{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.5 }, { f: 'h3', t: 'c3', c: 0.5 }]);
+    const r4 = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['z1', 'z2'], mode: 'rotate' });
+    await r4.next(eng);
+    r4.reset();
+    callN = 0;
+    const mvR = await r4.next(eng);
+    ok((mvR.meta.reasoning || '').indexOf('[轮换 stub:z1]') === 0, 'C20 reset 后轮换指针归零 (回到 z1)');
+  }
 
   console.log(failed ? '_committee_agent: ' + failed + ' FAIL' : '_committee_agent: ALL PASS');
   process.exit(failed ? 1 : 0);

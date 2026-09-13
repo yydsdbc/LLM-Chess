@@ -60,14 +60,18 @@
    * v1.7.6: 上限 MAX_RECORDS=60 (防 localStorage 无限膨胀) + 配额兑底
    * (QuotaExceeded → 逐级裁剪重试: 留30 → 留15 → 只存当前局, 保证刚下的这局永不丢) */
   var MAX_RECORDS = 60;
+  var _listCache = null, _listRaw = null;   // 第37轮: list() 解析缓存 (raw 串校验 — 外部写入/跨标签自愈)
   function save(record) {
     var all = list();
     var i = all.findIndex(function (r) { return r.id === record.id; });
     if (i >= 0) { all.splice(i, 1); }   // 更新也视为最近活动: 移到末尾再截断, 上限裁剪按活跃度
     all.push(record);
     if (all.length > MAX_RECORDS) all = all.slice(all.length - MAX_RECORDS);
+    _listCache = all;
     try {
-      localStorage.setItem(LS_KEY, JSON.stringify(all));
+      var _rawSave = JSON.stringify(all);
+      localStorage.setItem(LS_KEY, _rawSave);
+      _listRaw = _rawSave;
     } catch (e) {
       var tryKeep = [30, 15];
       for (var t = 0; t < tryKeep.length; t++) {
@@ -78,14 +82,20 @@
     return record;
   }
   function list() {
-    try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch (e) { return []; }
+    var raw = null;
+    try { raw = localStorage.getItem(LS_KEY) || '[]'; } catch (eR) { raw = '[]'; }
+    if (_listCache && _listRaw === raw) return _listCache;   // 第37轮: 原始串未变才用 memo (外部写入自愈)
+    try { _listCache = JSON.parse(raw); } catch (e) { _listCache = []; }
+    _listRaw = raw;
+    return _listCache;
   }
   function get(id) {
     return list().find(function (r) { return r.id === id; }) || null;
   }
   function remove(id) {
     var all = list().filter(function (r) { return r.id !== id; });
-    try { localStorage.setItem(LS_KEY, JSON.stringify(all)); } catch (e) {}
+    _listCache = all;
+    try { var _rawRm = JSON.stringify(all); localStorage.setItem(LS_KEY, _rawRm); _listRaw = _rawRm; } catch (e) {}
     // 第28轮: 孤儿键内聚清理 (回放进度/书签随棋谱删除; 原只 rpDeleteRecord 手工清, 其它调用方漏网)
     try { localStorage.removeItem('xq_replay_pos_' + id); } catch (e2) {}
     try { localStorage.removeItem('xq_replay:bm:' + id); } catch (e3) {}
@@ -176,9 +186,9 @@
         moveText.push(t);
       }
     });
-    var body = moveText.join(' ');
+    var body = moveText.join(' ').replace(/\$\d+/g, ' ');   // 第37轮: 剥 NAG ($1 等)
     var pairs = [];
-    var re = /([a-i](?:10|[1-9]))-([a-i](?:10|[1-9]))/g;
+    var re = /([a-i](?:10|[1-9]))\s*-\s*([a-i](?:10|[1-9]))/g;   // 第37轮: 宽松连字符空格
     var pm;
     while ((pm = re.exec(body)) !== null) pairs.push({ from: pm[1], to: pm[2] });
     if (!pairs.length) throw new Error('PGN 中未找到着法 (需 from-to 制, 如 e3-e6)');

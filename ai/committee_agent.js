@@ -203,7 +203,10 @@
       kind: 'llm',
       next: next,
       usage: usage,
-      reset: function () { agents.forEach(function (a) { if (a.agent.reset) a.agent.reset(); }); },
+      reset: function () {   // 第37轮: 重置补全 — 轮换指针/失败计数/流缓冲一并清 (原仅清子代理会话)
+        rotation = 0; errStreak = {}; streams = [];
+        agents.forEach(function (a) { if (a.agent.reset) a.agent.reset(); });
+      },
       guardCheck: agents.length && agents[0].agent.guardCheck ? agents[0].agent.guardCheck : null
     };
   }

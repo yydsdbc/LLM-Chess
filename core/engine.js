@@ -38,6 +38,7 @@
     var turn = opts.turn || 'red';
     var history = [];        // Move[]
     var lastMove = null;
+    var _tgtCache = null;   // 第37轮: legalTargets memo (任意盘面变更即由 apply/undo 重置)
     var over = false, result = 'normal', winner = null;
     var listeners = [];
     var posCounts = {};      // v1.7.7 重复局面计数: key=盘面文本|执子方 — 三次重复判和/长将检测基础
@@ -98,7 +99,9 @@
       legalTargets: function (x, y) {
         var p = board.get(x, y);
         if (!p || p.color !== turn) return [];
-        return Generator.legalTargetsFrom(board, x, y);
+        if (_tgtCache && _tgtCache.key === x + ',' + y + '@' + history.length) return _tgtCache.list;   // 第37轮: (选中格,手数) memo
+        _tgtCache = { key: x + ',' + y + '@' + history.length, list: Generator.legalTargetsFrom(board, x, y) };
+        return _tgtCache.list;
       },
       dangerTargets: function (x, y) {
         var p = board.get(x, y);
@@ -197,6 +200,7 @@
         return { v: 1, moves: history.map(function (m) { return [m.from.x, m.from.y, m.to.x, m.to.y]; }) };
       },
       loadSerialized: function (s) {
+        _tgtCache = null;   // 第37轮: 载入谱面即失效 targets memo (同长度异盘面边角)
         this.newGame();
         if (!s || !s.moves) return false;
         for (var i = 0; i < s.moves.length; i++) {

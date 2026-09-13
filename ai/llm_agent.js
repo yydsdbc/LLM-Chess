@@ -79,7 +79,7 @@ function create(opts) {
     var timeoutMs = opts.timeoutMs || 120000;   // v1.5.9: 90s→120s — provider 排队波 70~300s (memory 实录), 90s 必中断后重试总耗时更长
     var streamIdleMs = opts.streamIdleMs || 60000;    // 流式无数据看门狗
     var streamHardMs = opts.streamHardMs || 300000;   // 单请求流式总时长硬顶
-    var maxTokens = opts.maxTokens || 4096;   // v1.5.9: 2000→4096 — 思考模型的 reasoning_content 与 JSON 同计 max_tokens, 2000 会把长思考+JSON 一起截断 → 无 JSON 可解析 (接口错误主因之一); 只提上限, 不影响短回复耗时
+    var maxTokens = Math.min(opts.maxTokens || 4096, 32768);   // 第37轮: 与服务端钳制同口径 (误配超大值不依赖服务端兜底)   // v1.5.9: 2000→4096 — 思考模型的 reasoning_content 与 JSON 同计 max_tokens, 2000 会把长思考+JSON 一起截断 → 无 JSON 可解析 (接口错误主因之一); 只提上限, 不影响短回复耗时
     var thinkingMode = opts.thinking !== undefined ? opts.thinking : 'enabled';
     var quickAnswer = !!opts.quick;   // v1.7.2: 快答模式 (关思考, 决策原因合成思考内容)   // v1.5.2: 默认 type=enabled (tokenrhythm 强制思考); 'low'/'medium'/'high' 带 effort (适支持 openai o1 系列/zhipu 官方接口); null 不发送; glm-5.3 系发 disabled 会 400 REASONING_REQUIRED
     var usage = { requests: 0, prompt: 0, completion: 0, total: 0 };
@@ -448,7 +448,10 @@ function create(opts) {
           extSig.addEventListener('abort', function () { try { ctrl.abort(); } catch (eA) {} });
         }
         var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, timeoutMs) : null;
+        var _lastThinkEmit = 0;   // 第37轮: 面板流节流状态
         var onDelta = opts.onThinking ? function (kind, full) {
+          if (Date.now() - _lastThinkEmit < 80) return;   // 第37轮: 面板流节流 80ms (extractCN 长思考全量重跑 O(n²) 缓解; 最终 meta.reasoning 仍全量提取)
+          _lastThinkEmit = Date.now();
           try { opts.onThinking(side, full); } catch (e) {}
         } : null;
         fetch('api/chat', {

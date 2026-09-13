@@ -24,7 +24,12 @@
 
   // ── 棋局阶段判断 ──
   // 三信号: 已走回合数 / 剩余棋子数 / 大子交换 (大子=车马炮, 双方初始共12)
+  var _phaseCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;   // 第37轮: 按引擎+手数 memo (每帧多处调用不再重复扫 90 格)
   function detectPhase(engine) {
+    if (_phaseCache) {
+      var hit = _phaseCache.get(engine);
+      if (hit && hit.ply === engine.ply()) return hit.phase;
+    }
     var ply = engine.ply();
     var round = Math.ceil(ply / 2);
     var snap = engine.snapshot();
@@ -37,9 +42,11 @@
         if (p.type === 'rook' || p.type === 'knight' || p.type === 'cannon') big++;
       }
     }
-    if (round <= 8 && big >= 10) return 'opening';        // 早期且大子基本未交换
-    if (big <= 4 || pieces <= 14) return 'endgame';       // 大子枯竭或子力大减
-    return 'middlegame';
+    var phase = (round <= 8 && big >= 10) ? 'opening'        // 早期且大子基本未交换
+      : (big <= 4 || pieces <= 14) ? 'endgame'               // 大子枯竭或子力大减
+      : 'middlegame';
+    if (_phaseCache && engine) { try { _phaseCache.set(engine, { ply: ply, phase: phase }); } catch (eC) {} }
+    return phase;
   }
 
   // ── 动态子力价值 ──

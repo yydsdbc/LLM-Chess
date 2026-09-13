@@ -68,6 +68,7 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
   '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8'
 };
+var _staticCache = new Map();   // 第37轮: 静态内容缓存 (mtime 校验, 命中不回读磁盘; 上限 64 文件)
 function serveStatic(req, res, urlPath) {
   let p;
   try { p = decodeURIComponent(urlPath.split('?')[0]); } catch (eU) { res.writeHead(400); return res.end('bad request'); }   // v1.0.daily: 畸形百分号编码 (/% etc) 抛 URIError → 回 400 而非连接崩溃
@@ -75,13 +76,22 @@ function serveStatic(req, res, urlPath) {
   const full = path.normalize(path.join(ROOT, p));
   // 第27轮: 前缀穿越加固 — 裸 startsWith(ROOT) 会放行同名前缀兄弟目录 (…/LLM-chess-backup/…), 必须按路径段比对
   if (full !== ROOT && !full.startsWith(ROOT + path.sep)) { res.writeHead(403, { 'Cache-Control': 'no-store' }); return res.end('forbidden'); }   // 第28轮: no-store
-  fs.readFile(full, (err, buf) => {
-    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('404 Not Found'); }   // 第28轮: 404 不入缓存
-    // v1.0.3: ETag/304 — 文件未变时浏览器用本地副本 (对局中 F5 秒开, 省带宽); api/keys 动态路径不走这里
+  function sendBuf(buf) {
     const etag = '"' + require('crypto').createHash('sha1').update(buf).digest('hex').slice(0, 16) + '"';
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, { ETag: etag }); return res.end(); }
     res.writeHead(200, { 'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache', ETag: etag });
     res.end(buf);
+  }
+  fs.stat(full, (errS, st) => {
+    if (errS) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('404 Not Found'); }
+    const hit = _staticCache.get(full);
+    if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) { sendBuf(hit.buf); return; }   // 第37轮: 命中零磁盘 IO
+    fs.readFile(full, (err, buf) => {
+      if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('404 Not Found'); }
+      if (_staticCache.size > 64) _staticCache.clear();
+      _staticCache.set(full, { mtime: st.mtimeMs, size: st.size, buf: buf });
+      sendBuf(buf);
+    });
   });
 }
 

@@ -20,11 +20,18 @@
   }
 
   /* ── 评分表存取 (按 agent 名) ── */
+  var _tCache = null, _tRaw = null;   // 第37轮: 解析缓存 (raw 串校验)
   function table() {
-    try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (e) { return {}; }
+    var raw = null;
+    try { raw = localStorage.getItem(LS_KEY) || '{}'; } catch (eR) { raw = '{}'; }
+    if (_tCache && _tRaw === raw) return _tCache;
+    try { _tCache = JSON.parse(raw); } catch (e) { _tCache = {}; }
+    _tRaw = raw;
+    return _tCache;
   }
   function saveTable(t) {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(t)); } catch (e) {}
+    _tCache = t;
+    try { var raw = JSON.stringify(t); localStorage.setItem(LS_KEY, raw); _tRaw = raw; } catch (e) {}
   }
   function ratingOf(name) {
     var t = table();
