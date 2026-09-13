@@ -15,6 +15,11 @@
   'use strict';
   var XQ = root.XQ = root.XQ || {};
 
+  /* 第38轮: 按模型名推导默认超时 — 思考/reasoner 类排队与推理更久 (120s 易误杀长思考); 普通模型保持 120s */
+  function providerTimeout(model) {
+    return /reasoner|thinking|-r1|o1|o3|k2\.6|qwq|deepseek-v4-pro/i.test(String(model || '')) ? 240000 : 120000;
+  }
+
   /* v3.8 重试等待决策 (独立可测, 模块级纯函数): 网关/限流类瞬时错误 (429/502/503/504/gateway) 线性退避 3s×attempt, 其余格式错误短等 400ms。
      实证: tokenrhythm/deepseek 上游 502/504 与 503 同源 (排队/网关波动, v3.5 跨模型局 503/504 连环); 旧正则只覆盖 503 → 504 仅等 0.4s 立即重打, 加重上游压力且重试成功率更低 */
   function retryWaitMs(msg, attempt) {
@@ -76,7 +81,7 @@ function create(opts) {
     var model = opts.model || '';
     var promptLevel = opts.promptLevel || ({ aggressive: 'high', defensive: 'mid', balanced: 'mid' })[opts.style] || 'mid';   // v1.0.3: 提示词等级 none/low/mid/high (替代旧棋风; legacy style 映射: aggressive→high, 防守/均衡→mid)
     var temperature = typeof opts.temperature === 'number' ? opts.temperature : 0.3;
-    var timeoutMs = opts.timeoutMs || 120000;   // v1.5.9: 90s→120s — provider 排队波 70~300s (memory 实录), 90s 必中断后重试总耗时更长
+    var timeoutMs = opts.timeoutMs || providerTimeout(model);   // 第38轮: 默认按模型分级 (思考型更宽)   // v1.5.9: 90s→120s — provider 排队波 70~300s (memory 实录), 90s 必中断后重试总耗时更长
     var streamIdleMs = opts.streamIdleMs || 60000;    // 流式无数据看门狗
     var streamHardMs = opts.streamHardMs || 300000;   // 单请求流式总时长硬顶
     var maxTokens = Math.min(opts.maxTokens || 4096, 32768);   // 第37轮: 与服务端钳制同口径 (误配超大值不依赖服务端兜底)   // v1.5.9: 2000→4096 — 思考模型的 reasoning_content 与 JSON 同计 max_tokens, 2000 会把长思考+JSON 一起截断 → 无 JSON 可解析 (接口错误主因之一); 只提上限, 不影响短回复耗时
@@ -412,26 +417,31 @@ function create(opts) {
         var reader = res.body && res.body.getReader ? res.body.getReader() : null;
         if (!reader) { resolve(null); return; }
         var dec = new TextDecoder();
-        var buf = '', answer = '', reasoning = '';
+        var buf = '', answer = '', reasoning = '', pendingData = '';
+        /* 第38轮: SSE 事件解析抽为 handleSSE — 支持多行 data 拼接与 'data :' 变体 (原实现按行独立解析, 拆行 JSON 直接丢) */
+        function handleSSE(data) {
+          if (!data || data === '[DONE]') return;
+          try {
+            var j = JSON.parse(data);
+            if (j.usage) countUsage(j.usage);
+            var d = j.choices && j.choices[0] && j.choices[0].delta || {};
+            if (d.reasoning_content) { reasoning += d.reasoning_content; if (onDelta) onDelta('reason', extractCN(reasoning) || '思考中…'); }
+            // v1.5.2: content 是落子 JSON, 不推面板 (仅靠决定卡片 afterMove 展示), 防用户看到原始 JSON
+            if (d.content) { answer += d.content; }
+          } catch (e) { /* 忽略不完整事件 */ }
+        }
         function pump() {
           reader.read().then(function (r) {
             if (onChunk) { try { onChunk(); } catch (e4) {} }
-            if (r.done) { resolve({ answer: answer, reasoning: reasoning }); return; }
+            if (r.done) { if (pendingData) handleSSE(pendingData); resolve({ answer: answer, reasoning: reasoning }); return; }
             buf += dec.decode(r.value, { stream: true });
             var lines = buf.split('\n'); buf = lines.pop();
             lines.forEach(function (line) {
               line = line.trim();
-              if (line.slice(0, 5) !== 'data:') return;
-              var data = line.slice(5).trim();
-              if (!data || data === '[DONE]') return;
-            try {
-                var j = JSON.parse(data);
-                if (j.usage) countUsage(j.usage);
-                var d = j.choices && j.choices[0] && j.choices[0].delta || {};
-                if (d.reasoning_content) { reasoning += d.reasoning_content; if (onDelta) onDelta('reason', extractCN(reasoning) || '思考中…'); }
-                // v1.5.2: content 是落子 JSON, 不推面板 (仅靠决定卡片 afterMove 展示), 防用户看到原始 JSON
-                if (d.content) { answer += d.content; }
-              } catch (e) { /* 忽略不完整行 */ }
+              if (line === '') { if (pendingData) { handleSSE(pendingData); pendingData = ''; } return; }
+              var mData = /^data[\s]*:/.exec(line);
+              if (!mData) { if (pendingData) pendingData += line; return; }   // 无冒号行续接上一条 data
+              pendingData += line.slice(mData[0].length);
             });
             pump();
           }).catch(reject);
@@ -440,6 +450,7 @@ function create(opts) {
       });
     }
     function chat(messages, tempOverride) {
+      usage.httpCalls = (usage.httpCalls || 0) + 1;   // 第38轮: HTTP 调用级计数 (独立于 requests: 后者仅计上报 usage 的应答, 本项含未上报上游)
       return new Promise(function (resolve, reject) {
         var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
         var extSig = opts.signal || null;   // v3.9a: 外部中断 (对局取消/页面关闭) — 与内部看门狗共用 ctrl, 上抛时按 aborted 归因
@@ -473,9 +484,18 @@ function create(opts) {
         }).then(function (res) {
           if (timer) clearTimeout(timer);
           if (!res.ok) {
+            var retryAfterHdr = null;   // 第38轮: 捕获上游 Retry-After (秒或 HTTP-date 秒差), 退避取地板
+            try {
+              var ra = res.headers.get('retry-after');
+              if (ra) {
+                var raNum = parseFloat(ra);
+                if (isFinite(raNum) && raNum > 0) retryAfterHdr = raNum;
+                else { var raDate = Date.parse(ra); if (isFinite(raDate)) retryAfterHdr = Math.max(0, (raDate - Date.now()) / 1000); }
+              }
+            } catch (eRA) {}
             res.json().catch(function () { return {}; }).then(function (e) {
               var detail = e.error && e.error.message ? e.error.message : (e.error || e.message || e.code || '');   // v1.5.9: DeepSeek 等上游 error 是 {message,...} 对象, 直接 [object Object] 会丢失详情
-              reject(new Error('HTTP ' + res.status + ' ' + detail));
+              reject(new Error('HTTP ' + res.status + ' ' + detail + (retryAfterHdr ? ' [Retry-After ' + Math.round(retryAfterHdr) + 's]' : '')));
             });
             return;
           }
@@ -659,6 +679,7 @@ function create(opts) {
       side: side,
       kind: 'llm',
       next: function (engine, history) {
+        if (!model) return Promise.reject(new Error('模型名为空 — 请在设置中填写模型名'));   // 第38轮: 空模型早退 (免一次必然 400 的中继往返)
         var attempt = 0, lastBad = null;
         var tagCache = {};   // v3.7: 本手合法列表标注缓存 (重试复用, 引擎状态单次 next() 内不变 → 安全)
         function loop() {
@@ -761,8 +782,11 @@ function create(opts) {
             if (attempt < 3) {
               lastBad = msg;
               console.warn('[LLM ' + side + '] attempt ' + attempt + ' 失败重试: ' + msg.slice(0, 140));   // v1.5.7: 失败原因落日志 (无头跑/排障可见, 正常局零输出)
-              if (onRetryCb) { try { onRetryCb({ attempt: attempt, reason: msg.slice(0, 120) }); } catch (eHk) {} }   // v2.5: 重试实时可见 (HUD 状态条 重试N次)
               var wait = retryWaitMs(msg, attempt);   // v3.8: 提取为模块级纯函数 (可测), 退避覆盖面扩大到 502/504/gateway (与 503 同源的瞬时网关错误)
+              var raM = /\[Retry-After (\d+)s\]/.exec(msg);   // 第38轮: 上游明示等待优先 (上限 30s)
+              if (raM) wait = Math.max(wait, Math.min(30000, parseInt(raM[1], 10) * 1000));
+              if (opts.jitter) wait = Math.round(wait * (0.85 + Math.random() * 0.3));   // 第38轮: 抖动 ±15% (opt-in; 防多发起步同步撞限流窗口)
+              if (onRetryCb) { try { onRetryCb({ attempt: attempt, reason: msg.slice(0, 120), waitMs: wait }); } catch (eHk) {} }   // v2.5/v38: 重试实时可见 + 等待量
               return new Promise(function (r) { setTimeout(r, wait); }).then(loop);
             }
             throw err;
@@ -782,5 +806,5 @@ function create(opts) {
     };
   }
 
-  XQ.LLMAgent = { create: create, retryWaitMs: retryWaitMs, evalMove2Static: evalMove2Static };   // 第31轮: 供 committee 安全否决复用   // v3.8: retryWaitMs 导出供测试/调用方复用
+  XQ.LLMAgent = { create: create, retryWaitMs: retryWaitMs, evalMove2Static: evalMove2Static, providerTimeout: providerTimeout };   // 第38轮: providerTimeout 导出供测试   // 第31轮: 供 committee 安全否决复用   // v3.8: retryWaitMs 导出供测试/调用方复用
 })(typeof window !== 'undefined' ? window : globalThis);

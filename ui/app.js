@@ -100,6 +100,7 @@
   var evalHist = { red: [], black: [] };     // 各方自评走势 (数字序列)
   var checkPulseTimer = null, lastBadgeTimer = null, thinkWarned = false;
   var gameId = 0;              // v1.0.daily 对局世代: startRecord 自增; 迟到的 agent/兑底回调按世代作废 (重开不串局)
+  var gameAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;   // 第38轮: 对局级中止 — 重开/改设置即掐断在飞 LLM 请求 (不再继续烧 token)
   var kbCursor = null;         // v1.0.daily a11y 键盘走子光标 (声明提前, 供 startRecord/restart 复位)
   var checkFlashUntil = 0;   // 将军横幅闪屏期间, tick 暂停覆盖 ai-banner
   var repWarnedN = 0;        // v1.7.7 重复局面已告警到的次数 (只升不降, restart 清零)
@@ -471,7 +472,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var s = Math.floor((Date.now() - start) / 1000);           // 当前思考时间 → 顶部状态条
       var g = Math.floor((Date.now() - startTime) / 1000);       // 全局时间
       var info = document.getElementById('status-info');
-      if (info && view.aiThinking) { var rcR = view.aiRetries ? view.aiRetries[view.aiThinkingSide] : 0; var phT = ''; try { var pht = XQ.XiangqiKnowledge && XQ.XiangqiKnowledge.detectPhase(engine); phT = (XQ.XiangqiKnowledge.PHASE_CN && XQ.XiangqiKnowledge.PHASE_CN[pht]) || ''; } catch (eP) {} info.textContent = TI('status_ticker', { n: engine.ply(), s: s, ph: phT ? ' · ' + phT : '', rt: rcR ? TI('status_retry', { n: rcR }) : '' }); }   // v1.7.4 全局时间只在下方横幅; v2.5 重试可见; v3.7 阶段徽章; 第26轮 i18n
+      if (info && view.aiThinking) { var rcR = view.aiRetries ? view.aiRetries[view.aiThinkingSide] : 0; var phT = ''; try { var pht = XQ.XiangqiKnowledge && XQ.XiangqiKnowledge.detectPhase(engine); phT = (XQ.XiangqiKnowledge.PHASE_CN && XQ.XiangqiKnowledge.PHASE_CN[pht]) || ''; } catch (eP) {} info.textContent = TI('status_ticker', { n: engine.ply(), s: s, ph: phT ? ' · ' + phT : '', rt: rcR ? TI(view.aiRetryWait ? 'status_retry_wait' : 'status_retry', { n: rcR, s: Math.round((view.aiRetryWait || 0) / 1000) }) : '' }); }   // 第38轮: 重试等待量 · v1.7.4 全局时间只在下方横幅; v2.5 重试可见; v3.7 阶段徽章; 第26轮 i18n
       if (s >= 60 && !thinkWarned) { thinkWarned = true; warnBanner(TI('warn_think_slow', { m: modelName, n: s }), side); }   // 第26轮 i18n
       if (Date.now() >= checkFlashUntil) {   // 将军横幅闪屏期不被 tick 覆盖
         XQ.UI.aiBanner('busy', (XQ.I18N ? XQ.I18N.tArgs('ai_elapsed', { t: (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2) }) : '全局 ' + (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2)), side);   // v1.7.4: 下方横幅只显示全局时间 (上方已含模型/方别/手数)
@@ -797,7 +798,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         });
         var multiMode = (v.multi === 'rotate' || v.multi === 'council') && specs.length > 1 ? v.multi : 'off';
         var onThink = function (s2, text) { if (aiBusy && s2 === side) showThinking(s2, text); };
-        var onRetry2 = function (info) { view.aiRetries = view.aiRetries || {}; view.aiRetries[side] = info.attempt; };   // v2.5: 重试实时可见 (状态条 重试N次)
+        var onRetry2 = function (info) { view.aiRetries = view.aiRetries || {}; view.aiRetries[side] = info.attempt; view.aiRetryWait = info.waitMs || 0; };   // 第38轮: 等待量可见   // v2.5: 重试实时可见 (状态条 重试N次)
         var onProg = function (p) {   // 第31轮: 会诊进度实时上卡 (⚡ 思考中卡片文字替换)
           if (!aiBusy || p.side !== side) return;
           var dc = document.querySelector('#think-' + side + '-body .dcard.d-thinking');
@@ -809,7 +810,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             side: side, provider: v.provider, models: specs, mode: multiMode,
             promptLevel: v.style || 'mid', thinking: v.quick ? 'disabled' : 'enabled',
             onThinking: onThink, onRetry: onRetry2, onProgress: onProg,
-            voterBudgetMs: 90000
+            voterBudgetMs: 90000,
+            signal: gameAbort ? gameAbort.signal : undefined,   // 第38轮: 对局级中止
+            jitter: true                                         // 第38轮: 退避抖动 (多选民错峰不撞限流窗)
           });
           modelName = specs.join('+');
           modelsOut = specs;
@@ -817,7 +820,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           agent = XQ.LLMAgent.create({
             side: side, provider: v.provider, model: specs[0] || v.model, promptLevel: v.style || 'mid',
             thinking: v.quick ? 'disabled' : 'enabled',
-            onThinking: onThink, onRetry: onRetry2
+            onThinking: onThink, onRetry: onRetry2,
+            signal: gameAbort ? gameAbort.signal : undefined,   // 第38轮: 对局级中止
+            jitter: true
           });
           modelName = specs[0] || v.model;
         }
@@ -865,6 +870,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   /* ── 记录/存档 ── */
   function startRecord() {
     gameId++;   // v1.0.daily 世代翻转: 任何新对局作废旧异步回调
+    try { if (gameAbort) gameAbort.abort(); } catch (eAb) {}   // 第38轮: 中止上一局在飞请求
+    gameAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     kbCursor = null;
     syncArchive();
     var s = readSettings();

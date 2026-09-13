@@ -230,6 +230,34 @@ function resetStub(script) { callN = 0; scripted = script; }
     ok((mvR.meta.reasoning || '').indexOf('[轮换 stub:z1]') === 0, 'C20 reset 后轮换指针归零 (回到 z1)');
   }
 
+  // C21 第38轮: providerTimeout 分级 + Retry-After 地板 + SSE 变体 + 中止快拒
+  ok(XQ.LLMAgent.providerTimeout('deepseek-reasoner') === 240000, 'C21 reasoner 类默认 240s');
+  ok(XQ.LLMAgent.providerTimeout('glm-5.3-flash') === 120000, 'C21 普通模型默认 120s');
+  ok(XQ.LLMAgent.providerTimeout('kimi-k2.6') === 240000, 'C21 k2.6 思考型 240s');
+  {
+    // SSE 'data :' 变体 + 单事件多行 data 拼接
+    var nl = String.fromCharCode(10);
+    var obj = JSON.stringify({ choices: [{ delta: { content: JSON.stringify({ from: 'h3', to: 'e3', summary: 'sse-var', confidence: 0.7 }) } }] });
+    var half = Math.floor(obj.length / 2);
+    var frames = ['data :' + obj.slice(0, half) + nl + 'data:' + obj.slice(half) + nl + nl, 'data: [DONE]' + nl + nl];
+    callN = 0; sseMode = true; sseSets = [frames];
+    const engSse = XQ.Engine.create();
+    const cSse = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['sse1'], mode: 'council' });
+    const mvSse = await cSse.next(engSse);
+    ok(String(mvSse.meta.summary).indexOf('sse-var') >= 0, 'C21 SSE data 空格 + 多行 data 拼接均解析 (得 ' + mvSse.meta.summary + ')');
+    sseMode = false;
+  }
+  {
+    // 中止信号: 已中止信号 → 快速失败 (不烧重试)
+    var ac = new AbortController();
+    ac.abort();
+    resetStub([{ f: 'h3', t: 'e3', c: 0.5 }]);
+    const cAb = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['ab1'], mode: 'council', signal: ac.signal });
+    var threw33 = false;
+    try { await cAb.next(eng); } catch (e33) { threw33 = true; }
+    ok(threw33, 'C21 已中止信号 → 请求快拒 (不烧重试)');
+  }
+
   console.log(failed ? '_committee_agent: ' + failed + ' FAIL' : '_committee_agent: ALL PASS');
   process.exit(failed ? 1 : 0);
 })().catch(function (e) { console.error('suite crashed:', e); process.exit(1); });

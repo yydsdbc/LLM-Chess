@@ -33,7 +33,8 @@
                 }
               }
             : (idx === 0 ? opts.onThinking : null),
-          onRetry: opts.onRetry, signal: opts.signal
+          onRetry: opts.onRetry, signal: opts.signal,
+          jitter: opts.jitter, timeoutMs: opts.timeoutMs, maxTokens: opts.maxTokens   // 第38轮: 请求参数下传
         })
       };
     });

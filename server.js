@@ -95,7 +95,10 @@ function serveStatic(req, res, urlPath) {
   });
 }
 
-/* ── 上游转发 ── */
+/* ── 上游转发 ──
+ * 第38轮: keep-alive Agents — 上游默认每请求新建连接 (TLS 握手 ~100-400ms); LLM 调用密集 (会诊双选民/重试) 下复用连接显著省时 */
+const _httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 16, keepAliveMsecs: 30000 });
+const _httpAgent = new http.Agent({ keepAlive: true, maxSockets: 16, keepAliveMsecs: 30000 });
 function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 传入 (v1.0.3 起函数内引用 req 但不在作用域, 真实中继调用上游响应时 ReferenceError 崩进程)
   const base = (providerCfg.baseUrl || '').replace(/\/+$/, '');
   const path = providerCfg.chatPath || '/chat/completions';
@@ -118,6 +121,7 @@ function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 
     port: url.port || (url.protocol === 'https:' ? 443 : 80),
     path: url.pathname + url.search,
     method: 'POST',
+    agent: url.protocol === 'https:' ? _httpsAgent : _httpAgent,   // 第38轮: 连接复用
     timeout: 180000,   // v1.5.9: 65s→180s — socket 空闲超时, provider 排队波 70~300s 时 65s 会杀掉排队中请求 → 502 → agent 重试更久; 需 > agent 的 120s
     headers: Object.assign({
       'Content-Type': 'application/json',
@@ -195,6 +199,7 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
     port: url.port || (url.protocol === 'https:' ? 443 : 80),
     path: url.pathname + url.search,
     method: 'POST',
+    agent: url.protocol === 'https:' ? _httpsAgent : _httpAgent,   // 第38轮: 连接复用
     timeout: 180000,
     headers: Object.assign({
       'Content-Type': 'application/json',

@@ -1409,3 +1409,38 @@
 - 每帧 detectPhase 90 格扫描 ×3 处 → 每手一次
 - 静态资源二次请求 (对局中 F5) 磁盘 IO 归零
 - server.js 改动 (静态缓存) 需重启生效
+
+## 2026-09-12 ~19:40 第38轮 (v1.0.daily, zcode — 指令「对LLM请求逻辑做至少10个优化」→ 实做 18 项)
+
+基线 15/15。全部围绕请求链路 (ai/llm_agent.js 请求/重试/解析 + server 中继 + app 编排):
+
+【退避与限流协作 (1-6)】
+1. **Retry-After 捕获**: 上游 429/503 响应头 (秒数或 HTTP-date) → 错误消息尾标 [Retry-After Ns] (原完全忽略, 上游让等 30s 我们 3s 就重打)
+2. **Retry-After 作为退避地板**: wait = max(线性退避, Retry-After), 上限 30s
+3. **退避抖动 ±15%** (opt-in opts.jitter): 多选民/多局并发时错峰, 防同步撞同一限流窗口; retryWaitMs 纯函数保持无状态可测 (149 断言锚点不破)
+4. app 与委员会启用 jitter
+5. onRetry 载荷带 waitMs (wait 计算前置 — 原在通知之后)
+6. 状态条显示重试等待量: 「重试N次(待Xs)」(status_retry_wait i18n ZH/EN, ticker 动态选键)
+
+【请求构造与观测 (7-10)】
+7. **空模型值早退**: next() 直接 reject 明确提示 (原走中继必然 400, 白耗一次往返+限流窗口)
+8. **usage.httpCalls**: HTTP 调用级计数 (独立于 requests — 后者只计上报 usage 的应答; 本项含静默上游, 可观测「发了 5 次只回来 2 次用量」)
+9. **providerTimeout 按模型分级**: reasoner/thinking/r1/o1/o3/k2.6/qwq/deepseek-v4-pro 默认 240s, 普通 120s (原一律 120s, 长思考误杀后重试更慢) + 导出可测
+10. 委员会子代理下传 timeoutMs/maxTokens/jitter (原仅 signal/onRetry 透传, 无法按侧调参)
+
+【流式解析 (11-12)】
+11. **SSE 解析重写为规范容错形态**: 多行 data 拼接 (单事件 JSON 跨 chunk 拆行原本直接丢 — 已实测会丢) + 'data :' 空格变体; 事件以空行结分隔, 结束冲刷 pendingData
+12. handleSSE 抽取 (解析逻辑与读取循环解耦, 单元可覆盖)
+
+【生命周期 (13-15)】
+13. **对局级 AbortController**: startRecord (新局/重开/改设置) 即 abort 上一局在飞请求 — 原只靠 gameId 忽略结果, 上游 token 照烧
+14. llm/委员会接线 signal (committee 已透传 → 子代理)
+15. **服务器上游 keep-alive Agents** (https/http, maxSockets 16): 每请求新建连接 (TLS 握手 ~100-400ms) → 复用; 会诊双选民/重试密集场景收益直接
+
+【验证 (16-18)】
+16. C21 测试 6 断言: providerTimeout 三级分级 / SSE 多行+空格变体解析 / 已中止信号快拒 (不烧重试)
+17. 回归: llm_convo 149 / committee 34 / _server_http 46 / 全量 15/15 全绿; i18n 279 键 10/10
+18. LOG/CHANGELOG 收录
+
+- 边界: systemPrompt 未动 (2384 字, dump 新鲜度 PASS); server.js 改动 (keep-alive) 需重启; 零新依赖
+- 教训: (1) usage.requests 已被 countUsage 占用 — 新增计数改名 httpCalls 避免语义重叠 (测试当场抓出); (2) 行尾注释吞掉闭合大括号的拼接事故 (node --check 秒抓); (3) readStream 结构改造用整函数重写而非逐行替换, 避免残段
