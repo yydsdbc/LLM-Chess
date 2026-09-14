@@ -476,7 +476,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
       </datalist>
       <button id="snd-toggle" data-i18n-title="footer_sound_title" data-i18n-aria="footer_sound_title" aria-label="音效开关" title="音效开关">🔊</button>
     <button id="gear-toggle" data-i18n-title="settings_title" data-i18n-aria="settings_title" aria-label="对局设置" title="对局设置">⚙</button>
-    <div id="board"><div id="last-move-badge"></div>
+    <div id="board" role="group" tabindex="-1" data-i18n-aria="board_label" aria-label="棋盘"><div id="last-move-badge"></div>   <!-- 第40轮 a11y: tabindex=-1 仅作程序化焦点落点 (终局卡收起后归位), 不进 Tab 序; role=group + 名称给读屏一个盘面地标 -->
         <svg id="board-lines" viewBox="0 0 432 480" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
         <div id="col-labels" aria-hidden="true"><span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span><span>i</span></div>
         <div id="row-labels" aria-hidden="true"><span>10</span><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span></div>
@@ -489,37 +489,37 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                 <div class="set-col set-col-red">
                     <div class="col-title" data-i18n="side_red">🔴 红方</div>
                     <label class="set-check"><input type="checkbox" id="ai-red-enabled"> <span data-i18n="enabled">启用非人类棋手</span></label>
-                    <div class="set-row"><label data-i18n="type">对手类型</label>
+                    <div class="set-row"><label for="ai-red-type" data-i18n="type">对手类型</label>
                         <select id="ai-red-type"><option value="human" data-i18n="type_human">人类</option><option value="random" data-i18n="type_random">随机AI</option><option value="llm" data-i18n="type_llm">LLM</option></select>
                     </div>
-                    <div class="set-row llm-only"><label data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
+                    <div class="set-row llm-only"><label for="ai-red-provider" data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
                         <select id="ai-red-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
                         <button type="button" class="btn" id="ai-red-testconn" data-i18n="test_conn" style="margin-top:5px;width:100%;font-size:11px">⚡ 试连</button>
                         <span id="ai-red-testres" style="font-size:11px"></span>
                     </div>
-                    <div class="set-row llm-only"><label data-i18n="model">模型名称</label>
+                    <div class="set-row llm-only"><label for="ai-red-model" data-i18n="model">模型名称</label>
                         <input type="text" id="ai-red-model" list="model-datalist" data-i18n="model_placeholder" placeholder="选或填模型名">
                     </div>
-                    <div class="set-row llm-only"><label data-i18n="multi_label">同方多 LLM</label><select id="ai-red-multi"><option value="off" data-i18n="multi_off">关闭 (单模型)</option><option value="rotate" data-i18n="multi_rotate">轮换 (每手换模型)</option><option value="council" data-i18n="multi_council">会诊 (并行投票)</option></select></div>
-                    <div class="set-row llm-only"><label data-i18n="prompt_level">提示词等级 (风格注入量)</label>                        <select id="ai-red-style"><option value="none" data-i18n="pl_none">无 (不注入)</option><option value="low" data-i18n="pl_low">低 (一句话)</option><option value="mid" selected data-i18n="pl_mid">中 (标准)</option><option value="high" data-i18n="pl_high">高 (标准+战术)</option></select>                    </div>
+                    <div class="set-row llm-only"><label for="ai-red-multi" data-i18n="multi_label">同方多 LLM</label><select id="ai-red-multi"><option value="off" data-i18n="multi_off">关闭 (单模型)</option><option value="rotate" data-i18n="multi_rotate">轮换 (每手换模型)</option><option value="council" data-i18n="multi_council">会诊 (并行投票)</option></select></div>
+                    <div class="set-row llm-only"><label for="ai-red-style" data-i18n="prompt_level">提示词等级 (风格注入量)</label>                        <select id="ai-red-style"><option value="none" data-i18n="pl_none">无 (不注入)</option><option value="low" data-i18n="pl_low">低 (一句话)</option><option value="mid" selected data-i18n="pl_mid">中 (标准)</option><option value="high" data-i18n="pl_high">高 (标准+战术)</option></select>                    </div>
                     <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-red-quick"> <span data-i18n="quick_mode">快答模式 (关闭深度思考, 直出决策+原因)</span></label></div>
                 </div>
                 <div class="set-col set-col-black">
                     <div class="col-title" data-i18n="side_black">⚫ 黑方</div>
                     <label class="set-check"><input type="checkbox" id="ai-black-enabled"> <span data-i18n="enabled">启用非人类棋手</span></label>
-                    <div class="set-row"><label data-i18n="type">对手类型</label>
+                    <div class="set-row"><label for="ai-black-type" data-i18n="type">对手类型</label>
                         <select id="ai-black-type"><option value="human" data-i18n="type_human">人类</option><option value="random" data-i18n="type_random">随机AI</option><option value="llm" data-i18n="type_llm">LLM</option></select>
                     </div>
-                    <div class="set-row llm-only"><label data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
+                    <div class="set-row llm-only"><label for="ai-black-provider" data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
                         <select id="ai-black-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
                         <button type="button" class="btn" id="ai-black-testconn" data-i18n="test_conn" style="margin-top:5px;width:100%;font-size:11px">⚡ 试连</button>
                         <span id="ai-black-testres" style="font-size:11px"></span>
                     </div>
-                    <div class="set-row llm-only"><label data-i18n="model">模型名称</label>
+                    <div class="set-row llm-only"><label for="ai-black-model" data-i18n="model">模型名称</label>
                         <input type="text" id="ai-black-model" list="model-datalist" data-i18n="model_placeholder" placeholder="选或填模型名">
                     </div>
-                    <div class="set-row llm-only"><label data-i18n="multi_label">同方多 LLM</label><select id="ai-black-multi"><option value="off" data-i18n="multi_off">关闭 (单模型)</option><option value="rotate" data-i18n="multi_rotate">轮换 (每手换模型)</option><option value="council" data-i18n="multi_council">会诊 (并行投票)</option></select></div>
-                    <div class="set-row llm-only"><label data-i18n="prompt_level">提示词等级 (风格注入量)</label>                        <select id="ai-black-style"><option value="none" data-i18n="pl_none">无 (不注入)</option><option value="low" data-i18n="pl_low">低 (一句话)</option><option value="mid" selected data-i18n="pl_mid">中 (标准)</option><option value="high" data-i18n="pl_high">高 (标准+战术)</option></select>                    </div>
+                    <div class="set-row llm-only"><label for="ai-black-multi" data-i18n="multi_label">同方多 LLM</label><select id="ai-black-multi"><option value="off" data-i18n="multi_off">关闭 (单模型)</option><option value="rotate" data-i18n="multi_rotate">轮换 (每手换模型)</option><option value="council" data-i18n="multi_council">会诊 (并行投票)</option></select></div>
+                    <div class="set-row llm-only"><label for="ai-black-style" data-i18n="prompt_level">提示词等级 (风格注入量)</label>                        <select id="ai-black-style"><option value="none" data-i18n="pl_none">无 (不注入)</option><option value="low" data-i18n="pl_low">低 (一句话)</option><option value="mid" selected data-i18n="pl_mid">中 (标准)</option><option value="high" data-i18n="pl_high">高 (标准+战术)</option></select>                    </div>
                     <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-black-quick"> <span data-i18n="quick_mode">快答模式 (关闭深度思考, 直出决策+原因)</span></label></div>
                 </div>
             </div>
@@ -534,8 +534,8 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                 <div class="set-row" style="margin-bottom:8px;text-align:right">
                     <button type="button" class="btn" id="ui-resetdata" data-i18n="reset_data" style="background:rgba(192,57,43,.25);font-size:11px">清空本地数据</button>
                 </div>
-                <div class="set-row" style="margin-bottom:8px"><label data-i18n="language_label">语言</label><select id="ui-lang"><option value="zh">中文</option><option value="en">English</option></select></div>
-                <div class="set-row" style="margin-bottom:8px"><label data-i18n="pieces_label">棋子显示</label><select id="ui-pieces"><option value="cn">汉字</option><option value="en">Letters</option></select></div>
+                <div class="set-row" style="margin-bottom:8px"><label for="ui-lang" data-i18n="language_label">语言</label><select id="ui-lang"><option value="zh">中文</option><option value="en">English</option></select></div>
+                <div class="set-row" style="margin-bottom:8px"><label for="ui-pieces" data-i18n="pieces_label">棋子显示</label><select id="ui-pieces"><option value="cn">汉字</option><option value="en">Letters</option></select></div>
                 <button class="btn" onclick="XQApp.closeAISettings()"><span data-i18n="btn_close">取消</span></button>
                 <button class="btn" onclick="XQApp.saveAISettings()"><span data-i18n="btn_save_settings">保存并开局</span></button>
             </div>
@@ -571,6 +571,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 <div id="sr-status" class="sr-only" aria-live="polite"></div>
 <div id="ai-banner"></div>
 <div id="sr-move" class="sr-only" aria-live="polite"></div>
+<div id="sr-alert" class="sr-only" role="alert" aria-live="assertive"></div>   <!-- 第40轮 a11y: 错误/警告专属断言式播报区 — #ai-banner 思考中每秒 tick 会重写全局计时, 整体挂 aria-live 会每秒刷屏 -->
 <div id="btn-row"><button class="btn" id="btn-flip" data-i18n="btn_flip">⇅ 翻转</button><button class="btn" id="btn-undo" data-i18n="btn_undo" data-i18n-title="undo_tip" title="↩ 悔棋 (快捷键 U)">↩ 悔棋</button><button class="btn" id="btn-restart" data-i18n="btn_reset">🔄 重新开始</button><button class="btn" id="btn-replay-watch" data-i18n="btn_watch_replay" data-i18n-title="btn_watch_replay_title" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" data-i18n="btn_fullscreen" data-i18n-title="btn_fullscreen_title" title="全屏观战 (F 键)">⛶ 全屏</button></div>
 <div id="archive-row">
     <button class="btn" id="btn-save" data-i18n="btn_save_short" data-i18n-title="btn_save" title="导出棋谱JSON" disabled>💾 存棋谱</button>

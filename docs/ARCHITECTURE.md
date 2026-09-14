@@ -60,12 +60,17 @@ flowchart LR
 | `test/_clean_reason_check.js` | thinking-stream cleaning rules |
 | `test/cn_notation_check.js` | Chinese move notation (disambiguation edge cases) |
 | `test/_replay_edge.js` | replay edge cases + bookmark pure logic |
-| `test/_logic_layer.js` | pure logic layer guards (notation, HUD helpers), engine `legalTargets`/`dangerTargets` memo + state-version invalidation, and a DOM-stub renderer hot-path guard (one `snapshot()` per render, O(1) `isOver`, arrow-SVG dedupe) |
+| `test/_logic_layer.js` | pure logic layer guards (notation, HUD helpers), engine `legalTargets`/`dangerTargets` memo + state-version invalidation, a DOM-stub renderer hot-path guard (one `snapshot()` per render, O(1) `isOver`, arrow-SVG dedupe, sparkline signature dedupe, move-log `tabindex`, banner→`#sr-alert` announcement), and a `vm`-stubbed **service-worker offline-shell** guard (install-time shell precache + scope-relative navigation fallback) |
+| `test/i18n_check.js` | i18n dictionary guards, 11 groups (zh/en key parity, placeholder parity, static `data-i18n` + JS `t()` coverage, static/JS-side CJK attribute and dynamic-write-entry leaks, key existence for non-first-argument references) |
+| `test/link_check.js` | docs link guard — every relative link in the repo's `.md` files must resolve |
+| `test/_prompt_level_smoke.js` | prompt-tier injection (per-level constant length + prefix-cache invariance) |
+| `test/replay_risk_check.js` | replay risk detector + record quota fallback |
+| `test/_committee_agent.js` | same-side multi-LLM committee (council vote, tie-break, rotation, all-fail, usage sum) |
 | `test/_server_http.js` | server.js HTTP behavior (spawns a real server: ETag/304, traversal 403 incl. backslash form, rate-limit 429 + Retry-After, request-side validation 400s, OpenAI non-stream + **streaming SSE** + Anthropic protocol relay, CORS origin policy, …) |
-| `test/check_ui.js` | syntax sweep, ID cross-check, localStorage prefix, release files, README version parity, HTML hygiene, PWA manifest + SW guard (icons/screenshots/categories), replay-dialog semantics, life-cycle generation guards |
+| `test/check_ui.js` | syntax sweep, ID cross-check, localStorage prefix, release files, README version parity, HTML hygiene, PWA manifest + SW guard (icons/screenshots/categories), replay-dialog semantics, life-cycle generation guards, a11y/PWA source guards (`#sr-alert` announcer, label `for=`, move-log keyboard, drag abort, end-card focus return, SW shell precache) |
 | `npm run check` | syntax sweep of every JS file + prompt hard gate |
 
-Run everything with `npm test` (15 suites) — CI runs `npm run check` + `npm test` on Node 18/20/22 (ubuntu) and Node 22 (windows).
+Run everything with `npm test` (15 suites) — CI runs `npm run check` + `npm test` on Node 18/20/22/24 (ubuntu) and Node 22 (windows).
 
 ## Conventions / 约定
 

@@ -168,9 +168,9 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 | `node test/replay_smoke.js` | replay, 53 checks (data/control layers, speeds, seek, tolerance, parseEval direction, imported records, capture-jump) |
 | `node test/_clean_reason_check.js` | reasoning-stream cleaner, 10 checks |
 | `node test/cn_notation_check.js` | Chinese notation, 25 checks (classic anchors / file-disambiguation 前中后 / legacy-key sentinel) |
-| `node test/i18n_check.js` | i18n guards, 10 groups (zh/en key parity, placeholder parity, data-i18n / t() coverage, static & JS-side CJK attribute hooks, dynamic write-entry CJK) |
+| `node test/i18n_check.js` | i18n guards, 11 groups (zh/en key parity, placeholder parity, data-i18n / t() coverage, static & JS-side CJK attribute hooks, dynamic write-entry CJK, key-existence for non-first-argument key references) |
 | `node test/link_check.js` | docs link guard — relative links in all `.md` files must resolve to real files |
-| `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest (icons/screenshots/categories) + SW guard + replay-dialog semantics + life-cycle generation guards |
+| `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest (icons/screenshots/categories) + SW guard + replay-dialog semantics + life-cycle generation guards + a11y/PWA source guards (#sr-alert announcer, label `for=`, move-log keyboard, drag abort, end-card focus return, SW shell precache) |
 | `node test/_prompt_level_smoke.js` | prompt-tier injection: each level constant + legacy style map + prefix-cache invariance |
 | `node test/replay_risk_check.js` | replay risk detector + record quota fallback |
 | `node test/_committee_agent.js` | same-side multi-LLM committee: council vote, tie-break, rotation, all-fail, usage sum |
@@ -233,7 +233,7 @@ API keys exist only in server-side `config/keys.json` (never commit it — it is
 - **Replay: 跳到下一手吃子 / 上一手吃子 (键盘 `C` / `Shift+C`, 按钮 `⏪吃` / `吃子⏩`)** — 长局 (几十手) 跳过拉扯段快速看子力交换点; controller 新增 `stepNextCapture` / `stepPrevCapture` (边界: 末尾/起点; 零吃子平跳); 走法表/帮助模态同步。
 - **Evaluation: 槽心马/挂角马知识 (v3.9.2)** — 检测己方马已逼近对方九宫侧翼位 (x∈{1,2,6,7} + 对方宫城行 ±1), 双向点名 (攻方「可跴将抽车取势, 护住马眼勿轻兑」/ 守方「勿随手送马, 可驱赶/走跴」); 与窝心马 v2.5 (x=4 宫心) 互斥; 初始局零噪音。
 - **PGN 导出加中文记谱 (v3.9.2)** — rpExportPGN 每手 comment 追加 `{cn: 炮八平五}` (与原 summary 并列), 中文用户直接看走子, 国际 PGN 解析器忽略额外字段。
-- 5 项总计; test 149 / 88 / 49 / 53 / 10 / 25 / check_ui EXIT 0; 完整清单见 [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md) 11 轮。
+- 5 项总计; test 151 / 88 / 49 / 53 / 10 / 25 / check_ui EXIT 0; 完整清单见 [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md) 11 轮。
 
 ## Roadmap
 

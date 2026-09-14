@@ -170,3 +170,51 @@ if (!/if \(gid !== gameId\) \{ if \(selfTimer\) clearInterval\(selfTimer\); retu
 if (!/typeof opts\.signal === 'function' \? opts\.signal\(\)/.test(llmSrc)) lifeIssues.push('llm_agent 未支持 signal 取值函数');
 console.log('生命周期世代守卫:', lifeIssues.length ? lifeIssues.join(' | ') : 'OK (catch 守卫 + 信号取值函数 x2 + ticker 自清 + agent 侧支持)');
 if (lifeIssues.length) process.exit(1);
+
+// 15) 第40轮 a11y / PWA 源串守卫 — 本轮修复中无 DOM 可达的部分 (app.js 全局分支、渲染层事件绑定、
+//     sw.js 安装期行为已在 _logic_layer L11 行为化覆盖, 此处补源串层防线防回退):
+//     (a) 错误/警告播报区 #sr-alert 存在且为断言式; (b) 设置面板 label 与控件程序化关联 (for=);
+//     (c) 走法列表条目键盘可达 + 事件键处理; (d) 拖拽 pointercancel 中止清理; (e) 渲染热路径短路与签名去重;
+//     (f) 终局卡焦点归还; (g) serviceWorker.register 的 Promise 拒绝已兜底; (h) 悔棋 AI 思考期不再静默无反应; (i) sw 预缓存壳。
+const renSrc = fs.readFileSync(__dirname + '/../ui/renderer.js', 'utf8');
+const a11yIssues = [];
+// (a) 断言式播报区
+if (!/id="sr-alert"[^>]*role="alert"/.test(html) || !/id="sr-alert"[^>]*aria-live="assertive"/.test(html)) {
+  a11yIssues.push('index.html 缺 #sr-alert 断言式播报区 (role=alert + aria-live=assertive)');
+}
+if (!/getElementById\('sr-alert'\)/.test(renSrc)) a11yIssues.push('renderer 未把警告横幅写入 #sr-alert (读屏感知不到失败)');
+// (b) label ↔ 控件程序化关联: 非包裹式 label 挂 data-i18n 时必须带 for= 且目标 id 存在
+const labelRe = /<label([^>]*)>([\s\S]*?)<\/label>/g;
+let lm, forCount = 0;
+while ((lm = labelRe.exec(html)) !== null) {
+  const attrs = lm[1], inner = lm[2];
+  if (/<(input|select|textarea)/i.test(inner)) continue;         // 包裹式: 关联由结构给出
+  if (!/data-i18n(?:-title|-aria)?=/.test(attrs)) continue;       // 非文案标签 (装饰)
+  const forM = attrs.match(/\bfor="([\w-]+)"/);
+  if (!forM) { a11yIssues.push('label 未关联控件 (缺 for=): ' + attrs.trim().slice(0, 60)); continue; }
+  if (!html.includes('id="' + forM[1] + '"')) a11yIssues.push('label for="' + forM[1] + '" 指向不存在的 id');
+  forCount++;
+}
+if (forCount < 12) a11yIssues.push('设置面板 for= 关联数不足 (' + forCount + '/12)');
+// (c) 走法列表键盘可达
+if (!/log\.addEventListener\('keydown'/.test(renSrc)) a11yIssues.push('走法列表缺 keydown 处理 (键盘无法跳转局面)');
+if (!/e\.tabIndex = 0;/.test(renSrc)) a11yIssues.push('走法列表条目缺 tabIndex=0 (不可聚焦)');
+// (d) 拖拽中止清理
+if (!/addEventListener\('pointercancel', dragAbort\)/.test(renSrc) || !/addEventListener\('lostpointercapture', dragAbort\)/.test(renSrc)) {
+  a11yIssues.push('拖拽未接管 pointercancel/lostpointercapture (指针被夺走 → _drag 残留永久阻断拖拽)');
+}
+// (e) 渲染热路径
+if (!/sel \? legal\[x \+ ',' \+ y\] : null/.test(renSrc)) a11yIssues.push('逐格 legal 查表未按选中态短路 (未选中仍分配 90 次键串)');
+if (!/_sparkSig/.test(renSrc)) a11yIssues.push('评值走势 SVG 缺内容签名去重');
+if (!/tabIndex = \(mode === 'warn' && msg\) \? 0 : -1/.test(renSrc)) a11yIssues.push('横幅缺焦点落点管理 (仅警告态可聚焦)');
+// (f) 终局卡焦点归还
+if (!/overlay\._opener/.test(renSrc) || !/back\.isConnected/.test(renSrc)) a11yIssues.push('终局卡缺焦点归还 (关闭后焦点丢失到 body)');
+// (g)(h) app.js 侧
+if (!/serviceWorker\.register\('sw\.js'\)\.catch\(/.test(appSrc)) a11yIssues.push('serviceWorker.register 缺 Promise 拒绝兜底 (404 变 unhandled rejection)');
+if (!/XQ\.I18N\.t\('undo_ai_busy'\)/.test(appSrc)) a11yIssues.push('悔棋在 AI 思考期仍静默 return (应为可见+可播报提示)');
+if (!/abEl\.addEventListener\('keydown'/.test(appSrc)) a11yIssues.push('警告横幅缺键盘关闭 (键盘用户只能等 15s 自清)');
+// (i) sw 安装期预缓存
+if (!/var SHELL = \['\.\/', '\.\/index\.html'\]/.test(swSrc) || !/c\.add\(u\)/.test(swSrc)) a11yIssues.push('sw.js 缺安装期壳预缓存');
+if (!/caches\.match\('\.\/index\.html'\)/.test(swSrc)) a11yIssues.push('sw.js 导航兜底未用作用域相对键 (绝对路径写法在子路径部署必然 miss)');
+console.log('a11y/PWA 源串守卫:', a11yIssues.length ? a11yIssues.join(' | ') : 'OK (sr-alert 播报 + label for= x' + forCount + ' + 走法列表键盘 + 拖拽中止 + 热路径 + 终局焦点 + SW 兜底)');
+if (a11yIssues.length) process.exit(1);

@@ -12,6 +12,7 @@
  *  I9 JS 侧动态属性 CJK 守护 — JS 模板串里的 title=/placeholder=/aria-label= 含中文必须同串挂 data-i18n* 标记,
  *     .title = '…中文…' 赋值必须走 t/tArgs 家族 (第27轮; I8 只扫 index.html, JS 构建的 DOM 是第三盲区)
  *  I10 JS 动态写入口 (textContent=/aiBanner()/innerHTML=) 裸中文必须走 t 家族或挂 data-i18n (第37轮)
+ *  I11 T 家族同行引用的 snake_case 字面量键必须存在于字典 — 补 I5 只认「键紧跟左括号」的盲区 (第40轮)
  * 用法: node test/i18n_check.js
  */
 'use strict';
@@ -163,6 +164,27 @@ jsFiles.forEach(function (f) {
 });
 ok(miss10.length === 0, 'I10 JS 动态写入口 (textContent/aiBanner/innerHTML) 裸中文' + (miss10.length ? ' (漏挂: ' + miss10.join(' ; ') + ')' : ' (0 漏挂)'));
 
-console.log('i18n_check: ' + (10 - fails.length) + '/10 groups PASS, ' + zk.length + ' keys');
+// I11 第40轮: 键存在性守护 (非首参形态) — I5 的正则要求引号键紧跟 t( 的左括号, 因此
+//   TI(view.aiRetryWait ? 'status_retry_wait' : 'status_retry', …) 这类「键作为三元/拼接/非首参」的写法
+//   从未被守护: 第38轮加入 waitMs 分支时引用了字典里根本不存在的 status_retry_wait, I5 全绿,
+//   而界面上状态条原样显示字符串 'status_retry_wait' (中英皆是)。同理可漏掉任何新键。
+//   规则: 凡同行出现 T 家族调用, 该行所有 snake_case 引号字面量 (形如 a_b…) 都必须在 ZH 字典中存在。
+var miss11 = [];
+var I11_DENY = {};   // 逃生口: 若将来某非键字面量确实与键同形, 在此登记 (键名 → 1)
+jsFiles.forEach(function (f) {
+  fs.readFileSync(path.join(ROOT, f), 'utf8').split(/\r?\n/).forEach(function (line, i) {
+    if (!/\b[tT][A-Za-z0-9]*\(/.test(line)) return;      // 无 T 家族调用 → 该行字面量不可能是字典键
+    var ls = line.trim();
+    if (ls.indexOf('//') === 0 || ls.indexOf('*') === 0) return;   // 注释行豁免
+    var re11 = /'([a-z][a-z0-9]*(?:_[a-z0-9]+)+)'/g, m11;
+    while ((m11 = re11.exec(line)) != null) {
+      if (I11_DENY[m11[1]]) continue;
+      if (ZH[m11[1]] == null) miss11.push(f + ':' + (i + 1) + ' ' + m11[1]);
+    }
+  });
+});
+ok(miss11.length === 0, 'I11 T 家族同行引用的键均存在于字典 (非首参形态)' + (miss11.length ? ' (不存在: ' + miss11.join(' ; ') + ')' : ''));
+
+console.log('i18n_check: ' + (11 - fails.length) + '/11 groups PASS, ' + zk.length + ' keys');
 if (fails.length) { process.exit(1); }
 process.exit(0);

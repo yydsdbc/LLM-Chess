@@ -1475,3 +1475,43 @@
 - 教训: (1) 第38轮 AbortController 接线顺序错误在 headless 套件下完全不可见 — `ui/app.js` 无 DOM 级测试是系统性盲区, 本轮以「源串守卫 + DOM 桩渲染测试」两道补上; (2) 加 catch 世代守卫必须同时给 ticker 加世代自清, 否则旧局 interval 永久空转; (3) 守护测试先跑红再修绿。
 - 边界: systemPrompt 未动 (2384 字, dump 新鲜度 PASS); server.js 未改 (纯测试扩面, 无需重启); 套件数 15 不变 (徽章/目录树无需同步); 零新依赖
 - 触点: ai/llm_agent.js / ui/app.js / ui/renderer.js / core/engine.js / manifest.json / test/_logic_layer.js / test/test_llm_convo.js / test/_server_http.js / test/check_ui.js / README.md / README.zh-CN.md / docs/ARCHITECTURE.md / CHANGELOG.md / prompts_dump.md (仅时间戳)
+
+## 2026-09-15 02:16 第40轮 (v1.0.daily, zcode — 指令「优化: a11y 二期 / PWA manifest / 渲染性能 / 服务端行为测试 / 文档对齐 / i18n 漏挂」; 实做 15 项)
+
+基线 `npm run check` ALL PASS + `npm test` 15/15。主线: **i18n 漏挂第 6 轮抓出 6 处真实 EN 泄漏 (含 2 处由浏览器实机而非静态扫描发现) + a11y 二期补齐错误播报/表单标签/键盘可达/焦点归还 + PWA 离线首启白屏根因修复 + 渲染热路径三处去冗**。新守护 I11 直击「引用了不存在的键」这一历史盲区。
+
+【i18n 漏挂 (1-6)】
+1. **`status_retry_wait` 键根本不存在 → 状态条显示字面量**: 第38轮加入「重试等待量」时引用了该键, 但字典从未收录; `t()` 回退链返回键名本身 → *中英界面都*原样显示 `status_retry_wait`。补 ZH ` · 重试{n}次(待{s}s)` / EN ` · {n} retries (waiting {s}s)`。**I5 为何漏掉**: 其正则要求引号键紧跟 `t(` 左括号, 而此处键在三元里 (`view.aiRetryWait ? 'status_retry_wait' : 'status_retry'`) → 见第 17 项新增 I11。
+2. **阶段名 开局/中局/残局 三处漏挂**: `phaseCN()` 直取 `XiangqiKnowledge.PHASE_CN` 中文常量, 被状态条 (`renderStatus`)、每秒时钟 (`updateClock`)、思考 ticker (`app.js` tick) 三处注入 `{ph}` → EN 界面每帧显示 `Move 5 · 0:12 · 中局`。Phase 文案改走字典 (`phase_opening/middlegame/endgame`), ticker 同步改走 `XQ.I18N.t('phase_' + pht)`。
+3. **终局卡 5 条原因硬编码中文**: `renderOverlay` 三元链里的 `困毙…/绝杀…/长将判负…/三次重复判和…/自然限着判和…` 直接写进 `#eo-sub` → EN 界面每局终局副标题整段中文。改 `res_<result>` 字典键 (白名单映射, 未知 result 保持空串); 顺带去掉 `(v2.0 规则闭环)` 一类内部版本注记 (对用户无意义)。**I10 为何漏掉**: 它只匹配同行的 `textContent = '字面量'`, 而这里字面量在跨行三元里、赋值在另一行。
+4. **`(无摘要)` 两处漏挂**: 决策卡/续局重建的 `summary` 兜底值 (`app.js` ×2) → 新增 `summary_none` 键。
+5. **思考面板 stat 裸拼中文** (浏览器实机抓出, 静态扫描未报): `thinkStat.total + 's·' + moves + '手·' + secs + 's/手'` → EN 面板尾部显示 `11s·11手·1s/手`。新增 `think_stat_tpl` / `think_per_move` 双语键。
+6. **走法列表子名恒用汉字** (浏览器实机抓出): 日志的棋子字取自 `XQ.Piece.CHARS` 硬编码, 「EN 界面 + Letters」下棋盘是 `c` 而日志仍 `炮` — 双语/棋子偏好看似没生效。渲染层新增 `logGlyph(side, ch)` (按 `xq_pieces` 反查字母表), 走子字与被吃子字 (查对方字表) 一并处理。
+
+【a11y 二期 (7-11)】
+7. **错误/警告全站唯一出口不可感知**: `#ai-banner` 承载 AI 失败/401/429/402/导入失败/将军/重复局面/长将等全部运行时提示, 但无任何 ARIA 语义, 且只绑 `click` 关闭 — 读屏完全不知道失败, 键盘用户关不掉只能等 15s。新增 `#sr-alert` (`role=alert` + `aria-live=assertive`) 专属播报区: 只投 warn 文本 (busy 模式每秒重写全局计时, 整体挂 live 会每秒刷屏 — 这正是第23轮把状态条播报拆出去的同一教训); 横幅仅警告态置 `tabIndex=0` 并补 Enter/Space 关闭 (`stopPropagation` 不落到全局键盘走子分支); 收起时清空播报区, 保证同一错误能再次播报。
+8. **设置面板 12 处 label 与控件无程序化关联**: `index.html` 全仓 `for=` 数量为 0, label 是控件的兄弟节点 → 读屏逐个读出「组合框/文本框」而无名称 (分不清服务商/模型/对手类型)。12 处补 `for=` (红黑各 5 + 语言 + 棋子显示), 目标 id 均存在。
+9. **走法列表条目键盘不可达**: `.log-entry` 只有 `click` (CSS 还给着 `cursor:pointer`), 键盘用户无法用最核心的「点手数跳局面」功能。补 `tabIndex=0` + 容器 keydown 委托 (Enter/Space → 同一 `xq:replay` 事件, `parseInt` NaN 防护, Space 拦默认滚动) — 与第37轮回放层走法表的处理同口径。
+10. **终局卡只入不出**: 第24轮让焦点在显示时入卡, 但收起时 (`_wasShown=false`) 不归还 → activeElement 落在已 `visibility:hidden` 的按钮上, 焦点静默丢失到 body。现记录焦点宿主 `overlay._opener` 并在收起时归还 (仅当焦点确实还在卡内才搬移, 不打断用户已移到别处的焦点); 兜底落点用 `#board` (新加 `tabindex=-1` + `role=group` + `board_label` 名称 — 程序化落点, 不进 Tab 序, 顺带给读屏一个盘面地标)。
+11. **悔棋按钮「看着可用却无反应」**: `undoLastMove` 在 `aiBusy` 时静默 `return` — 读屏/键盘用户拿到零反馈。改为走警告横幅 (`undo_ai_busy` 键), 并借第 7 项自动进入 `#sr-alert` 播报。
+
+【PWA (12-13)】
+12. **离线首启白屏根因修复**: 原实现按访问 URL 写缓存 → 根导航键是 `./` 而非 `./index.html`, 而离线兜底却查写死的 `'/index.html'` (从未写入的键) → **必然 miss**; 且无安装期预缓存, 即便键对也无可回退。三重修复: 安装期预缓存作用域相对壳 (`./` 与 `./index.html`, 相对路径使子路径部署同样成立) + 兜底改按「`./index.html` → `./` → 原请求 ignoreSearch」链式查 + 缓存升版 `xq-shell-v2` 触发 activate 清旧。shell 首启即可离线开局 (Random AI 无需服务)。
+13. **`serviceWorker.register` 的 Promise 拒绝无人接管**: 原 `try/catch` 只兜同步抛错, `sw.js` 404/MIME 异常变成未处理 rejection (控制台报错 + 静默无 SW, 离线壳失效无迹可寻)。补 `.catch()` 并 warn。
+
+【渲染 / 输入热路径 (14-15)】
+14. **三处去冗**: ① 逐格 `legal[x+','+y]` / `danger[x+','+y]` 每帧无条件构造键串 (90 格 × 2 = 180 次分配), 未选中时 legal/danger 恒空 → 改 `sel` 总闸短路; ② `evalSpark` 全量重建 SVG 且无签名去重 (走子/吃子/悔棋/导入各触发一次) → 加内容签名 (pts 全量 + 语言, 因圆心 title 文案随语言热切), 空态同样去重; ③ `mouseover` 委托每次鼠标移动都先做一次全盘 `querySelectorAll('.cand-hover')` 清理 → 改记录已高亮格, 无候选且无历史高亮时零 DOM 查询。
+15. **拖拽指针被夺走 → 输入永久锁死**: 只挂 `pointerup` 收尾, 触屏转滚动/系统手势/右键菜单/窗口失焦时它永不触发 → `_drag` 残留非空, 而 `pointerdown` 有 `|| _drag` 守卫 → **此后所有拖拽被永久阻断** (且两个 document 监听永久泄漏)。补 `pointercancel`/`lostpointercapture` → `dragAbort()` (摘幽灵/高亮/监听 + 收敛选中态, 语义为「取消」不落子), 并对「正常 pointerup 之后到达的 lostpointercapture」做 `_drag` 空值早退防重复处理。
+
+【验证 / 守护 / 文档 (16-17)】
+16. **新守护测试 (全部先红后绿实证)**: ① `i18n_check` 新增 **I11** — 凡同行出现 T 家族调用, 该行所有 snake_case 引号字面量必须在字典中存在 (补 I5「键必须紧跟左括号」的盲区); 实测对现行代码 0 假阳性, 且**移除 `status_retry_wait` 后当场抓红 `ui/app.js:478`** (即第 1 项那个真实 bug)。② `check_ui` 第15节 a11y/PWA 源串守卫 (sr-alert 语义 / label `for=` 目标存在且 ≥12 / 走法列表 keydown 与 tabIndex / 拖拽中止监听 / 逐格短路 / spark 签名 / 终局焦点归还 / SW 兜底键与预缓存); 一次破坏 4 处 → 5 条问题当场报出, 还原即绿。③ `_logic_layer` 新增 **L11** (含 DOM 桩行为断言: spark 去重 1→1→2 次写入、走法条目 tabIndex、warn 进播报区而 busy 不进、横幅收起清空) + **sw.js 行为化测试** (vm + caches/self 桩): 两个独立红探针分别证伪「兜底键改回绝对路径」与「移除安装期预缓存」。
+17. **文档对齐**: `docs/ARCHITECTURE.md` 测试地图原只列 15 套件中的 10 个 → 补齐 `i18n_check`/`link_check`/`_prompt_level_smoke`/`replay_risk_check`/`_committee_agent`, 并把 stale 的 CI 矩阵 `18/20/22` 更正为 `18/20/22/24`; README 双语计数对齐 (zh `test_evaluation` 81→**88**、`replay_smoke` 45→**53**、i18n 守护 10→**11** 组, EN 段 `test_llm_convo` 149→**151**), 补齐 check_ui 守卫描述。顺带修正 zh 目录树与自身测试表互相矛盾的一处陈旧计数。
+
+【验证】
+- 门禁: `node --check` 全改文件 + `npm run check` ALL PASS (system prompt 2384 字未动) + `npm test` 15/15 (i18n 291→**293 键 / 11 组**; _logic_layer 含 L11; check_ui 含第15节)
+- **浏览器实机 (IAB, 预置 `xq_v1_settings` 双方 random + `xq_lang=en` + `xq_pieces=en` 自动开局)**: 对局自动推进至 21+ 手、32 子、**零 console error / unhandledrejection**、SW 已接管 (`navigator.serviceWorker.controller`)。EN 断言: 状态条无 CJK / 横幅 `Elapsed 0:11` / 思考面板 `3s·3 moves·1s/move` / 走法列表字母子名 `c` / `#board` `role=group`+`tabindex=-1`+`aria-label="Board"` / `#sr-alert` `role=alert`+`aria-live=assertive` / 12 处 `for=` 全部命中 / 走法条目 `tabIndex` 全 0。切 zh 复验: `3s·3手·1s/手`、子名 `炮`、`aria-label=棋盘`、状态条 `🤖 随机AI（黑方）思考中…` — 汉字路径未被破坏。
+- **截图失败 → 计算样式/几何断言兜底** (IAB guest 截图返回 `capture failed`): 棋盘 435×483 可见 / 90 格可见 / 28 子可见 / 走法列表 209×96 且 38 条可见 (cursor:pointer) / `#sr-alert` `display:block` + 宽 1px + `clip: rect(0,0,0,0)` (视觉隐藏但**不** display:none, 否则读屏不播报 — 关键正确性点) / `#board` tabIndex −1。
+- 提交前自查: 全局 keydown 保持「无光标时放行 Enter/Space」不变 (横幅新处理函数 `stopPropagation` 仅在其自身聚焦时生效); `_sparkSig`/`overlay._opener` 在重开/收起路径均复位; 本轮未新增异步回调 (既有世代守卫不涉及); 套件数保持 15 → 徽章/目录树无需同步。
+- 教训: (1) **静态扫描与实机是互补而非覆盖关系** — 第 5/6 项 (面板 stat `手`、走法列表子名) 三条 CJK 守护全绿却被浏览器实机一眼看出, 因为它们是「拼接产物」而非「字面量」; (2) 修「键缺失」类 bug 之后必须补「键存在性」守护, 否则同类 bug 会以另一处写法复发 (故有 I11); (3) 给兜底逻辑加链式回退时, 要意识到**回退会掩盖前一环的失效** — 第一版 sw 测试因此假绿, 必须构造「只含单一键」的隔离场景才能证伪具体那一环; (4) 修「多义 s. 元素常驻」类缺陷时, 单一测试若依赖隐式微任务顺序会偶发, 应显式串成 promise 链。
+- 边界: `ai/llm_agent.js` 未动 (system prompt 2384 字, dump 新鲜度 PASS, 无需重生成); `server.js` 未动 (无需重启); `sw.js` 改动只需用户下次访问重新拉取 SW 即生效 (缓存已升版); 零新依赖; 套件数 15 不变
+- 触点: ui/i18n.js (+14 键: status_retry_wait/phase_opening|middlegame|endgame/res_stalemate|checkmate|perpetual|repetition|natural/summary_none/board_label/undo_ai_busy/think_stat_tpl/think_per_move) / ui/app.js / ui/renderer.js / index.html / sw.js / test/i18n_check.js (I11) / test/check_ui.js (第15节) / test/_logic_layer.js (L11) / README.md / README.zh-CN.md / docs/ARCHITECTURE.md / CHANGELOG.md

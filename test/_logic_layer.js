@@ -213,5 +213,121 @@ viewR.selected = { x: 4, y: 9 };
 sandbox.XQ.UI.render(spy, viewR);
 ok(cnt.snapshot === 1, 'L10 选中态渲染同样仅 1 次 snapshot (legal/danger 走 memo)');
 
-console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
-process.exit(fails.length ? 1 : 0);
+/* ═══ L11 第40轮: PWA 离线壳 + 本轮渲染/a11y 行为回归 ═══ */
+var DOC_IDS_11 = ['ai-banner', 'sr-alert', 'move-log', 'think-red-spark', 'think-black-spark'];
+DOC_IDS_11.forEach(function (id) { DOC_MAP[id] = mkEl('div'); });
+DOC_MAP['ai-banner'].id = 'ai-banner';
+DOC_MAP['sr-alert'].id = 'sr-alert';
+
+// L11-a 评值走势 sparkline 内容签名去重 — 序列未变不重解析整段 SVG (走子/吃子/悔棋/导入各触发一次渲染)
+var sparkEl = DOC_MAP['think-red-spark'];
+sandbox.XQ.UI.evalSpark('red', [0.5, -1.2, 2.0]);
+var sparkSets1 = sparkEl._htmlSets || 0;
+ok(sparkSets1 === 1 && sparkEl.innerHTML.indexOf('<polyline') >= 0, 'L11 evalSpark 首次绘制 SVG (1 次写入)');
+sandbox.XQ.UI.evalSpark('red', [0.5, -1.2, 2.0]);
+ok((sparkEl._htmlSets || 0) === sparkSets1, 'L11 同序列重复调用不重建 SVG (第40轮签名去重)');
+sandbox.XQ.UI.evalSpark('red', [0.5, -1.2, 2.5]);
+ok((sparkEl._htmlSets || 0) === sparkSets1 + 1, 'L11 序列变化则重建 (签名覆盖每个采样点)');
+var sparkSets2 = sparkEl._htmlSets || 0;
+sandbox.XQ.UI.evalSpark('red', []);
+ok((sparkEl._htmlSets || 0) === sparkSets2 + 1 && sparkEl.innerHTML === '', 'L11 空序列清空一次');
+sandbox.XQ.UI.evalSpark('red', []);
+ok((sparkEl._htmlSets || 0) === sparkSets2 + 1, 'L11 空序列重复调用不重复清空 (空态同款去重)');
+
+// L11-b 走法列表条目键盘可达 — 第40轮补 tabindex (原只有 click, 键盘用户无法用走法列表跳转局面)
+var logEl = DOC_MAP['move-log'];
+logEl.children.length = 0;
+sandbox.XQ.UI.logMove(1, 'red', '炮', '炮二平五', null, null, 3, '');
+var entryEl = logEl.children[0];
+ok(!!entryEl && entryEl.tabIndex === 0, 'L11 走法列表条目 tabIndex=0 (键盘可聚焦)');
+
+// L11-c 底部横幅错误/警告 → #sr-alert 断言式播报 (原无任何 ARIA 语义, 读屏完全感知不到失败)
+var alertEl = DOC_MAP['sr-alert'], bannerEl = DOC_MAP['ai-banner'];
+sandbox.XQ.UI.aiBanner('warn', '⚠ <b>上游限流</b> 429', 'red');
+ok(alertEl.textContent.indexOf('上游限流') >= 0 && alertEl.textContent.indexOf('<') < 0, 'L11 warn 横幅文本 (去标签) 进 #sr-alert');
+ok(bannerEl.tabIndex === 0, 'L11 warn 横幅可聚焦 (键盘可关闭)');
+sandbox.XQ.UI.aiBanner('busy', 'Elapsed 0:03', 'red');
+ok(alertEl.textContent.indexOf('Elapsed') < 0, 'L11 busy 每秒计时不进播报区 (防读屏每秒刷屏)');
+ok(bannerEl.tabIndex === -1, 'L11 busy 横幅不进 Tab 序');
+sandbox.XQ.UI.aiBanner('', '');
+ok(alertEl.textContent === '' && bannerEl.tabIndex === -1, 'L11 横幅收起时清空播报区 (同一错误可再次播报)');
+
+// L11-d sw.js 离线壳 (vm + caches/self 桩) — 第40轮修复: 安装期预缓存 + 导航兜底查询键
+//   原实现: 缓存按键为访问 URL (根导航是 './'), 兜底却查写死的 '/index.html' → 永不命中 → 离线首启白屏
+var swPrecached = [], swStored = {};
+var swSandbox = { console: console, URL: URL, location: { origin: 'http://localhost:8788' } };
+swSandbox.globalThis = swSandbox;
+swSandbox.self = swSandbox;
+var swEvents = {};
+swSandbox.addEventListener = function (t, fn) { swEvents[t] = fn; };
+swSandbox.skipWaiting = function () { return Promise.resolve(); };
+swSandbox.clients = { claim: function () { return Promise.resolve(); } };
+swSandbox.Response = { error: function () { return { ok: false, _browserErrorPage: true }; } };
+swSandbox.fetch = function () { return Promise.reject(new Error('offline')); };
+function swMatch(u, opts) {
+  var key = typeof u === 'string' ? u : (u && u.url) || '';
+  if (opts && opts.ignoreSearch) key = key.split('?')[0];
+  return Promise.resolve(swStored[key]);   // 未命中返回 undefined (与真 CacheStorage 一致)
+}
+swSandbox.caches = {
+  open: function () {
+    return Promise.resolve({
+      add: function (u) { swPrecached.push(String(u)); swStored[String(u)] = { ok: true, body: 'CACHED:' + u }; return Promise.resolve(); },
+      put: function (req, res) { var k = typeof req === 'string' ? req : (req && req.url) || ''; swStored[k] = res; return Promise.resolve(); }
+    });
+  },
+  keys: function () { return Promise.resolve(['xq-shell-v2']); },
+  delete: function () { return Promise.resolve(true); },
+  match: swMatch
+};
+vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'), swSandbox, { filename: 'sw.js' });
+function swFire(type, req) {
+  var captured = null;
+  swEvents[type]({ request: req, waitUntil: function (p) { captured = p; }, respondWith: function (p) { captured = p; } });
+  return captured;
+}
+function navReq(u) { return { method: 'GET', url: 'http://localhost:8788' + u, mode: 'navigate' }; }
+function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
+(function () {
+  var results = [];
+  // ① 安装期预缓存 (本次修复的核心): 原实现无预缓存, 兜底查的键从未被写入 → 离线首启必然白屏
+  var installDone = Promise.resolve(swFire('install', {})).then(function () {
+    ok(!!(swEvents.install && swEvents.fetch && swEvents.activate), 'L11 sw.js 注册 install/activate/fetch 三事件');
+    ok(swPrecached.indexOf('./') >= 0 && swPrecached.indexOf('./index.html') >= 0,
+      'L11 安装期预缓存应用壳 (./ 与 ./index.html): ' + swPrecached.join(' '));
+  });
+  results.push(installDone);
+  // ② 离线导航回退到预缓存壳 (确定性排序: 等预缓存落库后再请求)
+  results.push(installDone.then(function () { return swNav('/'); }).then(function (res) {
+    ok(res && res._browserErrorPage !== true && String(res.body).indexOf('CACHED:') === 0,
+      'L11 离线导航回退到缓存壳 (非浏览器错误页)');
+  }));
+  /* ③ 隔离验证「兜底查询键」本身 (与 ① 独立):
+     缓存中只放 './index.html' 一个键 (用户曾直达 /index.html 的部署形态)。写死绝对 '/index.html' 时
+     此处必然 miss, 且其后 './' 与 ignoreSearch 兜底也都不命中 → 旧实现返回 Response.error() 浏览器错误页。 */
+  results.push(installDone.then(function () {
+    swStored = { './index.html': { ok: true, body: 'CACHED:./index.html' } };
+    return swNav('/');
+  }).then(function (res) {
+    ok(res && res.body === 'CACHED:./index.html', 'L11 导航兜底键解析到作用域相对 ./index.html (绝对路径写法在此必然 miss)');
+  }));
+  // ④ 带 query 的深链导航: 仅 ignoreSearch 兜底能命中 (壳两键都不匹配 query URL)
+  results.push(installDone.then(function () {
+    swStored = { './': { ok: true, body: 'CACHED:./' }, './index.html': { ok: true, body: 'CACHED:./index.html' } };
+    return swNav('/?x=1');
+  }).then(function (res) {
+    ok(res && res._browserErrorPage !== true, 'L11 带 query 的离线导航同样回退壳 (ignoreSearch 兜底)');
+  }));
+  // ⑤ /api/* 与非 GET 必须放行 (respondWith 不被调用 → 中继请求不受 SW 干预)
+  var apiHandled = false, postHandled = false;
+  swEvents.fetch({ request: { method: 'GET', url: 'http://localhost:8788/api/health' }, respondWith: function () { apiHandled = true; }, waitUntil: function () {} });
+  swEvents.fetch({ request: { method: 'POST', url: 'http://localhost:8788/api/chat' }, respondWith: function () { postHandled = true; }, waitUntil: function () {} });
+  ok(!apiHandled && !postHandled, 'L11 /api/* 与非 GET 直接放行 (不缓存中继)');
+  return Promise.all(results);
+})().then(function () {
+  console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
+  process.exit(fails.length ? 1 : 0);
+}, function (e) {
+  console.log('  [FAIL] L11 异步断言异常: ' + (e && e.message));
+  process.exit(1);
+});

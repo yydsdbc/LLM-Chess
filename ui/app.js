@@ -268,7 +268,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var entry = {
       n: engine.ply(),
       name: XQ.Piece.CHARS[m.piece.color][m.piece.type] + '-' + XQ.Move.sqName(m.from) + '\u2192' + XQ.Move.sqName(m.to),
-      summary: (meta && meta.summary) || '(无摘要)',
+      summary: (meta && meta.summary) || (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)'),
       plan: (meta && meta.plan) || '',
       evaluation: (meta && meta.evaluation) || '',
       confidence: (meta && typeof meta.confidence === 'number') ? meta.confidence : null,
@@ -300,7 +300,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (u && u.total) tok = (u.total > 999 ? (u.total / 1000).toFixed(1) + 'k' : u.total) + 'tok';
     }
     thinkStat[side].lastSecs = secs;   // v1.5.5: 最近一手延迟 (面板 stat 实时显示)
-    var statTxt = thinkStat[side].total + 's·' + thinkStat[side].moves + '手·' + (secs ? secs + 's/手' : '?') + (tok ? '·' + tok : '');
+    // 第40轮 i18n: 原 statTxt 直接拼裸中文 ('手' / 's/手') → EN 界面面板尾部显示 "11s·11手·1s/手"
+    var Tm3 = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
+    var perMove = secs ? Tm3('think_per_move', { s: secs }) : '?';
+    var statTxt = XQ.I18N
+      ? Tm3('think_stat_tpl', { t: thinkStat[side].total, m: thinkStat[side].moves, p: perMove }) + (tok ? '·' + tok : '')
+      : thinkStat[side].total + 's·' + thinkStat[side].moves + '手·' + perMove + (tok ? '·' + tok : '');
     XQ.UI.thinkPanel(side, { stat: statTxt });
     playDrop(!!m.captured);
     // v1.5 观战动画: 滑动入位 + 吃子 ghost; 将军提示音 + 状态条已有文字
@@ -475,7 +480,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var s = Math.floor((Date.now() - start) / 1000);           // 当前思考时间 → 顶部状态条
       var g = Math.floor((Date.now() - startTime) / 1000);       // 全局时间
       var info = document.getElementById('status-info');
-      if (info && view.aiThinking) { var rcR = view.aiRetries ? view.aiRetries[view.aiThinkingSide] : 0; var phT = ''; try { var pht = XQ.XiangqiKnowledge && XQ.XiangqiKnowledge.detectPhase(engine); phT = (XQ.XiangqiKnowledge.PHASE_CN && XQ.XiangqiKnowledge.PHASE_CN[pht]) || ''; } catch (eP) {} info.textContent = TI('status_ticker', { n: engine.ply(), s: s, ph: phT ? ' · ' + phT : '', rt: rcR ? TI(view.aiRetryWait ? 'status_retry_wait' : 'status_retry', { n: rcR, s: Math.round((view.aiRetryWait || 0) / 1000) }) : '' }); }   // 第38轮: 重试等待量 · v1.7.4 全局时间只在下方横幅; v2.5 重试可见; v3.7 阶段徽章; 第26轮 i18n
+      if (info && view.aiThinking) { var rcR = view.aiRetries ? view.aiRetries[view.aiThinkingSide] : 0; var phT = ''; try { var pht = XQ.XiangqiKnowledge && XQ.XiangqiKnowledge.detectPhase(engine); phT = (pht && XQ.I18N) ? XQ.I18N.t('phase_' + pht) : ((pht && XQ.XiangqiKnowledge.PHASE_CN && XQ.XiangqiKnowledge.PHASE_CN[pht]) || ''); } catch (eP) {} info.textContent = TI('status_ticker', { n: engine.ply(), s: s, ph: phT ? ' · ' + phT : '', rt: rcR ? TI(view.aiRetryWait ? 'status_retry_wait' : 'status_retry', { n: rcR, s: Math.round((view.aiRetryWait || 0) / 1000) }) : '' }); }   // 第38轮: 重试等待量 · v1.7.4 全局时间只在下方横幅; v2.5 重试可见; v3.7 阶段徽章; 第40轮: 阶段名走字典 (原直取中文常量 → EN 每秒显示中文)
       if (s >= 60 && !thinkWarned) { thinkWarned = true; warnBanner(TI('warn_think_slow', { m: modelName, n: s }), side); }   // 第26轮 i18n
       if (Date.now() >= checkFlashUntil) {   // 将军横幅闪屏期不被 tick 覆盖
         XQ.UI.aiBanner('busy', (XQ.I18N ? XQ.I18N.tArgs('ai_elapsed', { t: (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2) }) : '全局 ' + (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2)), side);   // v1.7.4: 下方横幅只显示全局时间 (上方已含模型/方别/手数)
@@ -519,7 +524,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var abEl = document.getElementById('ai-banner');
     if (abEl && !abEl._dismissBound) {
       abEl._dismissBound = true;
-      abEl.addEventListener('click', function () { clearTimeout(warnTimer); XQ.UI.aiBanner('', ''); });   // v1.0.daily: 点击横幅立即关闭 (取消残留定时器)
+      var abClose = function () { clearTimeout(warnTimer); XQ.UI.aiBanner('', ''); };
+      abEl.addEventListener('click', abClose);   // v1.0.daily: 点击横幅立即关闭 (取消残留定时器)
+      /* 第40轮 a11y: renderer 仅在警告态给横幅 tabIndex=0 — 补 Enter/Space 关闭, 键盘用户不再只能干等 15s 自清 */
+      abEl.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+        ev.preventDefault();
+        ev.stopPropagation();   // 不外溢到全局 Enter/Space 键盘走子分支
+        abClose();
+      });
     }
     clearTimeout(warnTimer);
     var wgE = gameId;   // 第39轮: 同上 — 世代守卫 (错误横幅 15s 后自清, 不跨局)
@@ -945,7 +958,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   /* 第30轮 悔棋: 人机局撤「人类+AI」一对; AI-vs-AI 撤 1 手并让对局继续。
      同步回滚: 走法列表/决策日志/吃子托盘/评值走势; LLM 会话 reset (历史已不匹配, 重建) */
   function undoLastMove() {
-    if (aiBusy || engine.ply() === 0) return;
+    // 第40轮: aiBusy 原为静默 return — 按钮看着可用却毫无反应 (读屏/键盘用户零反馈); 改为警告横幅, 同经 #sr-alert 播报
+    if (aiBusy) { warnBanner((XQ.I18N ? XQ.I18N.t('undo_ai_busy') : 'AI 思考中 — 请等本手落子后再悔棋'), null); return; }
+    if (engine.ply() === 0) return;
     if (replayStack.length) { warnBanner((XQ.I18N ? XQ.I18N.t('undo_need_restore') : '复盘查看中 — 请先 ⟲ 还原再悔棋'), null); return; }
     var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
     var steps = 1;
@@ -1044,7 +1059,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (!isNaN(ev2)) evalHist[sd].push(ev2);
       thinkStat[sd].total += secs2; thinkStat[sd].moves++;
       decisionLog[sd].push({ n: m.n, name: (m.piece ? XQ.Piece.CHARS[m.side][m.piece] : '?') + '-' + m.from + '→' + m.to,
-        summary: m.summary || '(无摘要)', plan: m.plan || '', evaluation: m.evaluation || '',
+        summary: m.summary || (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)'), plan: m.plan || '', evaluation: m.evaluation || '',
         confidence: (typeof m.confidence === 'number') ? m.confidence : null, candidates: m.candidates || [], reasoning: '', secs: secs2 });
     });
     XQ.UI.capturedTray('red', capturedBy.red); XQ.UI.capturedTray('black', capturedBy.black);
@@ -1080,7 +1095,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     setTimeout(tryOfferResume, 1200);   // 第30轮: 初始化后探测未完对局
     // 第24轮 PWA 二期: service worker (网络优先离线壳, 见根级 sw.js) — file:// 等非安全上下文静默跳过
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-      try { navigator.serviceWorker.register('sw.js'); } catch (eSW) {}
+      // 第40轮: register() 返回 Promise — 原 try/catch 只兜同步抛错, sw.js 404/MIME 异常会变成未处理的 rejection (控制台报错且静默无 SW, 离线壳失效无迹可寻)
+      try { navigator.serviceWorker.register('sw.js').catch(function (eSW) { if (window.console && console.warn) console.warn('[sw] registration failed:', eSW && eSW.message); }); } catch (eSW) {}
     }
     initSoundToggle();
     // v3.9c 语言切换 (ui-lang 下拉: zh/en, localStorage xq_lang 持久化, 切换即刷新全部 data-i18n)

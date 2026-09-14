@@ -18,6 +18,14 @@
     var table = glyphTable();
     return (table[p.color] || {})[p.type] || XQ.Piece.CHARS[p.color][p.type];
   }
+  /* 第40轮: 走法列表棋子字随棋子显示偏好 (xq_pieces) — 日志此前恒用汉字 CHAR 表,
+     于是「EN 界面 + Letters」下棋盘是 abc 而走法列表仍显示 汉字子名, 双语切换看似没生效 */
+  function logGlyph(side, ch) {
+    if (!ch || glyphTable() !== XQ.Piece.LETTERS) return ch;
+    var charsT = XQ.Piece.CHARS[side] || {}, lettersT = XQ.Piece.LETTERS[side] || {};
+    for (var k in charsT) { if (charsT[k] === ch) return lettersT[k] || ch; }
+    return ch;
+  }
 
   /* ── 棋盘线条 (一次绘制) ── */
   function drawBoard(svgEl) {
@@ -90,6 +98,24 @@
     _drag = { fx: fx, fy: fy, pieceEl: pieceEl, sx: ev.clientX, sy: ev.clientY, moved: false, overCell: null, view: view };
     document.addEventListener('pointermove', dragMove);
     document.addEventListener('pointerup', dragEnd);
+    /* 第40轮: 指针被浏览器夺走 (触屏转为滚动 / 系统手势 / 右键菜单 / 窗口失焦) 时 pointerup 永不触发 —
+       原实现只清 pointerup 路径, 会残留 _drag 与两个 document 监听, 且 _drag 非空永久阻断后续拖拽 (输入锁死)。 */
+    document.addEventListener('pointercancel', dragAbort);
+    document.addEventListener('lostpointercapture', dragAbort);
+  }
+  /* 第40轮: 拖拽中止清理 — 摘幽灵/高亮/监听并收敛选中态 (语义: 取消, 不落子; 与 pointerup 的走子路径区分) */
+  function dragAbort() {
+    document.removeEventListener('pointermove', dragMove);
+    document.removeEventListener('pointerup', dragEnd);
+    document.removeEventListener('pointercancel', dragAbort);
+    document.removeEventListener('lostpointercapture', dragAbort);
+    if (!_drag) return;   // 正常 pointerup 已收尾 (lostpointercapture 常在 pointerup 之后到达) → 不重复处理
+    var d = _drag; _drag = null;
+    if (d.ghost) d.ghost.remove();
+    if (d.pieceEl && d.pieceEl.parentNode) d.pieceEl.classList.remove('drag-src');
+    if (d.overCell) d.overCell.classList.remove('drag-over');
+    if (d.moved && d.view && d.view.onCancelSelect) d.view.onCancelSelect();
+    suppress();
   }
   function dragMove(ev) {
     if (!_drag) return;
@@ -108,6 +134,8 @@
   function dragEnd(ev) {
     document.removeEventListener('pointermove', dragMove);
     document.removeEventListener('pointerup', dragEnd);
+    document.removeEventListener('pointercancel', dragAbort);   // 第40轮: 正常收尾同样摘掉中止监听
+    document.removeEventListener('lostpointercapture', dragAbort);
     if (!_drag) return;
     var d = _drag; _drag = null;
     if (d.ghost) d.ghost.remove();
@@ -155,11 +183,12 @@
     var overNow = engine.isOver();   // 第39轮: 原 90 格循环内每格调用一次 → 提到循环外一次
 
     var selected = view.selected;
-    var legalList = (selected && !overNow) ? engine.legalTargets(selected.x, selected.y) : [];
+    var sel = !!(selected && !overNow);   // 第40轮: 选中态总闸 — 未选中时 legal/danger 恒空, 逐格免去 'x,y' 键串构造
+    var legalList = sel ? engine.legalTargets(selected.x, selected.y) : [];
     var legal = {};   // 第28轮: 90 格 × O(n) find → O(1) 哈希命中
     var danger = {};
     for (var li = 0; li < legalList.length; li++) legal[legalList[li].x + ',' + legalList[li].y] = legalList[li];
-    if (selected && !overNow) {
+    if (sel) {
       engine.dangerTargets(selected.x, selected.y).forEach(function (d) { danger[d.x + ',' + d.y] = d; });
     }
 
@@ -226,10 +255,10 @@
         c.classList.toggle('selected', !!(selected && selected.x === x && selected.y === y));
         // v1.0.daily a11y: 键盘走子光标 (app 键盘事件维护 view.kbCursor, 方向键移动 + Enter 选子走子)
         c.classList.toggle('kb-cursor', !!(view.kbCursor && view.kbCursor.x === x && view.kbCursor.y === y));
-        var hit = legal[x + ',' + y];
+        var hit = sel ? legal[x + ',' + y] : null;   // 第40轮: 未选中 → 直接短路, 免掉每帧 90 次键串分配
         c.classList.toggle('legal-capture', !!(hit && hit.isCapture));
         c.classList.toggle('legal-target', !!(hit && !hit.isCapture));
-        c.classList.toggle('illegal-target', !hit && !!danger[x + ',' + y]);
+        c.classList.toggle('illegal-target', sel && !hit && !!danger[x + ',' + y]);
         c.classList.toggle('last-start', !!(snap.lastMove && x === snap.lastMove.from.x && y === snap.lastMove.from.y));
         c.classList.toggle('last-move', !!(snap.lastMove && x === snap.lastMove.to.x && y === snap.lastMove.to.y));
         c.classList.toggle('in-check', !overNow && !!p && p.type === 'king' && p.color === snap.turn && engine.inCheck(snap.turn));
@@ -286,10 +315,13 @@
     renderOverlay(engine, view);
   }
 
-  /* ── 棋局阶段中文 (v3.7 HUD 徽章: 状态条显示 开局/中局/残局, 观战者一眼知阶段) ── */
+  /* ── 棋局阶段标签 (v3.7 HUD 徽章: 状态条显示阶段, 观战者一眼知阶段; 第40轮改走 i18n 字典) ── */
   function phaseCN(engine) {
     try {
       var ph = XQ.XiangqiKnowledge && XQ.XiangqiKnowledge.detectPhase(engine);
+      if (!ph) return '';
+      // 第40轮 i18n: 原直取 PHASE_CN 中文常量 → EN 界面状态条与时钟每帧显示「中局」等中文 (phase_opening/middlegame/endgame)
+      if (XQ.I18N) return XQ.I18N.t('phase_' + ph);
       return (XQ.XiangqiKnowledge.PHASE_CN && XQ.XiangqiKnowledge.PHASE_CN[ph]) || '';
     } catch (e) { return ''; }
   }
@@ -337,21 +369,23 @@
     document.getElementById('btn-row').classList.toggle('visible', snap.over);
   }
 
+  var RES_KEYS = { stalemate: 1, checkmate: 1, perpetual: 1, repetition: 1, natural: 1 };   // 第40轮: 终局原因字典键白名单 (兼容 r.result 其他取值 → 空副标题)
   function renderOverlay(engine, view) {
     var overlay = document.getElementById('end-overlay');
     if (engine.isOver()) {
       var r = engine.result();
-      var reason = r.result === 'stalemate' ? '困毙 · 对方无子可动且未被将军'
-                 : r.result === 'checkmate' ? '绝杀 · 对方无合法应将走法'
-                 : r.result === 'perpetual' ? '长将判负 · 一方连续将军不变招 (v2.0 规则闭环)'
-                 : r.result === 'repetition' ? '三次重复判和 · 同一局面反复出现, 双方不变招 (v2.2 规则闭环)'
-                 : r.result === 'natural' ? '自然限着判和 · 双方 60 回合无吃子 (v3.8 规则闭环)' : '';
+      /* 第40轮 i18n: 原 5 条中文终局原因硬编码在本三元链 — EN 界面终局卡副标题整段中文漏挂。
+         I10 守护只匹配同行字面量赋值, 跨行装进 reason 变量后赋值躲过了扫描, 属真实漏挂而非误报。 */
+      var reason = (r.result && RES_KEYS[r.result] && XQ.I18N) ? XQ.I18N.t('res_' + r.result) : '';
       document.getElementById('eo-title').textContent = r.winner === 'red' ? (XQ.I18N ? XQ.I18N.t('status_win_red') : '🏆 红方胜利') : r.winner === 'black' ? (XQ.I18N ? XQ.I18N.t('status_win_black') : '🏆 黑方胜利') : (XQ.I18N ? XQ.I18N.t('status_draw') : '和棋');
       document.getElementById('eo-sub').textContent = reason;
       overlay.classList.add('show');
       // 第24轮 a11y: 终局卡焦点入卡 (仅 隐藏→显示 转换沿触发一次; 双 rAF 等 visibility 过渡起帧 — 同第23轮设置面板教训)
       if (!overlay._wasShown) {
         overlay._wasShown = true;
+        // 第40轮 a11y: 记录焦点宿主 — 收起时归还 (原实现只入不出, 关闭后 activeElement 落在已 visibility:hidden 的按钮上 → 焦点静默丢失到 body)
+        var prevAe = document.activeElement;
+        overlay._opener = (prevAe && prevAe !== document.body && !overlay.contains(prevAe)) ? prevAe : null;
         var eoBtn = overlay.querySelector('.eo-btn');
         var eoFocus = function () { if (eoBtn && document.getElementById('end-overlay').classList.contains('show')) { try { eoBtn.focus({ preventScroll: true }); } catch (eF) { eoBtn.focus(); } } };
         if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { requestAnimationFrame(eoFocus); });
@@ -359,6 +393,14 @@
       }
     } else {
       overlay.classList.remove('show');
+      // 第40轮 a11y: 焦点归还 — 仅当焦点确实还在卡内 (点遮罩/点卡内按钮收起) 才搬移, 不打断用户已移到别处的焦点
+      var ae = document.activeElement;
+      if (ae && overlay.contains(ae)) {
+        var back = overlay._opener;
+        if (!back || !back.isConnected || typeof back.focus !== 'function') back = document.getElementById('board');   // 回落: 盘面 (tabindex=-1, 程序化落点, 不进 Tab 序)
+        if (back && back.focus) { try { back.focus({ preventScroll: true }); } catch (eB) { back.focus(); } }
+      }
+      overlay._opener = null;
       overlay._wasShown = false;   // 复位: 下一局终局再次焦点入卡
     }
   }
@@ -368,6 +410,20 @@
     b.className = mode || '';
     if (side) b.classList.add(side === 'red' ? 'side-red' : 'side-black');
     b.innerHTML = msg || '';   // v2 HUD: 分段配色 (ico/model/state/meta spans)
+    /* 第40轮 a11y: 横幅是全站运行时错误/警告的唯一出口, 此前无任何 ARIA 语义且只绑 click 关闭 —
+       读屏完全不知道 LLM 失败/导入失败/将军/重复局面, 键盘用户也关不掉它。
+       busy 模式每秒 tick 会重写全局计时, 整体挂 aria-live 会每秒刷屏, 因此只把警告文本投进 #sr-alert。 */
+    var alertEl = document.getElementById('sr-alert');
+    if (alertEl) {
+      if (mode === 'warn' && msg) {
+        var plain = String(msg).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (plain !== alertEl.textContent) alertEl.textContent = plain;   // 幂等: 同文本不重复播报
+      } else if (!msg) {
+        alertEl.textContent = '';   // 清空 → 同一错误再次发生时仍能触发播报
+      }
+    }
+    // 第40轮: 仅警告态留键盘焦点落点 (可 Tab 到 + Enter/Space 关闭); 其余态摘除, 不留常驻 Tab 停点
+    b.tabIndex = (mode === 'warn' && msg) ? 0 : -1;
   }
 
   /* v1.0.daily 长对局 (100+ 手) DOM 防护: move-log 条目超上限只保留尾部, 头部一行折叠提示
@@ -379,10 +435,13 @@
     var e = document.createElement('div');
     e.className = 'log-entry';
     e.dataset.ply = n;   // v1.5.5: 点击复盘 — 点击该手跳到该局面
+    e.tabIndex = 0;      // 第40轮 a11y: 走法列表是核心导航 (点击跳转局面) 却只有 click — 补键盘可达 (回放层走法表第37轮已同样处理)
     var Tl = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return 'Click to jump to move ' + a.n; };   // 第27轮 i18n: 条目 title 原硬编码中文 (I9 守护点)
     e.title = Tl('log_entry_title', { n: n }) + (cn ? ' · ' + cn : '');   // v1.7: 中文记谱
+    var dispPiece = logGlyph(side, pieceChar);   // 第40轮: 子名随棋子显示偏好 (Letters 模式 → 字母)
+    var dispCapt = capturedChar ? logGlyph(side === 'red' ? 'black' : 'red', capturedChar) : '';   // 被吃子属对方阵营, 查对方字表
     e.innerHTML = '<span class="log-dot ' + side + '">●</span><span class="log-num">' + n + '. </span><span class="' + (side === 'red' ? 'log-red' : 'log-black') + '">'
-      + pieceChar + '</span> ' + name + (capturedChar ? ' ×' + capturedChar : '')
+      + dispPiece + '</span> ' + name + (dispCapt ? ' ×' + dispCapt : '')
       + (cn ? '<span class="log-cn">' + cn + '</span>' : '')   // 第33轮: 行内中文记谱 (原只在悬停 title)
       + (secs ? '<span class="log-secs"> ⏱' + secs + 's</span>' : '');
     log.appendChild(e);
@@ -412,6 +471,16 @@
       var e = ev.target.closest('.log-entry');
       if (!e || !e.dataset.ply) return;
       var ply = parseInt(e.dataset.ply, 10);
+      document.dispatchEvent(new CustomEvent('xq:replay', { detail: { ply: ply } }));
+    });
+    /* 第40轮 a11y: 条目键盘激活 (Enter/Space) — 与 click 同语义; Space 需拦默认滚动 */
+    log.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var e = ev.target.closest ? ev.target.closest('.log-entry') : null;
+      if (!e || !e.dataset.ply) return;
+      var ply = parseInt(e.dataset.ply, 10);
+      if (isNaN(ply)) return;
+      ev.preventDefault();
       document.dispatchEvent(new CustomEvent('xq:replay', { detail: { ply: ply } }));
     });
   });
@@ -576,18 +645,23 @@
   });
 
   // 第36轮: 候选悬停 → 盘面对应起讫格高亮 (翻转感知)
+  /* 第40轮: 原实现每次 mouseover (鼠标在页面上移动的每一刻) 都先做一次全盘 querySelectorAll 清理 —
+     即使从未有过高亮格, 也无条件扫一遍棋盘子树。改为记住已高亮格, 无高亮且未悬停候选时零 DOM 查询。 */
+  var _candHover = [];
   document.addEventListener('mouseover', function (ev) {
     var chip = ev.target && ev.target.closest && ev.target.closest('.d-cand[data-from]');
+    if (!chip && !_candHover.length) return;   // 无候选且无历史高亮 → 直接放行
     var boardEl = document.getElementById('board');
     if (!boardEl) return;
-    boardEl.querySelectorAll('.cand-hover').forEach(function (c) { c.classList.remove('cand-hover'); });
+    _candHover.forEach(function (c) { c.classList.remove('cand-hover'); });
+    _candHover = [];
     if (!chip) return;
     var flip = document.documentElement.dataset.flip === '1';
     [[chip.dataset.from, 'from'], [chip.dataset.to, 'to']].forEach(function (pair) {
       var bx = pair[0].charCodeAt(0) - 97, by = 10 - parseInt(pair[0].slice(1), 10);
       var dx = flip ? 8 - bx : bx, dy = flip ? 9 - by : by;
       var cell = boardEl.querySelector('.cell[data-x="' + dx + '"][data-y="' + dy + '"]');
-      if (cell) cell.classList.add('cand-hover');
+      if (cell) { cell.classList.add('cand-hover'); _candHover.push(cell); }
     });
   });
 
@@ -609,7 +683,10 @@
   function evalSpark(side, arr) {
     var el = document.getElementById('think-' + side + '-spark');
     if (!el) return;
-    if (!arr || !arr.length) { el.innerHTML = ''; return; }
+    if (!arr || !arr.length) {
+      if (el._sparkSig !== '') { el._sparkSig = ''; el.innerHTML = ''; }   // 第40轮: 空态同款签名去重
+      return;
+    }
     var w = 182, h = 26;
     var clamp = function (v) { return Math.max(-3, Math.min(3, v)); };
     var span = Math.max(1, arr.length - 1);   // v1.0.daily 修复: 采样窗取实际点数 — 原 Math.max(len,8) 让 1~7 点序列挤在左缘细条 (对局早期曲线几乎不可见)
@@ -625,6 +702,11 @@
     var lineCol = side === 'red' ? '#e78a7a' : '#7fb8e8';
     /* v1.0.daily 第20轮: 线下渐变面积填充 (SVG 内部装饰, 不加 DOM) — 走势方向一眼可读 */
     var areaPts = '2,' + (h - 1) + ' ' + pts + ' ' + (arr.length === 1 ? w / 2 : (w - 2)) + ',' + (h - 1);
+    /* 第40轮: 内容签名去重 — 走势序列未变则不重解析整段 SVG (走子/吃子/悔棋/导入各触发一次渲染)。
+       签名取 pts 全量 (覆盖每个点) + 语言 (圆心 title 文案随语言热切), 不会漏更新也不会残留旧语言文案。 */
+    var sig = side + '|' + pts + '|' + (XQ.I18N ? XQ.I18N.getLang() : 'zh');
+    if (el._sparkSig === sig) return;
+    el._sparkSig = sig;
     el.innerHTML = '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">'
       + '<defs><linearGradient id="spark-fill-' + side + '" x1="0" y1="0" x2="0" y2="1">'
       + '<stop offset="0" stop-color="' + lineCol + '" stop-opacity=".30"/>'
