@@ -241,6 +241,42 @@ async function main() {
   ok(burstRes.some(function (r) { return r.status === 429; }), '限流: 单秒 12 连发出现 429 (8/s 窗)');
   ok(burstRes.some(function (r) { return r.status === 429 && r.headers['retry-after'] === '60'; }), '限流 429 带 Retry-After: 60 (客户端退避依据)');
 
+  /* ── 第41轮: 静态托管 query 形态 (SW 的 ignoreSearch 离线兜底与用户手动 cache-bust 都依赖它) ──
+     serveStatic 内 urlPath.split('?')[0] 后按扩展名取 MIME / 算 ETag; 若该切分被破坏, 带 query 的资源
+     会退化成 404 或 application/octet-stream — 表现为「带参数强刷一次页面白屏」, 且 SW 离线兜底再也命中不到壳。 */
+  const qIndex = await req('GET', '/index.html?v=2');
+  ok(qIndex.status === 200 && /<!DOCTYPE html>/i.test(qIndex.body) && /text\/html/.test(qIndex.headers['content-type'] || ''),
+    'GET /index.html?v=2 → 200 html (query 不参与路径/扩展名解析)');
+  ok(!!etag && qIndex.headers.etag === etag, '带 query 与裸路径返回同一 ETag (同一文件字节)');
+  const qRoot = await req('GET', '/?cachebust=' + process.pid);
+  ok(qRoot.status === 200 && /<!DOCTYPE html>/i.test(qRoot.body), 'GET /?query → 200 index.html (根路径同样切分)');
+  const qJs = await req('GET', '/ui/app.js?v=9');
+  ok(qJs.status === 200 && /javascript/.test(qJs.headers['content-type'] || '') && qJs.body.indexOf('use strict') >= 0,
+    'GET /ui/app.js?v=9 → 200 JS 且内容完整 (MIME 按真实扩展名)');
+
+  /* ── 第41轮: keys.json 热加载 (mtime 缓存) 与半写容错 — v1.0.3 特性此前零自动化覆盖 ──
+     语义: 文件未改动 → 复用解析结果 (省每请求磁盘 IO); 一改立即生效 (免重启); 编辑器半写 → 保留上次有效配置。
+     若 mtime 判据失效 (如永远复用首读结果), 用户填完 key 必须重启才生效 — 这正是本组要钉住的行为。 */
+  const origKeys = fS.readFileSync(keysFile, 'utf8');
+  const withExtra = JSON.parse(origKeys);
+  withExtra.providers.stubextra = { name: 'StubExtra', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'k2' };
+  const ids = function (body) { try { return (((JSON.parse(body) || {}).providers) || []).map(function (p) { return p.id; }); } catch (e) { return []; } };
+  await new Promise(function (r) { setTimeout(r, 25); });   // 拉开 mtime (粗粒度文件系统兜底)
+  fS.writeFileSync(keysFile, JSON.stringify(withExtra, null, 2));
+  const reloaded = await req('GET', '/api/providers');
+  ok(ids(reloaded.body).indexOf('stubextra') >= 0,
+    'keys.json 改动后免重启即生效 (mtime 缓存判据正确): ' + ids(reloaded.body).join(','));
+  await new Promise(function (r) { setTimeout(r, 25); });
+  fS.writeFileSync(keysFile, '{"providers": {"broken":');   // 模拟编辑器半写 (非法 JSON)
+  const halfWritten = await req('GET', '/api/providers');
+  ok(halfWritten.status === 200 && ids(halfWritten.body).indexOf('stubextra') >= 0,
+    'keys.json 半写 (非法 JSON) → 保留上次有效配置, 不 500 不清空 (编辑期间对局不断)');
+  await new Promise(function (r) { setTimeout(r, 25); });
+  fS.writeFileSync(keysFile, origKeys);   // 还原: 后续中继穿越测试依赖 stubprov/stubanthropic
+  const restored = await req('GET', '/api/providers');
+  ok(ids(restored.body).indexOf('stubprov') >= 0 && ids(restored.body).indexOf('stubextra') < 0,
+    'keys.json 还原后列表随之收敛 (热加载双向生效, 非单向追加)');
+
   finish();
 }
 

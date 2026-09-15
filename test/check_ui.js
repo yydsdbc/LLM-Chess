@@ -213,8 +213,50 @@ if (!/overlay\._opener/.test(renSrc) || !/back\.isConnected/.test(renSrc)) a11yI
 if (!/serviceWorker\.register\('sw\.js'\)\.catch\(/.test(appSrc)) a11yIssues.push('serviceWorker.register 缺 Promise 拒绝兜底 (404 变 unhandled rejection)');
 if (!/XQ\.I18N\.t\('undo_ai_busy'\)/.test(appSrc)) a11yIssues.push('悔棋在 AI 思考期仍静默 return (应为可见+可播报提示)');
 if (!/abEl\.addEventListener\('keydown'/.test(appSrc)) a11yIssues.push('警告横幅缺键盘关闭 (键盘用户只能等 15s 自清)');
-// (i) sw 安装期预缓存
-if (!/var SHELL = \['\.\/', '\.\/index\.html'\]/.test(swSrc) || !/c\.add\(u\)/.test(swSrc)) a11yIssues.push('sw.js 缺安装期壳预缓存');
+// (i) sw 安装期预缓存 — 第41轮: 原正则写死 `var SHELL = ['./', './index.html']` 字面量, 壳清单一旦增补即误报;
+//     此处只守「机制在」(SHELL 数组 + 安装期 c.add + 导航兜底键), 清单完整性交由 _logic_layer L13 行为断言
+//     (按 index.html 实际引用逐个比对预缓存结果, 漏挂新脚本会被抓红)
+if (!/var SHELL = \[/.test(swSrc) || !/c\.add\(u\)/.test(swSrc) || !/addEventListener\('install'/.test(swSrc)) a11yIssues.push('sw.js 缺安装期壳预缓存');
 if (!/caches\.match\('\.\/index\.html'\)/.test(swSrc)) a11yIssues.push('sw.js 导航兜底未用作用域相对键 (绝对路径写法在子路径部署必然 miss)');
-console.log('a11y/PWA 源串守卫:', a11yIssues.length ? a11yIssues.join(' | ') : 'OK (sr-alert 播报 + label for= x' + forCount + ' + 走法列表键盘 + 拖拽中止 + 热路径 + 终局焦点 + SW 兜底)');
+if (!/return c\.put\(req, copy\); \}\)\.catch\(/.test(swSrc)) a11yIssues.push('sw.js 运行时写缓存的 Promise 悬空 (配额错误变 unhandled rejection)');
+// (j) 第41轮: 键盘走子光标播报 + 设置层模态闸门
+if (!/getElementById\('sr-cursor'\)/.test(appSrc) || !/announceCursor\(\);/.test(appSrc)) a11yIssues.push('键盘走子光标缺读屏播报 (方向键移动无反馈)');
+if (!/sr-cursor/.test(html) || !/aria-live="polite"/.test(html)) a11yIssues.push('index.html 缺 #sr-cursor 播报区');
+if (!/soMod\.classList\.contains\('show'\)\) return;/.test(appSrc)) a11yIssues.push('设置层开启时单键快捷键未拦截 (R/U/M/F 会操作面板后方棋局)');
+// 第41轮: 源码串守卫需忽略注释的干扰 — 本轮多处修复的说明注释里会引用「被修掉的旧写法」原文
+// (例如 app.js 注释中描述 `entry.summary` 与 '(无摘要)' 比对的历史实现), 否则守卫会被自己的文档误触发。
+// 状态机剥注释 (块注释跨行, 行首标记法不够用) 并保留字符串字面量内容; 正则字面量内的 // 可能被误判,
+// 但本仓守卫全部是「必须存在」形态 — 误剥只会让守卫报缺失 (响亮失败), 不会静默放行。
+function codeOnly(src) {
+  var out = '', i = 0, n = src.length, st = 0, c, d;   // st: 0=code 1=行注释 2=块注释 3/4/5=单/双/反引号串
+  while (i < n) {
+    c = src[i]; d = src[i + 1];
+    if (st === 0) {
+      if (c === '/' && d === '/') { st = 1; i += 2; continue; }
+      if (c === '/' && d === '*') { st = 2; i += 2; continue; }
+      if (c === "'") st = 3; else if (c === '"') st = 4; else if (c === '`') st = 5;
+      out += c; i++; continue;
+    }
+    if (st === 1) { if (c === '\n') { st = 0; out += c; } i++; continue; }
+    if (st === 2) { if (c === '*' && d === '/') { st = 0; i += 2; } else { if (c === '\n') out += c; i++; } continue; }
+    if (c === '\\') { out += c + (d || ''); i += 2; continue; }
+    if ((st === 3 && c === "'") || (st === 4 && c === '"') || (st === 5 && c === '`')) st = 0;
+    out += c; i++;
+  }
+  return out;
+}
+const appCode = codeOnly(appSrc);
+const renCode = codeOnly(renSrc);
+// (k) 第41轮: 棋子显示偏好单出口 (HUD/回放层不得直取 CHARS)
+if (!/XQ\.UI\.pieceGlyph/.test(appCode) || !/function pieceGlyphOf\(color, type\)/.test(renCode)) a11yIssues.push('棋子显示字缺单出口 (HUD/回放层直取 CHARS → Letters 模式下与棋盘矛盾)');
+// (l) 第41轮: 兑底判定必须基于「模型是否给了 summary」这一原始事实, 不得比对字典产物 (EN 恒 false → 兑底透明化在英文界面整体失效)
+if (!/function fbMark\(entry, hasSummary/.test(appCode) || !/var hasSummary = !!\(meta && meta\.summary\)/.test(appCode)) {
+  a11yIssues.push('app.js 兑底判定未按原始 summary 事实 (fbMark/hasSummary)');
+}
+if (/entry\.summary === '\(无摘要\)'/.test(appCode)) a11yIssues.push('app.js 仍以翻译串判定兑底 (EN 下恒不成立, 兑底徽章/摘要/推理全部失效)');
+if (!/var fbBadge = entry\.fallback \?/.test(appCode)) a11yIssues.push('兑底徽章未按 fallback 旗标 (应为语言中立)');
+if (!/fbMark\(entry2, !!m\.summary/.test(appCode)) a11yIssues.push('续局重建未恢复兑底旗标 (存档往返后兑底手退化为「无摘要」)');
+// (m) 第41轮: 思考中切换语言必须重新解析随机AI 名称 (否则状态条整轮停在旧语言)
+if (!/thH\.kind === 'random'\) view\.aiThinking =/.test(appCode)) a11yIssues.push('语言热切未重新解析思考中的随机AI 名称 (状态条整轮停在旧语言)');
+console.log('a11y/PWA 源串守卫:', a11yIssues.length ? a11yIssues.join(' | ') : 'OK (sr-alert 播报 + label for= x' + forCount + ' + 走法列表键盘 + 拖拽中止 + 热路径 + 终局焦点 + SW 壳/兜底/写缓存兜底 + 光标播报 + 设置层模态闸门)');
 if (a11yIssues.length) process.exit(1);

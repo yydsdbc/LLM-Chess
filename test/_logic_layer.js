@@ -213,6 +213,98 @@ viewR.selected = { x: 4, y: 9 };
 sandbox.XQ.UI.render(spy, viewR);
 ok(cnt.snapshot === 1, 'L10 选中态渲染同样仅 1 次 snapshot (legal/danger 走 memo)');
 
+/* ═══ L12 第41轮: 棋子显示偏好单出口 + 兑底选词 + 状态条时钟单出口 ═══
+   L12 全部断言都指向同一类缺陷: 「同一个展示事实在多处各写一遍」。第40轮为此改了三处阶段名 i18n,
+   而棋子字/兑底标记/时钟文案当时仍各有多份拷贝, 故本轮收敛为单出口并逐条钉住行为。 */
+(function () {
+  // 载入 i18n (真实字典) — 语言热切与 EN 文案是本组断言的被测面
+  sandbox.document.documentElement.setAttribute = function () {};
+  sandbox.XQ = XQ;
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'ui', 'i18n.js'), 'utf8'), sandbox, { filename: 'ui/i18n.js' });
+  ok(!!(sandbox.XQ.I18N && sandbox.XQ.I18N.t), 'L12 i18n 模块在 DOM 桩下加载');
+  var mem12 = {};
+  sandbox.localStorage = {
+    getItem: function (k) { return mem12[k] != null ? mem12[k] : null; },
+    setItem: function (k, v) { mem12[k] = String(v); },
+    removeItem: function (k) { delete mem12[k]; }
+  };
+  sandbox.XQ.I18N.setLang('zh', false);
+
+  // L12-e 语言切换事件必须送到 document (全仓唯一监听在 document; 派发到 window 不会向下传播 → 监听永不触发,
+  //      「切语言即时刷新动态文案」整条链路变死代码)。用两个分开的桩分别记录 window / document 派发以证伪。
+  var evOn = { root: [], document: [] };
+  var realRootDispatch = sandbox.dispatchEvent, realDocDispatch = sandbox.document.dispatchEvent;
+  sandbox.document.addEventListener = function () {};   // 桩: 只需记录派发目标, 不模拟传播
+  sandbox.dispatchEvent = function (e) { evOn.root.push(e && e.type); return true; };
+  sandbox.document.dispatchEvent = function (e) { evOn.document.push(e && e.type); return true; };
+  sandbox.CustomEvent = sandbox.CustomEvent || function (type, o) { this.type = type; this.detail = o && o.detail; };
+  sandbox.XQ.I18N.setLang('en', true);
+  ok(evOn.document.indexOf('xq:i18n') >= 0, 'L12 语言切换事件派发到 document (document 监听可达): document=' + evOn.document.join(',') + ' | window=' + evOn.root.join(','));
+  ok(evOn.root.indexOf('xq:i18n') < 0, 'L12 不再只派发到 window (window 事件不向下传播到 document)');
+  sandbox.dispatchEvent = realRootDispatch;
+  sandbox.document.dispatchEvent = realDocDispatch;
+  sandbox.XQ.I18N.setLang('zh', false);
+
+  // L12-a (色,子种) → 显示字: cn 汉字 / en 字母 (棋盘与 HUD 同一出口)
+  ok(sandbox.XQ.UI.pieceGlyph('red', 'cannon') === '炮' && sandbox.XQ.UI.pieceGlyph('black', 'rook') === '车',
+    'L12 pieceGlyph 默认 (cn) 返回汉字子名');
+  mem12['xq_pieces'] = 'en';
+  ok(sandbox.XQ.UI.pieceGlyph('red', 'cannon') === 'C' && sandbox.XQ.UI.pieceGlyph('black', 'rook') === 'r',
+    'L12 pieceGlyph 随 xq_pieces=en 返回字母 (红大写/黑小写)');
+  ok(sandbox.XQ.UI.pieceGlyph('red', 'king') === 'K' && sandbox.XQ.UI.pieceGlyph('black', 'pawn') === 'p',
+    'L12 pieceGlyph 覆盖帅/兵等全部子种');
+
+  // L12-b 吃子托盘: 入参以汉字存储 (capturedBy 的数据形态), 渲染必须按偏好还原
+  var trayEl = mkEl('div'); DOC_MAP['think-red-captured'] = trayEl;
+  sandbox.XQ.UI.capturedTray('red', ['车', '马']);   // 红方吃掉的对方 (黑) 子力
+  ok(trayEl.innerHTML.indexOf('r') >= 0 && trayEl.innerHTML.indexOf('n') >= 0 && trayEl.innerHTML.indexOf('车') < 0,
+    'L12 capturedTray 在 Letters 模式下输出字母 (原恒显「车马」与棋盘矛盾): ' + trayEl.innerHTML);
+  mem12['xq_pieces'] = 'cn';
+  sandbox.XQ.UI.capturedTray('red', ['车', '马']);
+  ok(trayEl.innerHTML.indexOf('车') >= 0 && trayEl.innerHTML.indexOf('马') >= 0, 'L12 capturedTray 汉字模式未被破坏');
+  trayEl.innerHTML = '';
+  sandbox.XQ.UI.thinkPanel && sandbox.XQ.UI.capturedTray('red', []);
+  ok(trayEl.innerHTML === '', 'L12 capturedTray 空数组清空');
+  mem12['xq_pieces'] = 'en';
+
+  // L12-c 决策卡兑底选词: 语言中立旗标 e.fallback 决定文案 (原按 app 写入的中文串比对, EN 下永不命中)
+  sandbox.XQ.I18N.setLang('zh', false);
+  var cardZh = sandbox.XQ.UI.decisionCards([{ n: 3, name: '炮-h3→e3', fallback: true, summary: '', reasoning: '【兑底】x', secs: 1 }], 1).join('');
+  ok(cardZh.indexOf('兑底·安全着法') >= 0 && cardZh.indexOf('【兑底】前几次输出无效') >= 0,
+    'L12 兑底卡 (zh) 显示字典摘要与推理');
+  sandbox.XQ.I18N.setLang('en', false);
+  var cardEn = sandbox.XQ.UI.decisionCards([{ n: 3, name: 'c-h3>e3', fallback: true, summary: '', reasoning: '【兑底】x', secs: 1 }], 1).join('');
+  ok(cardEn.indexOf('Fallback · safe move') >= 0 && cardEn.indexOf('Earlier outputs were invalid') >= 0,
+    'L12 兑底卡 (en) 走 EN 字典 — 旗标与界面语言解耦');
+  ok(cardEn.indexOf('兑底') < 0 && cardEn.indexOf('无摘要') < 0, 'L12 EN 兑底卡无中文残留');
+  var cardSum = sandbox.XQ.UI.decisionCards([{ n: 4, name: 'x', summary: 'my plan', secs: 1 }], 1).join('');
+  ok(cardSum.indexOf('my plan') >= 0 && cardSum.indexOf('Fallback') < 0, 'L12 非兑底卡照常显示模型摘要 (旗标不误伤)');
+  var cardLegacy = sandbox.XQ.UI.decisionCards([{ n: 5, name: 'x', summary: '兑底·安全着法', secs: 1 }], 1).join('');
+  ok(cardLegacy.indexOf('Fallback · safe move') >= 0, 'L12 仍带中文标记的旧内存数据同样本地化 (向后兼容)');
+  sandbox.XQ.I18N.setLang('zh', false);
+
+  // L12-d 状态条时钟单出口: renderStatus 内联写入与 updateClock 必须逐字一致 (原为两份拷贝, 漂移即撕裂)
+  var viewC = { boardEl: mkEl('div'), startTime: Date.now() - 95000, aiThinking: null, selected: null, flip: false, pendingAnim: null, arrow: true };
+  viewC.boardEl.parentNode = mkEl('div');
+  var engC = XQ.Engine.create();
+  engC.applyPlayerMove(7, 7, 7, 4);   // 走一手 → 进入中局判定样本, ply=1
+  var infoEl = DOC_MAP['status-info'];
+  sandbox.XQ.UI.updateClock(engC, viewC);
+  var clockFromUpdate = infoEl.textContent;
+  infoEl.textContent = '';
+  sandbox.XQ.UI.render(engC, viewC);
+  var clockFromRender = infoEl.textContent;
+  ok(clockFromUpdate.length > 0 && clockFromUpdate === clockFromRender,
+    'L12 时钟文案单出口: updateClock 与 renderStatus 输出逐字相同 ("' + clockFromUpdate + '")');
+  ok(clockFromUpdate.indexOf('第1手') === 0 && clockFromUpdate.indexOf('1:35') > 0, 'L12 时钟含手数与原位计时');
+  ok(sandbox.XQ.UI.clockText(engC, viewC, engC.ply()) === clockFromUpdate, 'L12 clockText 为两处共同的单一实现');
+  sandbox.XQ.I18N.setLang('en', false);
+  sandbox.XQ.UI.updateClock(engC, viewC);
+  var clockEn = infoEl.textContent;
+  ok(clockEn.indexOf('Move 1') === 0 && !/[\u4e00-\u9fff]/.test(clockEn), 'L12 EN 时钟无中文残留 ("' + clockEn + '")');
+  sandbox.XQ.I18N.setLang('zh', false);
+})();
+
 /* ═══ L11 第40轮: PWA 离线壳 + 本轮渲染/a11y 行为回归 ═══ */
 var DOC_IDS_11 = ['ai-banner', 'sr-alert', 'move-log', 'think-red-spark', 'think-black-spark'];
 DOC_IDS_11.forEach(function (id) { DOC_MAP[id] = mkEl('div'); });
@@ -325,9 +417,67 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
   ok(!apiHandled && !postHandled, 'L11 /api/* 与非 GET 直接放行 (不缓存中继)');
   return Promise.all(results);
 })().then(function () {
+  return l13OfflineShell();   // 第41轮: 壳清单完整性 + 写缓存失败兜底
+}).then(function () {
   console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
   process.exit(fails.length ? 1 : 0);
-}, function (e) {
+  }, function (e) {
   console.log('  [FAIL] L11 异步断言异常: ' + (e && e.message));
   process.exit(1);
 });
+
+/* ═══ L13 第41轮: 离线壳清单完整性 (按 index.html 实际引用推导, 不写死清单) + 写缓存失败兜底 ═══
+   ① 壳清单必须覆盖 index.html 引用的全部本地子资源。第40轮只预缓存了 HTML 本身:
+      断网首启拿得到 HTML, 却拿不到 20 个 <script src> 与图标 → XQ 未定义、页面空白,
+      「离线可直接开局」名不副实。清单完整性由本组按 index.html 现场推导比对 (新增脚本漏挂即红)。 */
+function l13OfflineShell() {
+  var htmlTxt = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  var need = [], mre = /<(?:script|link)\b[^>]*\b(?:src|href)="([^"]+)"/g, mm;
+  while ((mm = mre.exec(htmlTxt))) {
+    var u = mm[1];
+    if (/^(?:[a-z]+:)?\/\//i.test(u) || u.indexOf('data:') === 0) continue;   // 外链 / data-URI 不属离线壳
+    need.push('./' + u.replace(/^\.\//, ''));
+  }
+  var missing = need.filter(function (r) { return swPrecached.indexOf(r) < 0; });
+  ok(need.length >= 20, 'L13 index.html 本地子资源解析出 ' + need.length + ' 项 (脚本 + 图标 + manifest)');
+  ok(missing.length === 0, 'L13 安装期预缓存覆盖全部子资源' + (missing.length ? ' — 漏: ' + missing.join(' ') : ''));
+  ok(swPrecached.indexOf('./') >= 0 && swPrecached.indexOf('./index.html') >= 0, 'L13 壳仍含根导航两键 (第40轮修复未被回退)');
+
+  /* ② 运行时写缓存被拒 (配额耗尽/隐私模式) 必须被吞: 原实现 caches.open().then(c => c.put(..)) 悬空,
+     拒绝变成进程级 unhandledRejection (控制台报错)。写缓存纯属优化, 失败只应降级为「本次不缓存」。
+     用独立 SW 沙箱 + 真实 process 级 unhandledRejection 探针证伪 (跨 realm 拒绝同样会上报, 已实测)。 */
+  var rej = [];
+  var sw2 = { console: console, URL: URL, location: { origin: 'http://localhost:8788' } };
+  sw2.globalThis = sw2; sw2.self = sw2;
+  var ev2 = {};
+  sw2.addEventListener = function (t, fn) { ev2[t] = fn; };
+  sw2.skipWaiting = function () { return Promise.resolve(); };
+  sw2.clients = { claim: function () { return Promise.resolve(); } };
+  sw2.Response = { error: function () { return { ok: false, _browserErrorPage: true }; } };
+  sw2.caches = {
+    open: function () {
+      return Promise.resolve({
+        add: function () { return Promise.resolve(); },
+        put: function () { return Promise.reject(new Error('QuotaExceededError')); }   // 写盘失败
+      });
+    },
+    match: function () { return Promise.resolve(undefined); },
+    keys: function () { return Promise.resolve([]); },
+    delete: function () { return Promise.resolve(true); }
+  };
+  sw2.fetch = function () { return Promise.resolve({ ok: true, type: 'basic', clone: function () { return {}; } }); };
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'), sw2, { filename: 'sw.js' });
+  var onRej = function (e) { rej.push(e && e.message || e); };
+  process.on('unhandledRejection', onRej);
+  var captured = null;
+  ev2.fetch({ request: { method: 'GET', url: 'http://localhost:8788/ui/app.js' }, respondWith: function (p) { captured = p; }, waitUntil: function () {} });
+  return Promise.resolve(captured).then(function (res) {
+    ok(res && res.ok === true, 'L13 写缓存失败不影响在线响应 (仍原样返回上游响应)');
+  }).then(function () {
+    return new Promise(function (r) { setTimeout(r, 40); });   // 等拒绝上报窗口
+  }).then(function () {
+    process.removeListener('unhandledRejection', onRej);
+    ok(rej.length === 0, 'L13 写缓存 rejected Promise 已被兜底 (无未处理拒绝), 实测 ' + (rej.length ? rej.join(';') : 0));
+  });
+}
+

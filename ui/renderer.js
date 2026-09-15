@@ -14,9 +14,14 @@
     _glyphTable = _glyphMode === 'en' ? XQ.Piece.LETTERS : XQ.Piece.CHARS;
     return _glyphTable;
   }
+  /* 第41轮: 按 (色, 子种) 取当前显示偏好的棋子字 — 供 app 侧 HUD/回放层复用。
+     原 capturedTray/lastMoveBadge/回放盘面各自直取 XQ.Piece.CHARS, 「EN 界面 + Letters」下与棋盘/走法列表
+     互相矛盾 (第40轮只修了走法列表一格). 单一出口后新增展示位不再需要各自记着 xq_pieces。 */
+  function pieceGlyphOf(color, type) {
+    return (glyphTable()[color] || {})[type] || XQ.Piece.CHARS[color][type];
+  }
   function pieceGlyph(p) {
-    var table = glyphTable();
-    return (table[p.color] || {})[p.type] || XQ.Piece.CHARS[p.color][p.type];
+    return pieceGlyphOf(p.color, p.type);
   }
   /* 第40轮: 走法列表棋子字随棋子显示偏好 (xq_pieces) — 日志此前恒用汉字 CHAR 表,
      于是「EN 界面 + Letters」下棋盘是 abc 而走法列表仍显示 汉字子名, 双语切换看似没生效 */
@@ -356,14 +361,7 @@
     if (view.aiThinking) {
       document.getElementById('status-info').textContent = '';   // 思考中: 由 tick 填充当前思考时间
     } else {
-      var elapsed = (Date.now() - view.startTime) / 1000 | 0;
-      var ph = phaseCN(engine);
-      var clockTxt = '';
-    try { if (engine.naturalClock && engine.naturalClock() >= 60) clockTxt = (XQ.I18N ? XQ.I18N.tArgs('status_limit', { n: engine.naturalClock() }) : ' · 限着 ' + engine.naturalClock() + '/120'); } catch (eNC) {}
-    var mm = (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2);
-    document.getElementById('status-info').textContent = XQ.I18N
-      ? XQ.I18N.tArgs('status_clock', { n: snap.ply, t: mm, ph: ph ? ' · ' + ph : '', lim: clockTxt })
-      : '第' + snap.ply + '手 · ' + mm + (ph ? ' · ' + ph : '') + clockTxt;
+      document.getElementById('status-info').textContent = clockText(engine, view, snap.ply);   // 第41轮: 与 updateClock 共用单出口 (原逐字内联一份重复实现)
     }
     document.getElementById('status-bar').className = cls;
     document.getElementById('btn-row').classList.toggle('visible', snap.over);
@@ -612,6 +610,9 @@
         return '<span class="d-cand' + (isWin ? ' d-cand-win' : '') + '"' + attrs + '>' + esc(c.move) + (c.score ? ' <b>' + esc(c.score) + '</b>' : '') + '</span>';
       }).join('');
       var hasReason = !!e.reasoning;
+      // 第41轮: 兑底摘要选词改按语言中立旗标 e.fallback (app 侧 fbMark 落旗) —
+      // 原实现比对 app 写入的中文标记串, 而该写入自第40轮 i18n 后按字典产出, EN 下标记串根本不再出现
+      var sumTxt = e.fallback ? T('fb_summary') : (e.summary === '兑底·安全着法' ? T('fb_summary') : e.summary);   // 兼容仍有中文标记串的旧内存数据
       return '<div class="dcard">'
         + '<div class="d-head"><span class="d-move">#' + e.n + ' ' + esc(e.name) + '</span>'
         + (e.voterName ? '<span class="d-voter" title="' + esc(e.voterName) + '">✦' + esc(String(e.voterName).split(':').pop()) + '</span>' : '')   // 第32轮: 胜出选民
@@ -619,7 +620,7 @@
         + (hasReason ? '<button class="d-toggle" data-ply="' + e.n + '" aria-label="reasoning" aria-expanded="false">💭</button>' : '')
         + '</div>'
         + (e.plan ? '<div class="d-plan">📌 ' + esc(e.plan) + '</div>' : '')
-        + (e.summary ? '<div class="d-sum">' + esc(e.summary === '兑底·安全着法' ? T('fb_summary') : e.summary) + '</div>' : '')   // 第27轮 i18n: 兑底摘要是数据标记 (app.js:295 按 zh 串比对), 渲染层按标记本地化, 数据不动
+        + (sumTxt ? '<div class="d-sum">' + esc(sumTxt) + '</div>' : '')
         + (cands ? '<div class="d-cands">' + cands + '</div>' : '')
         + '<div class="d-meta">' + (e.confidence != null ? T('d_conf') + esc(e.confidence) + ' · ' : '') + (e.secs ? esc(e.secs) + 's' : '') + '</div>'   // 第27轮 i18n: 信 角标原硬编码
         + (hasReason ? '<div class="d-reason" data-ply="' + e.n + '" style="display:none">' + esc(e.reasoning.indexOf('【兑底】') === 0 ? T('fb_reason') : e.reasoning) + '</div>' : '')   // 第27轮 i18n: 兑底推理同上 (标记前缀比对)
@@ -666,10 +667,15 @@
   });
 
   /* ═══ v1.7 HUD 组件 ═══ */
-  /* 被吃子力托盘: chars = 该方吃掉的对方子力字符数组 */
+  /* 被吃子力托盘: chars = 该方吃掉的对方子力字符数组 (以 CHARS 汉字表存储, 渲染时按显示偏好还原) */
   function capturedTray(side, chars) {
     var el = document.getElementById('think-' + side + '-captured');
-    if (el) el.innerHTML = (chars && chars.length) ? '<b>' + T('tray_captured') + '</b>' + chars.join('') : '';   // 第27轮 i18n: 俘 字原硬编码
+    if (el) {
+      // 第41轮: 托盘此前恒显汉字 — 「EN 界面 + Letters」下棋盘是字母而托盘是「车马炮」(与第40轮修掉的走法列表同类)
+      var opp = side === 'red' ? 'black' : 'red';
+      var disp = (chars || []).map(function (ch) { return logGlyph(opp, ch); });
+      el.innerHTML = (disp.length) ? '<b>' + T('tray_captured') + '</b>' + disp.join('') : '';   // 第27轮 i18n: 俘 字原硬编码
+    }
   }
   /* 最新着法大字徽章: html 传入, null 隐藏 (app 侧 4s 定时淡出) */
   function lastMoveBadge(html) {
@@ -718,19 +724,27 @@
       + '</svg>';
   }
 
+  /* ── 状态条时钟文案 (单出口) ──
+     第41轮: 原 renderStatus 内联一份、updateClock 另一份逐字重复, 第40轮修阶段名 i18n 时必须同时改两处
+     (第三处在 app.js ticker) — 三份等价逻辑靠人工同步, 漏改一处即出现「状态条中文 · 时钟英文」的撕裂。
+     现收敛到此函数, 两个调用点共用 (守护: _logic_layer L12 断言两条路径输出逐字相同)。 */
+  function clockText(engine, view, ply) {
+    var elapsed = (Date.now() - view.startTime) / 1000 | 0;
+    var ph = phaseCN(engine);
+    var lim = '';
+    try { if (engine.naturalClock && engine.naturalClock() >= 60) lim = (XQ.I18N ? XQ.I18N.tArgs('status_limit', { n: engine.naturalClock() }) : ' · 限着 ' + engine.naturalClock() + '/120'); } catch (eNC) {}
+    var mm = (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2);
+    return XQ.I18N
+      ? XQ.I18N.tArgs('status_clock', { n: ply, t: mm, ph: ph ? ' · ' + ph : '', lim: lim })
+      : '第' + ply + '手 · ' + mm + (ph ? ' · ' + ph : '') + lim;
+  }
+
   /* ── 轻量时钟刷新 (每秒 tick, 不重建棋盘) ── */
   function updateClock(engine, view) {
     if (engine.isOver()) return;
-    var elapsed = (Date.now() - view.startTime) / 1000 | 0;
     var el = document.getElementById('status-info');
-    var ph = phaseCN(engine);
-    var clockTxt = '';
-    try { if (engine.naturalClock && engine.naturalClock() >= 60) clockTxt = (XQ.I18N ? XQ.I18N.tArgs('status_limit', { n: engine.naturalClock() }) : ' · 限着 ' + engine.naturalClock() + '/120'); } catch (eNC) {}
-    var mm2 = (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2);
-    if (el) el.textContent = XQ.I18N
-      ? XQ.I18N.tArgs('status_clock', { n: engine.ply(), t: mm2, ph: ph ? ' · ' + ph : '', lim: clockTxt })
-      : '第' + engine.ply() + '手 · ' + mm2 + (ph ? ' · ' + ph : '') + clockTxt;
+    if (el) el.textContent = clockText(engine, view, engine.ply());
   }
 
-  XQ.UI = { CS: CS, drawBoard: drawBoard, render: render, aiBanner: aiBanner, logMove: logMove, thinkPanel: thinkPanel, decisionCards: decisionCards, updateClock: updateClock, capturedTray: capturedTray, lastMoveBadge: lastMoveBadge, evalSpark: evalSpark };
+  XQ.UI = { CS: CS, drawBoard: drawBoard, render: render, aiBanner: aiBanner, logMove: logMove, thinkPanel: thinkPanel, decisionCards: decisionCards, updateClock: updateClock, clockText: clockText, capturedTray: capturedTray, lastMoveBadge: lastMoveBadge, evalSpark: evalSpark, pieceGlyph: pieceGlyphOf };
 })(typeof window !== 'undefined' ? window : globalThis);

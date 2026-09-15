@@ -86,6 +86,8 @@
     think_busy: '⚡ 思考中…',
     council_progress: '⚡ 会诊中 ({a}/{t} 已应答)…',
     sr_move: '第{n}手 {side} {cn}',
+    sr_cursor_piece: '光标 {sq} {p}',   // 第41轮 a11y: 键盘走子光标播报 (原只有视觉描边, 读屏用户按方向键零反馈)
+    sr_cursor_empty: '光标 {sq} 空格',
     status_ticker: '第{n}手 · {s}s{ph}{rt}',
     status_retry: ' · 重试{n}次',
     status_clock: '第{n}手 · {t}{ph}{lim}',
@@ -259,6 +261,8 @@
     think_busy: '⚡ Thinking…',
     council_progress: '⚡ Council ({a}/{t} answered)…',
     sr_move: 'Move {n} {side} {cn}',
+    sr_cursor_piece: 'Cursor {sq} {p}',
+    sr_cursor_empty: 'Cursor {sq} empty',
     status_ticker: 'Move {n} · {s}s{ph}{rt}',
     status_retry: ' · {n} retries',
     status_clock: 'Move {n} · {t}{ph}{lim}',
@@ -403,7 +407,12 @@
       if (v3 != null) n3.setAttribute('aria-label', v3);
     }
     try { root.document.title = t('app_title'); } catch (e) {}
-    try { root.dispatchEvent(new root.CustomEvent('xq:i18n', { detail: { lang: cur } })); } catch (e2) {}
+    // 第41轮关键修复: 事件原派发在 window 上, 而全仓唯一的监听在 document (app.js 动态文案热切)。
+    // window 是 document 的祖先 — 派发到 window 的事件不会向下传播到 document, 监听器从未被调用过,
+    // 于是「切语言即时刷新动态文案」整条链路是死代码 (静态 data-i18n 由上面的 apply 覆盖, 因此表面看像生效了;
+    // 思考面板名/决策卡/状态条/回放层标题则一直停在旧语言, 直到下一次无关重渲染才顺带更新)。
+    // 改为派发到 document 并允许冒泡: document 上的监听直接命中, window 上的监听经冒泡同样收到, 两种写法都成立。
+    try { root.document.dispatchEvent(new root.CustomEvent('xq:i18n', { detail: { lang: cur }, bubbles: true })); } catch (e2) {}
   }
   function getLang() { return cur; }
   function init() {

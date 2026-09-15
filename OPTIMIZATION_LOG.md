@@ -1515,3 +1515,44 @@
 - 教训: (1) **静态扫描与实机是互补而非覆盖关系** — 第 5/6 项 (面板 stat `手`、走法列表子名) 三条 CJK 守护全绿却被浏览器实机一眼看出, 因为它们是「拼接产物」而非「字面量」; (2) 修「键缺失」类 bug 之后必须补「键存在性」守护, 否则同类 bug 会以另一处写法复发 (故有 I11); (3) 给兜底逻辑加链式回退时, 要意识到**回退会掩盖前一环的失效** — 第一版 sw 测试因此假绿, 必须构造「只含单一键」的隔离场景才能证伪具体那一环; (4) 修「多义 s. 元素常驻」类缺陷时, 单一测试若依赖隐式微任务顺序会偶发, 应显式串成 promise 链。
 - 边界: `ai/llm_agent.js` 未动 (system prompt 2384 字, dump 新鲜度 PASS, 无需重生成); `server.js` 未动 (无需重启); `sw.js` 改动只需用户下次访问重新拉取 SW 即生效 (缓存已升版); 零新依赖; 套件数 15 不变
 - 触点: ui/i18n.js (+14 键: status_retry_wait/phase_opening|middlegame|endgame/res_stalemate|checkmate|perpetual|repetition|natural/summary_none/board_label/undo_ai_busy/think_stat_tpl/think_per_move) / ui/app.js / ui/renderer.js / index.html / sw.js / test/i18n_check.js (I11) / test/check_ui.js (第15节) / test/_logic_layer.js (L11) / README.md / README.zh-CN.md / docs/ARCHITECTURE.md / CHANGELOG.md
+
+## 2026-09-16 02:40 第41轮 (v1.0.daily, zcode — 指令「优化: a11y 二期 / PWA manifest / 渲染性能 / 服务端行为测试 / 文档对齐 / i18n 漏挂」; 实做 15 项)
+
+基线 `npm run check` ALL PASS + `npm test` 15/15。主线: **三条「看似生效、实则死掉/按语言绑定」的链路被逐个证伪并修复** — (a) 语言热切事件派发目标与监听目标不一致 → 整条动态文案热切是死代码; (b) 兑底透明化的判定跨语言比对翻译串 → 英文界面下功能整体消失且存档往返丢标记; (c) 离线壳只预缓存 HTML → 断网首启拿得到页面却拿不到 20 个脚本。三项均由**浏览器实机**而非静态扫描定位 (其中 (a) 由浏览器事件探针直接证伪, (c) 由真实 CacheStorage 内容证实)。
+
+【i18n 死链路 / 漏挂 (1-4)】
+1. **`xq:i18n` 事件派发在 window, 唯一监听在 document → 语言热切整条链路从未执行**: `ui/i18n.js` 用 `root.dispatchEvent` (root=window) 派发, 而全仓唯一监听是 `ui/app.js` 的 `document.addEventListener('xq:i18n')`; window 是 document 的**祖先**, 派发到祖先的事件不会向下传播到后代 → 监听器一次都没被调用过。表象极具迷惑性: `apply()` 会把静态 `data-i18n` 文本刷成新语言, 看起来「切语言生效了」, 而思考面板名/决策卡/状态条/回放层标题全部停在旧语言, 直到下一次无关重渲染顺带覆盖。修复: 改派发到 `document` 且 `bubbles: true` (document 监听直接命中, window 监听经冒泡同样收到, 两种写法都成立)。实机: 切 zh 后同步得到 `🤖 随机AI（红方）思考中…` + 面板名 `红方` (修复前二者均为英文, 且要等到下一手才可能变)。
+2. **思考中切语言时随机AI 名称不重解析**: `view.aiThinking` 是本次思考开始时按当时语言解析出的**字符串** (随机AI 名称含方别词), 切语言后 `refresh()` 只是把旧串重画一遍 → 状态条在整轮思考期间停在旧语言 (LLM 一手 30~60s, 肉眼可见)。在 `xq:i18n` 监听内按当前语言重解析 (LLM 的 label 是模型名, 语言中立, 不动)。
+3. **兑底透明化在英文界面整体失效**: 第40轮把摘要占位改走字典 (`summary_none` → EN `'(no summary)'`), 而兑底判定仍写 `entry.summary === '(无摘要)'` → EN 下恒 false, `fb_badge` 徽章 / `fb_summary` 摘要 / `fb_reason` 推理三处全部不再出现 (功能随 i18n 修复静默消失, 且 zh 路径掩盖了它)。改为按**原始事实**判定 (`!meta.summary && confidence == null`), 落在语言中立的布尔旗标 `entry.fallback` 上, 渲染层据旗标选词 — 与界面语言彻底解耦。实机 EN: 最新着法徽章出现 `⚠fallback`。
+4. **续局重建丢失兑底标记**: `resumeGame` 重建决策日志时无条件写 `summary_none` 占位 (`m.summary || t('summary_none')`), 而棋谱只在模型给了 summary 时才写该字段 → 存档往返后兑底手一律退化为「无摘要」, 与实盘口径不一致。抽出 `fbMark(entry, hasSummary, reasoning)` 单出口, 实盘/续局同口径; 渲染层兼容仍带中文标记的旧内存数据。
+
+【棋子显示偏好 (5-6)】
+5. **HUD 三处忽略 `xq_pieces`**: `capturedTray` (吃子托盘) 与 `lastMoveBadge` (最新着法大字, 含 ✕被吃子) 直取 `XQ.Piece.CHARS` → 「EN 界面 + Letters」下棋盘是字母而托盘/徽章是「车马炮」, 与第40轮已修的走法列表自相矛盾。渲染层新增 `pieceGlyphOf(color,type)` 作唯一出口 (经 `XQ.UI.pieceGlyph` 暴露), 托盘在渲染期按显示偏好还原 (数据仍以汉字存储)。实机: 托盘 `Capn`、徽章 `#2 ⚫ c 砲2进3 ⚠fallback`。
+6. **回放层与决策卡标题同样忽略偏好**: 回放盘面 90 格、吃子幽灵、信息面板子名/被吃子、下着预览、以及**决策卡标题** (`entry.name`) 均直取 CHARS。前六处随第 5 项统一; 决策卡标题是**浏览器实机**截图快照抓出的 (`#117 炮-g3→f3` 与旁边 `b` 并列) — 静态 CJK 扫描看不到, 因为它是拼接产物 (与第40轮「面板 stat 手」「走法列表子名」同类, 再次印证静态扫描与实机是互补而非覆盖关系)。
+
+【PWA 离线壳 (7-8)】
+7. **壳清单只有 HTML 本身 → 断网首启仍是白页 (第40轮遗留)**: 第40轮修好了「兜底查询键」, 但预缓存只列了 `./` 与 `./index.html`; 首屏加载发生在 SW 接管**之前**, 网络优先策略来不及为 20 个 `<script src>`/图标/manifest 建缓存 → 断网首启拿到 HTML 却拿不到脚本, `XQ` 未定义, 页面空白。按 index.html 实际引用逐条列出全壳并升版 `xq-shell-v3` (v2 旧壳由 activate 清理, 用户下次访问自然重建)。实机 CacheStorage: 24 个键 = 20 个 JS + index.html + `/` + manifest.json + icon.svg, 零缺失。
+8. **运行时写缓存的 Promise 悬空**: `caches.open(CACHE).then(c => c.put(req, copy))` 未 `return` 也未 `catch` → 配额耗尽/隐私模式下 `QuotaExceededError` 变成未处理的 rejection (控制台报错, 且无任何降级说明)。补 `return ... .catch()`: 写缓存纯属优化, 失败只应降级为「本次不缓存」, 不得污染在线路径。
+
+【a11y (9-10)】
+9. **键盘走子光标对读屏零反馈**: `kbMove` 只改视觉描边 + 重绘, 读屏用户按方向键不知道自己在哪一格、格上有没有子、是哪方的子 → 键盘走子对读屏等于不可用。新增 `#sr-cursor` (独立 polite 区, 避免与着法播报互相覆盖) 与 `sr_cursor_piece`/`sr_cursor_empty` 双语键, 移动后播报「坐标 + 棋子字」。
+10. **设置层开启时单键快捷键仍在操作面板后方棋局**: 设置层是 `aria-modal="true"` 对话 (背景声明为惰性), 但快捷键不走 Tab 序 — 面板开着按 R 会弹「重开确认」并重开对局、U 悔棋、M 静音、F 全屏, 方向键/Enter 还会把棋盘光标连同落子动作操作到遮罩后面。把「面板开启」作为统一闸门挡在棋盘键盘交互与单键快捷键之前 (Esc 保留在闸门之前求值: 关面板+清理光标是它的既有职责)。实机: 面板开启时 7 个键全部无副作用 (confirmCalls=0/手数不变/静音态不变/光标未生成); 关闭面板后同样按键立即生效 (反证闸门是唯一原因)。
+
+【渲染 / 维护性 (11)】
+11. **状态条时钟文案两份逐字重复的实现**: `renderStatus` 内联一份、导出的 `updateClock` 另一份 (经 check_ui 报告 `used=false`, 实为零调用点), 第40轮修阶段名 i18n 时必须同时改两处 (第三处在 app.js ticker) — 三份等价逻辑靠人工同步, 漏改一处即「状态条中文 · 时钟英文」撕裂。收敛为 `clockText(engine, view, ply)` 单出口, 两处共用 (并保留 `updateClock` 导出, 不破坏既有导出面)。
+
+【服务端行为测试 (12-13, server.js 零改动)】
+12. **静态路径带 query 形态**: `/index.html?v=2`、`/?x=1`、`/ui/app.js?v=9` — `serveStatic` 的 `urlPath.split('?')[0]` 决定扩展名/MIME/ETag, 一旦被破坏, 带参数强刷会退化为 404 或 `application/octet-stream` (白屏), 且 SW 的 `ignoreSearch` 离线兜底再也命中不到壳。断言 200 + 正确 MIME + 与裸路径**同一 ETag**。
+13. **keys.json 热加载 (mtime 缓存) 与半写容错 — v1.0.3 特性此前零自动化覆盖**: 改文件后免重启即生效 (证明 mtime 判据正确, 而非永远复用首读结果) / 半写非法 JSON → 保留上次有效配置 (不 500 不清空, 编辑期间对局不断) / 还原后列表收敛 (双向生效, 非单向追加)。
+
+【验证 / 守护 / 文档 (14-15)】
+14. **新守护 (逐条先红后绿实证)**: ① `_logic_layer` **L12** (DOM 桩 + 真实字典): 语言切换事件派发到 document (分别记录 window/document 派发目标以证伪) / `pieceGlyph` 随 `xq_pieces` / `capturedTray` 字母化 / 兑底卡按旗标选词 (含 EN 无中文残留、非兑底不误伤、旧标记串兼容) / 时钟两条路径输出逐字相同 + EN 无中文残留。② `_logic_layer` **L13**: 壳清单完整性**按 index.html 现场推导**比对预缓存结果 (22 项, 新增脚本漏挂即红) + 真实 `process` 级 `unhandledRejection` 探针 (已实测跨 realm 拒绝同样上报; 去掉 catch 即抓到 `QuotaExceededError`)。③ `check_ui` 源串守卫扩展 (壳机制/导航兜底/写缓存兜底/光标播报/设置层闸门/棋子字单出口/兑底判定按原始 summary/续局旗标/语言热切重解析), 并新增 `codeOnly()` **先剥注释** — 否则本轮多处「引用被修掉旧写法」的说明注释会让守卫被自己的文档误触发 (首次提交即踩到, 当场修正)。④ `_server_http` 54→**61**: 上述 query 形态 4 条 + keys.json 3 条。⑤ 全部红探针实测: SHELL 回退 2 项 / 去掉 catch / 托盘回退汉字 / 兑底选词不看旗标 / 时钟第二实现 / 兑底判定回退翻译串 / 续局旗标移除 / 单出口移除 / 热切重解析移除 / mtime 判据破坏 / 去掉 query 切分 — 对应断言全部当场红。
+15. **文档对齐**: `docs/ARCHITECTURE.md` 测试地图 (`_logic_layer` L12/L13 描述、`_server_http` 61 项与新增面) + README 双语测试表 (`_server_http` 54→**61**、check_ui 守卫清单含 `#sr-cursor`/模态闸门/全壳预缓存) + zh 目录树同步; CHANGELOG 记 Round-41 里程碑。
+
+【验证】
+- 门禁: `node --check` 全改文件 + `npm run check` ALL PASS (system prompt 2384 字未动, dump 新鲜度 PASS) + `npm test` 15/15 (i18n 293→**295 键**/11 组; `_logic_layer` 81 项含 L12/L13; `_server_http` **61/61**; check_ui 含扩展源串守卫)
+- **浏览器实机 (IAB, 预置 `xq_v1_settings` 双方 random + `xq_lang=en` + `xq_pieces=en`, 端口 8899)**: 对局自动推进至 30+ 手、**零 console error / unhandledrejection**。EN 断言: 决策卡 `#1 C-b3→b10`(字母) / 走法列表 `●1. C b3-b10` / 吃子托盘 `Capn` / 最新着法徽章 `#2 ⚫ c … ⚠fallback`(兑底徽章在 EN 下首次可见) / 回放信息面板下着预览 `🔴 N h1 → g3`。语言热切: 切 zh 后**同步**得到 `🤖 随机AI（红方）思考中…` + 面板名 `红方` (修复前需等下一手才可能变)。键盘光标: 方向键后 `#sr-cursor` = `Cursor f5 empty` → 移到有子格 `Cursor f5 C`。设置层闸门: 面板开启时 `r/u/m/f/方向键/空格` 全部无副作用 (confirmCalls=0 / 手数 26→26 / 静音态不变 / 光标未生成 / 对话框仍开); Esc 关闭后同样按键立即生效 (反证)。PWA: `navigator.serviceWorker.controller` 已接管, `caches.keys()` = `['xq-shell-v3']`, 该缓存 **24 个键** = 20 JS + index.html + `/` + manifest.json + icon.svg, 零缺失 (第40轮为 2 个键, 首启仅 HTML)。
+- 提交前自查: 全局 keydown 保持「无光标时放行 Enter/Space」不变 (本轮只是把模态闸门提前; Esc 分支仍在闸门之前以保留「关闭+清理光标」语义); 新增 `#sr-cursor` 为瞬态输出非模块状态 (新局/重开由 kbCursor=null 复位, 无残留态); 本轮未新增异步回调 (既有世代守卫不涉及); 套件数保持 15 → 徽章/目录树套件数无需同步 (仅同步各套件断言数); 新守护测试全部先真实跑红再转绿后才挂链; UI 验收走浏览器实机 + 计算/接口断言 (截图非必需)。
+- 教训: (1) **事件派发目标与监听目标是两个独立事实** — 「监听器写对了」不代表「事件送到了」, `window` 上的事件不向下传播到 `document`; 这类缺陷在静态扫描/单测下完全不可见, 只有实机探针能证伪 (对照第39轮 AbortController 接线错序: 同一类「接线错但代码看起来对」)。(2) **判定条件不得复用被本地化的显示值** — 一旦某值改由字典产出, 所有拿它做等值判断的地方都会随语言失效 (兑底标记), 正确做法是让「事实」与「展示」分离 (旗标 + 渲染层选词); 与第40轮教训(2)同源, 本轮在 app 侧复发。(3) 「预缓存了壳」要问清壳包含什么: HTML 只是壳的入口, 子资源必须一并入册, 且清单要与 index.html 对齐并由测试**现场推导**比对, 否则新增脚本会静默破坏离线能力。(4) 给「必须存在」型源码守卫加剥注释预处理 — 修复说明里引用旧写法是常态, 否则守卫会与自己的文档打架。(5) 每轮实机验收都值得做: 本轮 6/15 项的真实证据来自浏览器 (事件链路、决策卡标题、托盘/徽章、回放预览、SW 缓存清单), 其中 2 项静态扫描原理上不可能发现。
+- 边界: `ai/llm_agent.js` 未动 (system prompt 2384 字未变, 无需重生成 prompts_dump); `server.js` **未改** (新增的 7 条断言纯属既有行为的覆盖, 无需重启); `sw.js` 改动需用户下次访问重新拉取 SW 即生效 (缓存已升版 v3, activate 清 v2); 零新依赖; 套件数 15 不变。刻意保留 (非缺陷): 走法列表/徽章里的**中文记谱** (`cnNotation`, v1.7 特性「中文记谱」) 在 Letters 模式下仍显示汉字着法 — 与棋子字显示偏好是两件事, 本轮只统一后者。
+- 触点: ui/i18n.js (+2 键: sr_cursor_piece/sr_cursor_empty; 事件改派发到 document) / ui/app.js / ui/renderer.js (pieceGlyphOf/clockText/decisionCards) / index.html (#sr-cursor) / sw.js (全壳清单 + v3 + 写缓存兜底) / test/_logic_layer.js (L12/L13) / test/check_ui.js (源串守卫 + codeOnly) / test/_server_http.js (54→61) / README.md / README.zh-CN.md / docs/ARCHITECTURE.md / CHANGELOG.md

@@ -150,8 +150,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   /* 决策日志渲染: 每手一行 (手号/着法/摘要/评价/信心/耗时) — 文本模式 (卡片不可用时兜底) */
   function logTextFor(side) {
     if (!decisionLog[side] || !decisionLog[side].length) return '';
+    var Tf = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
     return decisionLog[side].map(function (e) {
-      return '#' + e.n + ' ' + e.name + '\n  ' + e.summary
+      return '#' + e.n + ' ' + e.name + '\n  ' + (e.fallback ? Tf('fb_summary') : e.summary)   // 第41轮: 兑底行同样走字典 (卡片模式为主路径, 此处为纯文本兜底)
         + (e.evaluation ? ' | ' + e.evaluation : '')
         + (e.confidence != null ? ' | ' + (XQ.I18N ? XQ.I18N.t('d_conf') : '信') + e.confidence : '')
         + (e.secs ? ' | ' + e.secs + 's' : '');
@@ -250,6 +251,23 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var Tw0 = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
     return { text: logTextFor(side) || Tw0('think_wait'), active: false };   // 第26轮 i18n
   }
+  /* 第41轮: 棋子显示字统一出口 (渲染层按 xq_pieces 决定汉字/字母) — 原 HUD/回放层多处直取 CHARS,
+     「EN 界面 + Letters」下最新着法徽章、吃子托盘、回放盘面与信息面板都与棋盘自相矛盾 (第40轮只修了走法列表) */
+  function pg(color, type) {
+    return XQ.UI && XQ.UI.pieceGlyph ? XQ.UI.pieceGlyph(color, type) : XQ.Piece.CHARS[color][type];
+  }
+  /* 第41轮 兑底透明化 (v2.0 语义): 兑底着法 = 模型未给 summary 且未给 confidence (重试全败后安全阀代走)。
+     原实现用 `entry.summary === '(无摘要)'` 判定 — 而该值自第40轮起改由字典产出 (EN 译作 '(no summary)'),
+     跨语言比对必然失败 → 英文界面下兑底徽章/摘要/推理全部不再出现 (功能随 i18n 修复静默消失)。
+     现按「模型是否真的给了 summary」这一原始事实判定, 并落在语言中立的布尔旗标 entry.fallback 上,
+     渲染层据旗标选词 (见 renderer.decisionCards), 与界面语言彻底解耦。 */
+  function fbMark(entry, hasSummary, rawReasoning) {
+    entry.fallback = !hasSummary && entry.confidence == null;
+    if (!entry.fallback) return entry;
+    entry.summary = '';   // 摘要位置让给本地化的 fb_summary (旗标即数据, 不再用中文串充当标记)
+    if (!rawReasoning) entry.reasoning = '【兑底】前几次输出无效, 系统按静态评分选定此安全走法';   // 前缀是数据标记, renderer 按前缀映射 fb_reason
+    return entry;
+  }
   function afterMove(res, secs, meta) {
     var m = res.move;
     var side = m.piece.color;
@@ -265,10 +283,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       secs, cn);
     // 决策日志 (v1.5): 含 plan/candidates, 渲染为结构化卡片
     var holder = agents[side];
+    var hasSummary = !!(meta && meta.summary);   // 第41轮: 原始事实 (非字典产物) — 兑底判定的唯一依据
     var entry = {
       n: engine.ply(),
-      name: XQ.Piece.CHARS[m.piece.color][m.piece.type] + '-' + XQ.Move.sqName(m.from) + '\u2192' + XQ.Move.sqName(m.to),
-      summary: (meta && meta.summary) || (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)'),
+      name: pg(m.piece.color, m.piece.type) + '-' + XQ.Move.sqName(m.from) + '\u2192' + XQ.Move.sqName(m.to),   // 第41轮: 卡片标题子名随显示偏好 (浏览器实机抓出 — 静态扫描看不出拼接产物)
+      summary: hasSummary ? meta.summary : '',
       plan: (meta && meta.plan) || '',
       evaluation: (meta && meta.evaluation) || '',
       confidence: (meta && typeof meta.confidence === 'number') ? meta.confidence : null,
@@ -276,11 +295,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       reasoning: cleanReason((meta && meta.reasoning) || ''),   // v1.5.5 中文过滤 + v1.5.10 清洗坐标扫描噪音, 卡片 💭 展开查看
       secs: secs
     };
-    // v2.0 兑底透明化: 3 次重试后的兑底着法 (无 summary 且无 confidence) → 决策卡标訽, 观战者知悉这手不是模型自信决策
-    if (entry.summary === '(无摘要)' && entry.confidence == null) {
-      entry.summary = '兑底·安全着法';
-      if (!entry.reasoning) entry.reasoning = '【兑底】前几次输出无效, 系统按静态评分选定此安全走法';
-    }
+    fbMark(entry, hasSummary, entry.reasoning);   // 第41轮: 兑底着法标旗 (无 summary 且无 confidence)
+    if (!entry.fallback && !entry.summary) entry.summary = (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)');   // 纯展示兜底: 有 summary 缺失但置信度在 → 保留原「无摘要」占位
     decisionLog[side].push(entry);
     if (decisionLog[side].length > 60) decisionLog[side].shift();
     var logText = logTextFor(side);
@@ -324,10 +340,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var Ts = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TAs = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
       srEl.textContent = TAs('sr_move', { n: engine.ply(), side: Ts(side === 'red' ? 'status_side_red' : 'status_side_black'), cn: cn || (XQ.Move.sqName(m.from) + '->' + XQ.Move.sqName(m.to)) });   // v1.0.daily a11y: 屏幕阅读器着法播报
     }
-    var fbBadge = entry.summary === '兑底·安全着法' ? ' <span style="color:#e67e22">' + Ts('fb_badge') + '</span>' : '';   // v2.0 兑底透明化; 第26轮 i18n (兑底徽章双语)
+    var fbBadge = entry.fallback ? ' <span style="color:#e67e22">' + Ts('fb_badge') + '</span>' : '';   // v2.0 兑底透明化; 第26轮 i18n (兑底徽章双语); 第41轮 改按 fallback 旗标 (原比对中文串, EN 恒 false)
     XQ.UI.lastMoveBadge('<b>#' + engine.ply() + '</b> ' + (side === 'red' ? '🔴' : '⚫') + ' '
-      + XQ.Piece.CHARS[side][m.piece.type] + ' <b>' + esc2(cn) + '</b> <span style="opacity:.65">' + esc2(XQ.Move.sqName(m.from) + '→' + XQ.Move.sqName(m.to)) + '</span>'
-      + (m.captured ? ' <span style="color:#e67e22">✕' + XQ.Piece.CHARS[m.captured.color][m.captured.type] + '</span>' : '') + fbBadge);
+      + pg(side, m.piece.type) + ' <b>' + esc2(cn) + '</b> <span style="opacity:.65">' + esc2(XQ.Move.sqName(m.from) + '→' + XQ.Move.sqName(m.to)) + '</span>'
+      + (m.captured ? ' <span style="color:#e67e22">✕' + pg(m.captured.color, m.captured.type) + '</span>' : '') + fbBadge);
     if (lastBadgeTimer) clearTimeout(lastBadgeTimer);
     lastBadgeTimer = setTimeout(function () { XQ.UI.lastMoveBadge(null); }, 4000);
     if (engine.inCheck(engine.turn()) && !engine.isOver()) {
@@ -418,11 +434,24 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
 
   /* v1.0.daily a11y 键盘走子: 方向键移动光标, Enter/Space 选子/走子, Esc 取消 (人棋玩家无鼠标可玩) */
   var kbCursor = null;
+  /* 第41轮 a11y: 光标落点播报 — 原实现只有一圈视觉描边, 读屏用户按方向键拿不到任何反馈 (知道自己在哪一格、
+     格上有没有子、是哪一方的子), 键盘走子对读屏等于不可用。独立播报区避免与着法播报互相覆盖。 */
+  function announceCursor() {
+    if (!kbCursor) return;
+    var el = document.getElementById('sr-cursor');
+    if (!el) return;
+    var Ta = XQ.I18N ? XQ.I18N.tArgs : function (kk, a) { return kk; };
+    var p = null;
+    try { p = engine.pieceAt(kbCursor.x, kbCursor.y); } catch (eP) {}
+    var sq = XQ.Move.sqName({ x: kbCursor.x, y: kbCursor.y });
+    el.textContent = p ? Ta('sr_cursor_piece', { sq: sq, p: pg(p.color, p.type) }) : Ta('sr_cursor_empty', { sq: sq });
+  }
   function kbMove(dx, dy) {
     if (!kbCursor) { kbCursor = { x: 4, y: 5 }; }   // 缺省落在棋盘中央
     kbCursor.x = Math.max(0, Math.min(8, kbCursor.x + dx * (flipOn ? -1 : 1)));
     kbCursor.y = Math.max(0, Math.min(9, kbCursor.y + dy * (flipOn ? -1 : 1)));
     refresh();
+    announceCursor();
   }
 
   /* ── Agent 调度 ── */
@@ -1058,9 +1087,14 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var ev2 = parseEvalNum(m.evaluation);
       if (!isNaN(ev2)) evalHist[sd].push(ev2);
       thinkStat[sd].total += secs2; thinkStat[sd].moves++;
-      decisionLog[sd].push({ n: m.n, name: (m.piece ? XQ.Piece.CHARS[m.side][m.piece] : '?') + '-' + m.from + '→' + m.to,
-        summary: m.summary || (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)'), plan: m.plan || '', evaluation: m.evaluation || '',
-        confidence: (typeof m.confidence === 'number') ? m.confidence : null, candidates: m.candidates || [], reasoning: '', secs: secs2 });
+      // 第41轮: 续局重建的决策卡与实盘同口径 — 兑底旗标按记录里的原始事实判定 (记录只在模型给了 summary 时才写该字段,
+      // 故「无 summary 且无 confidence」即兑底手; 原实现无条件写 summary_none 占位 → 续局后兑底标记整体丢失)
+      var entry2 = { n: m.n, name: (m.piece ? pg(m.side, m.piece) : '?') + '-' + m.from + '→' + m.to,
+        summary: m.summary || '', plan: m.plan || '', evaluation: m.evaluation || '',
+        confidence: (typeof m.confidence === 'number') ? m.confidence : null, candidates: m.candidates || [], reasoning: '', secs: secs2 };
+      fbMark(entry2, !!m.summary, '');
+      if (!entry2.fallback && !entry2.summary) entry2.summary = (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)');
+      decisionLog[sd].push(entry2);
     });
     XQ.UI.capturedTray('red', capturedBy.red); XQ.UI.capturedTray('black', capturedBy.black);
     XQ.UI.evalSpark('red', evalHist.red); XQ.UI.evalSpark('black', evalHist.black);
@@ -1117,6 +1151,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     // v1.0.daily 语言切换联动回放层: 覆盖层打开时重刷图表标题与动态面板 (静态骨架由 data-i18n apply() 自动覆盖)
     document.addEventListener('xq:i18n', function () {
       /* v1.0.daily 主界面动态文案热切: 状态条/面板名/决策卡 (静态 data-i18n 已由 apply 刷新) */
+      /* 第41轮 i18n 漏挂 (浏览器实机抓出): view.aiThinking 是本次思考开始时按当时语言解析出的**字符串**
+         (随机AI 的名称含方别词), 切语言后 refresh() 只是把这个旧串重画一遍 → 状态条在整轮思考期间停在旧语言
+         (LLM 一手思考 30~60s, 肉眼可见)。此处按当前语言重新解析; LLM 的 label 是模型名 (语言中立), 不动。 */
+      if (view.aiThinking) {
+        var thH = agents[view.aiThinkingSide];
+        if (thH && thH.kind === 'random') view.aiThinking = XQ.I18N ? XQ.I18N.t('agent_random_name') : view.aiThinking;
+      }
       refresh();
       ['red', 'black'].forEach(function (sd) {
         XQ.UI.thinkPanel(sd, { name: XQ.I18N ? XQ.I18N.t(sd === 'red' ? 'status_side_red' : 'status_side_black') : (sd === 'red' ? '红方' : '黑方') });
@@ -1400,6 +1441,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       }
       /* v1.0.daily a11y 键盘走子: 方向键光标 / Enter·Space 选子走子 / Esc 取消 */
       var k = (ev.key || '').toLowerCase();
+      if (k === 'escape') {   // Esc 必须先于模态守卫求值 (关闭面板 + 清理棋盘光标是它的既有职责)
+        var so2 = document.getElementById('settings-overlay');
+        if (so2 && so2.classList.contains('show')) { closeAISettings(); if (kbCursor) { kbCursor = null; refresh(); } ev.preventDefault(); return; }   // v1.0.daily: Esc 关设置; 第23轮: 统一出口
+        if (kbCursor) { kbCursor = null; refresh(); ev.preventDefault(); return; }
+      }
+      /* 第41轮 a11y: 设置层是 aria-modal="true" 对话 (背景对读屏/键盘声明为惰性), 但键盘快捷键不走 Tab 序 —
+         面板开着时按 R/U/M/F 会在用户看不见的遮罩后面重开对局/悔棋/静音/全屏; 方向键/Enter 还会把棋盘光标
+         (连同高亮与落子动作) 操作到面板后方。此处把「面板开启」作为统一闸门挡在棋盘键盘交互与单键快捷键之前。 */
+      var soMod = document.getElementById('settings-overlay');
+      if (soMod && soMod.classList.contains('show')) return;
       if (k === 'arrowup' || k === 'arrowdown' || k === 'arrowleft' || k === 'arrowright') {
         kbMove(k === 'arrowleft' ? -1 : k === 'arrowright' ? 1 : 0, k === 'arrowup' ? -1 : k === 'arrowdown' ? 1 : 0);
         ev.preventDefault(); return;
@@ -1409,11 +1460,6 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         ev.preventDefault();
         if (!engine.isOver() && !aiBusy) { onCellClick(kbCursor.x, kbCursor.y); }
         return;
-      }
-      if (k === 'escape') {
-        var so2 = document.getElementById('settings-overlay');
-        if (so2 && so2.classList.contains('show')) { closeAISettings(); if (kbCursor) { kbCursor = null; refresh(); } ev.preventDefault(); return; }   // v1.0.daily: Esc 关设置; 第23轮: 统一出口
-        if (kbCursor) { kbCursor = null; refresh(); ev.preventDefault(); return; }
       }
       if (k === 'm') document.getElementById('snd-toggle').click();
       else if (k === 'u') undoLastMove();   // 第33轮: U 键悔棋
@@ -2166,7 +2212,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         if (p) {
           var pe = document.createElement('div');
           pe.className = 'piece ' + p.color;
-          pe.textContent = XQ.Piece.CHARS[p.color][p.type];
+          pe.textContent = pg(p.color, p.type);   // 第41轮: 回放盘面此前恒用汉字 — Letters 偏好下与主盘面不一致
           var isLanding = last && x === last.to.x && y === last.to.y;
           if (isLanding && !animate) pe.classList.add('just-placed');   // 手动步进的落地 pop; 自动播放走真滑动 (第25轮重制, 与主棋盘同款关键帧)
           c.appendChild(pe);
@@ -2187,7 +2233,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             if (last.captured) {
               var gh = document.createElement('div');
               gh.className = 'piece ghost-out ' + last.captured.color;
-              gh.textContent = XQ.Piece.CHARS[last.captured.color][last.captured.type];
+              gh.textContent = pg(last.captured.color, last.captured.type);   // 第41轮: 回放吃子幽灵同上
               c.insertBefore(gh, pe);
             }
           }
@@ -2231,8 +2277,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var opp = e.side === 'red' ? 'black' : 'red';
       var sideTag = e.side === 'red' ? T('rp_side_red_full') : T('rp_side_black_full');
       var model = e.side === 'red' ? rpSession.summary.redModel : rpSession.summary.blackModel;
-      var pc = (XQ.Piece.CHARS[e.side] && XQ.Piece.CHARS[e.side][e.piece]) || e.piece;
-      var capTxt = e.captured ? TA('rp_capture', { p: (XQ.Piece.CHARS[opp] && XQ.Piece.CHARS[opp][e.captured]) || e.captured }) : '';
+      var pc = (XQ.Piece.CHARS[e.side] && XQ.Piece.CHARS[e.side][e.piece]) ? pg(e.side, e.piece) : e.piece;   // 第41轮: 信息面板子名随显示偏好
+      var capTxt = e.captured ? TA('rp_capture', { p: (XQ.Piece.CHARS[opp] && XQ.Piece.CHARS[opp][e.captured]) ? pg(opp, e.captured) : e.captured }) : '';
       html += '<div style="font-size:15px"><b>' + TA('rp_move_of', { n: st.idx, t: st.total }) + '</b> · ' + sideTag
         + (model ? ' <span style="color:#c4a56e;font-size:11px">[' + esc2(model) + ']</span>' : '') + '</div>';
       html += '<div style="font-size:18px;margin:4px 0"><b style="color:#f0d9a0">' + esc2(pc) + '</b> <span style="color:#e8d5ae">' + esc2(e.from) + ' → ' + esc2(e.to) + '</span><span style="color:#e67e22">' + esc2(capTxt) + '</span></div>';
@@ -2280,7 +2326,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (st.idx < st.total && !st.over) {
       var nxt = rpSession.record.moves[st.idx];
       var nTag = nxt.side === 'red' ? '🔴' : '⚫';
-      var nPc = (XQ.Piece.CHARS[nxt.side] && XQ.Piece.CHARS[nxt.side][nxt.piece]) || nxt.piece;
+      var nPc = (XQ.Piece.CHARS[nxt.side] && XQ.Piece.CHARS[nxt.side][nxt.piece]) ? pg(nxt.side, nxt.piece) : nxt.piece;   // 第41轮: 下着预览同上
       html += '<div style="font-size:12px;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(122,90,42,.4)">↪ <b style="color:#e0a030">' + T('rp_next_move') + '</b> ' + nTag + ' <b style="color:#f0d9a0">' + esc2(nPc) + '</b> <span style="color:#e8d5ae">' + esc2(nxt.from) + ' → ' + esc2(nxt.to) + '</span>' + (nxt.summary ? ' <span style="color:#c4a56e">· ' + esc2(nxt.summary) + '</span>' : '') + '</div>';
     }
     rpEl.info.innerHTML = html;
