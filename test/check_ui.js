@@ -260,3 +260,86 @@ if (!/fbMark\(entry2, !!m\.summary/.test(appCode)) a11yIssues.push('续局重建
 if (!/thH\.kind === 'random'\) view\.aiThinking =/.test(appCode)) a11yIssues.push('语言热切未重新解析思考中的随机AI 名称 (状态条整轮停在旧语言)');
 console.log('a11y/PWA 源串守卫:', a11yIssues.length ? a11yIssues.join(' | ') : 'OK (sr-alert 播报 + label for= x' + forCount + ' + 走法列表键盘 + 拖拽中止 + 热路径 + 终局焦点 + SW 壳/兜底/写缓存兜底 + 光标播报 + 设置层模态闸门)');
 if (a11yIssues.length) process.exit(1);
+
+// 16) 第42轮 接线/写入点 源串+结构守卫 — 本轮缺陷共同的形态是「代码本身看着对, 断链在别处」:
+//     写出点根本不存在 (dataset.flip)、查询落在错误子树 (终局导出按钮)、清理漏了一处 (光标播报区)、
+//     隐藏态语义不全 (opacity:0 仍可聚焦)、维护性拷贝 (stat 文案)、缺闸门 (回放态被 AI 接管)。
+//     逐条钉住「谁写 / 谁读 / 谁清理 / 谁兜底」:
+//     (a) 静态 id 只许文档层取用 — 子树查询静态 id 是「查询落空」类死链的通用形态;
+//     (b) dataset.flip 写入点; (c) #btn-row 隐藏态 visibility; (d) 时钟秒级补位; (e) Enter/Space 让位;
+//     (f) 光标清理单出口; (g) 齿轮 aria 展开态; (h) 回放进度/过滤读屏名称声明式; (i) 帮助层可再按关闭;
+//     (j) 终局直达回放的焦点管理; (k) 决策卡按钮标签本地化; (l) stat 文案单出口; (m) 回放态 AI 闸门。
+const wireIssues = [];
+// (a) 通用: querySelector('#静态id') 一律不许 — 静态元素必须从 document 取, 子树查询极易落空 (死链)
+const staticIds = new Set();
+let sid; const sidRe = /id="([\w-]+)"/g;
+while ((sid = sidRe.exec(html)) !== null) staticIds.add(sid[1]);
+['ui/renderer.js', 'ui/app.js', 'ai/llm_agent.js'].forEach(function (f) {
+  const src = codeOnly(fs.readFileSync(__dirname + '/../' + f, 'utf8'));   // 剥注释: 修复说明里会引用旧写法原文 (第41轮教训), 否则守卫被自己的文档误触发
+  let m; const selRe = /querySelector(?:All)?\(\s*'(#[\w-]+)'/g;
+  while ((m = selRe.exec(src)) !== null) {
+    const id = m[1].slice(1);
+    if (id.slice(-1) === '-') continue;              // 字符串拼接前缀 ('#think-' + side + …) → 运行时元素
+    if (!staticIds.has(id)) continue;                // 运行时创建的动态 id (rp-*/elo-s-* 等)
+    wireIssues.push(f + ' 用子树查询取静态 id #' + id + ' (静态元素必须走 getElementById, 子树查询易落空)');
+  }
+});
+// (a2) 终局卡「导出本局」的宿主是 .eo-card (与 #eo-stats 同级) — 结构性前提 + 绑定形态双向钉住
+const eoStatsOpen = html.indexOf('id="eo-stats"');
+const eoStatsSlice = eoStatsOpen < 0 ? '' : html.slice(eoStatsOpen, html.indexOf('</div>', html.indexOf('>', eoStatsOpen)));
+if (/id="eo-export"/.test(eoStatsSlice)) wireIssues.push('守卫前提失效: #eo-export 已变成 #eo-stats 的子节点');
+if (!/getElementById\('eo-export'\)/.test(appCode)) wireIssues.push('终局「导出本局」未从文档层绑定 (#eo-export 不在 #eo-stats 子树内 → 恒 null 的死按钮)');
+// (b) dataset.flip: 两个消费方 (候选悬停高亮 / 回放盘面) 必须有写入者
+if (!/document\.documentElement\.dataset\.flip = /.test(appCode)) wireIssues.push('dataset.flip 无写入点 (回放盘面与候选格高亮的翻转感知恒为 false)');
+const flipReaders = (appCode + renCode).match(/dataset\.flip === '1'/g) || [];
+if (flipReaders.length < 2) wireIssues.push('dataset.flip 消费点少于 2 处 (应覆盖候选悬停与回放盘面), 实为 ' + flipReaders.length);
+// (c) #btn-row 隐藏态: 仅 opacity:0 的按钮仍在 Tab 序内且可被 Enter 激活
+const btnRowBase = (html.match(/#btn-row\{[^}]*\}/) || [''])[0];
+const btnRowShow = (html.match(/#btn-row\.visible\{[^}]*\}/) || [''])[0];
+if (!/visibility:hidden/.test(btnRowBase)) wireIssues.push('#btn-row 隐藏态缺 visibility:hidden (不可见按钮仍可 Tab 聚焦并被 Enter 激活)');
+if (!/visibility:visible/.test(btnRowShow)) wireIssues.push('#btn-row.visible 未恢复 visibility');
+// (d) 状态条时钟: render() 之外的秒级补位 (updateClock 曾是零调用点纯导出 → 无 AI 思考期间时钟冻结)
+if (!/setInterval\(function \(\) \{[\s\S]{0,220}?updateClock\(engine, view\)/.test(appCode)) wireIssues.push('状态条时钟缺秒级补位调用 (updateClock 零调用点 → 无 AI 思考时时钟与限着计数冻结)');
+if (!/if \(view\.aiThinking \|\| engine\.isOver\(\)\) return;/.test(appCode)) wireIssues.push('时钟补位未与 AI 思考期互斥 (会与思考 ticker 每秒互写)');
+// (e) 全局 Enter/Space: 必须放行「该键已被消费」与「目标自身可交互」的情形
+if (!/if \(ev\.defaultPrevented \|\| selfActing\) return;/.test(appCode)) wireIssues.push('全局 Enter/Space 未放行已消费/自身可交互的按键 (焦点在走法条目或折叠头上按 Enter = 双动作)');
+if (!/var selfActing = /.test(appCode)) wireIssues.push('缺 selfActing 交互元素判定');
+if (!/ev\.preventDefault\(\);\s*\n\s*ev\.stopPropagation\(\);/.test(renCode)) wireIssues.push('走法条目 keydown 未 stopPropagation (Enter 会再冒泡到全局键盘走子分支)');
+// (f) 光标清理单出口 (并清播报区, 否则回到同一格无法再次播报)
+const ckcBody = (appCode.match(/function clearKbCursor\(\) \{[\s\S]*?\n  \}/) || [''])[0];
+if (!ckcBody) wireIssues.push('缺 clearKbCursor 单出口');
+const kbAll = (appCode.match(/kbCursor = null/g) || []).length;
+const kbInCkc = (ckcBody.match(/kbCursor = null/g) || []).length;
+const kbDecls = (appCode.match(/var kbCursor = null/g) || []).length;
+if (kbAll - kbInCkc - kbDecls !== 0) wireIssues.push('仍有 ' + (kbAll - kbInCkc - kbDecls) + ' 处绕过 clearKbCursor 直接置空光标');
+if ((appCode.match(/clearKbCursor\(\)/g) || []).length < 5) wireIssues.push('clearKbCursor 调用点不足 (清光标路径应全部收敛)');
+if (!/getElementById\('sr-cursor'\);\s*\n\s*if \(el\) el\.textContent = '';/.test(ckcBody)) wireIssues.push('clearKbCursor 未清 #sr-cursor 播报区 (内容未变的重复写入不再被读屏播报)');
+// (g) 齿轮按钮: 弹层类按钮的展开态
+if (!/id="gear-toggle"[^>]*aria-haspopup="dialog"/.test(html)) wireIssues.push('齿轮按钮缺 aria-haspopup="dialog"');
+if (!/id="gear-toggle"[^>]*aria-expanded="false"/.test(html)) wireIssues.push('齿轮按钮缺 aria-expanded 初值');
+if (!/gb\.setAttribute\('aria-expanded', 'true'\)/.test(appCode)) wireIssues.push('设置层打开未置 aria-expanded=true');
+if (!/g\.setAttribute\('aria-expanded', 'false'\)/.test(appCode)) wireIssues.push('设置层关闭未置 aria-expanded=false');
+// (h) 回放层读屏名称声明式挂载 (语言热切由 apply() 自愈)
+if (!/id="rp-range"[^']*data-i18n-aria="rp_jump_label"/.test(appCode)) wireIssues.push('回放进度条读屏名称未挂 data-i18n-aria (切语言后停在旧语言)');
+if (/rpEl\.range\.setAttribute\('aria-label'/.test(appCode)) wireIssues.push('回放进度条仍一次性硬设 aria-label (语言热切后过期)');
+if (!/id="rp-moves-filter"[^']*aria-label="/.test(appCode)) wireIssues.push('回放走法过滤框只有 placeholder 无读屏名称');
+// (i) 帮助层可再次按键关闭 (与 rp_hk_help 文案承诺一致)
+if (!/if \(ex\) \{ ex\.remove\(\); return; \}/.test(appCode)) wireIssues.push('回放帮助层仍不可再次按下关闭 (与帮助文案承诺不符)');
+// (j) 终局卡直达回放的焦点管理
+const rpWatchBody = (appCode.match(/function rpWatchRecord\(\) \{[\s\S]*?\n  \}/) || [''])[0];
+if (!/rpOpener = document\.activeElement/.test(rpWatchBody)) wireIssues.push('终局直达回放未记录焦点宿主 (关闭后焦点无处可还)');
+if (!/rpEl\.pick\.focus/.test(rpWatchBody)) wireIssues.push('终局直达回放未把焦点移入层 (焦点留在被遮蔽的终局卡上)');
+// (k) 决策卡 💭 按钮标签本地化
+if (!/T\('d_reason_toggle'\)/.test(renCode)) wireIssues.push('决策卡 💭 按钮标签未走字典 (原硬编码英文 reasoning)');
+if (/aria-label="reasoning"/.test(renCode)) wireIssues.push('决策卡 💭 按钮仍有硬编码英文标签');
+// (l) 面板 stat 文案单出口 (撤销路径复用同一实现)
+if (!/function panelStatText\(side, secs\)/.test(appCode)) wireIssues.push('面板 stat 文案缺单出口');
+if ((appCode.match(/panelStatText\(/g) || []).length < 3) wireIssues.push('面板 stat 单出口复用点不足 (定义 + 落子 + 撤销回滚)');
+if (/var statTxt = XQ\.I18N/.test(appCode)) wireIssues.push('afterMove 仍内联一份 stat 文案 (撤销路径无法复用, 两处会漂移)');
+// (m) 回放态 (currentRecord=null) 不得让 AI 接管
+const schedBody = (appCode.match(/function scheduleAgent\(\) \{[\s\S]*?\n  \}/) || [''])[0];
+if (!/if \(!currentRecord\) return;/.test(schedBody)) wireIssues.push('scheduleAgent 缺 currentRecord 闸门 (载入棋谱后 AI 会继续走导入的残局且不入档)');
+// (n) 回放层首绘兜底: 记忆进度为 0 时控制器不发状态回调 → 必须显式补一次首绘, 否则回放以空白盘面开场
+if (!/rpOnState\(rpSession\.state\(\)\);/.test(appCode)) wireIssues.push('回放层缺首绘兜底 (记忆进度=0 时 gotoPly(0) 不触发状态回调 → 盘面/信息面板全空)');
+console.log('接线/写入点守卫:', wireIssues.length ? wireIssues.join(' | ') : 'OK (静态 id 文档层取用 + 导出按钮绑定 + dataset.flip 写入 + btn-row visibility + 时钟补位 + Enter/Space 让位 + 光标清理单出口 + 齿轮 aria + 回放 aria 声明式 + 帮助层开关 + 直达回放焦点 + 卡片标签本地化 + stat 单出口 + 回放态 AI 闸门)');
+if (wireIssues.length) process.exit(1);

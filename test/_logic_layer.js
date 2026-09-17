@@ -419,6 +419,8 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
 })().then(function () {
   return l13OfflineShell();   // 第41轮: 壳清单完整性 + 写缓存失败兜底
 }).then(function () {
+  l14Round42();               // 第42轮: 决策卡无障碍标签本地化
+}).then(function () {
   console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
   process.exit(fails.length ? 1 : 0);
   }, function (e) {
@@ -479,5 +481,32 @@ function l13OfflineShell() {
     process.removeListener('unhandledRejection', onRej);
     ok(rej.length === 0, 'L13 写缓存 rejected Promise 已被兜底 (无未处理拒绝), 实测 ' + (rej.length ? rej.join(';') : 0));
   });
+}
+
+/* ═══ L14 第42轮: 决策卡无障碍标签本地化 ═══
+   缺陷形态: 💭 折叠按钮的 aria-label 曾是硬编码英文 'reasoning' — 中文界面下读屏把它读成英文词,
+   而同一张卡片的其它文案早已全部走字典 (第27/40/41 三轮 i18n 漏挂整改都没覆盖「a11y 标签」这个出口,
+   因为 I9/I10 只扫 title/placeholder/aria-label 的静态模板串与 CJK 字面量, 纯英文硬编码不触发任何一跳)。
+   断言走真实字典 + 真实 decisionCards 输出 (非源串匹配): 双语齐备且译文不同 → 标签随语言 → 无推理不渲染按钮。 */
+function l14Round42() {
+  var I14 = sandbox.XQ.I18N;
+  if (!I14 || !sandbox.XQ.UI || !sandbox.XQ.UI.decisionCards) {
+    ok(false, 'L14 前置缺失: i18n/renderer 未在 DOM 桩下就绪');
+    return;
+  }
+  var zh14 = I14.STRINGS.zh.d_reason_toggle, en14 = I14.STRINGS.en.d_reason_toggle;
+  ok(!!zh14 && !!en14, 'L14 d_reason_toggle 双语文案齐备 (' + zh14 + ' / ' + en14 + ')');
+  ok(!!zh14 && !!en14 && zh14 !== en14, 'L14 d_reason_toggle 双语译文不同 (排除「只加一侧」与「两侧同值未翻译」)');
+  I14.setLang('zh', false);
+  var c14zh = sandbox.XQ.UI.decisionCards([{ n: 7, name: 'c-h3>e3', reasoning: 'r', secs: 1 }], 1).join('');
+  ok(c14zh.indexOf('aria-label="' + zh14 + '"') >= 0, 'L14 决策卡 💭 标签在 zh 下走字典 (' + zh14 + ')');
+  ok(c14zh.indexOf('aria-label="reasoning"') < 0, 'L14 决策卡 💭 标签在 zh 下不再出现硬编码英文词');
+  ok(c14zh.indexOf('aria-expanded="false"') >= 0, 'L14 决策卡 💭 按钮保留初始折叠态语义 (aria-expanded)');
+  I14.setLang('en', false);
+  var c14en = sandbox.XQ.UI.decisionCards([{ n: 7, name: 'c-h3>e3', reasoning: 'r', secs: 1 }], 1).join('');
+  ok(c14en.indexOf('aria-label="' + en14 + '"') >= 0, 'L14 决策卡 💭 标签在 en 下走英文 (' + en14 + ')');
+  var c14none = sandbox.XQ.UI.decisionCards([{ n: 8, name: 'x', secs: 1 }], 1).join('');
+  ok(c14none.indexOf('d-toggle') < 0, 'L14 无推理的卡片不渲染 💭 按钮 (标签不会凭空出现)');
+  I14.setLang('zh', false);
 }
 

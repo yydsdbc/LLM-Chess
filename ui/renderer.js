@@ -479,6 +479,7 @@
       var ply = parseInt(e.dataset.ply, 10);
       if (isNaN(ply)) return;
       ev.preventDefault();
+      ev.stopPropagation();   // 第42轮: 条目自身已消费 Enter/Space — 不再冒泡到 app 的全局键盘走子分支 (否则焦点在条目上按 Enter 会「跳局面 + 棋盘走子」双动作)
       document.dispatchEvent(new CustomEvent('xq:replay', { detail: { ply: ply } }));
     });
   });
@@ -617,7 +618,7 @@
         + '<div class="d-head"><span class="d-move">#' + e.n + ' ' + esc(e.name) + '</span>'
         + (e.voterName ? '<span class="d-voter" title="' + esc(e.voterName) + '">✦' + esc(String(e.voterName).split(':').pop()) + '</span>' : '')   // 第32轮: 胜出选民
         + (e.evaluation ? '<span class="d-eval">' + esc(e.evaluation) + '</span>' : '')
-        + (hasReason ? '<button class="d-toggle" data-ply="' + e.n + '" aria-label="reasoning" aria-expanded="false">💭</button>' : '')
+        + (hasReason ? '<button class="d-toggle" data-ply="' + e.n + '" aria-label="' + esc(T('d_reason_toggle')) + '" aria-expanded="false">💭</button>' : '')   // 第42轮 i18n/a11y: 原 aria-label 硬编码英文 'reasoning' — 中文界面读屏播报英文词
         + '</div>'
         + (e.plan ? '<div class="d-plan">📌 ' + esc(e.plan) + '</div>' : '')
         + (sumTxt ? '<div class="d-sum">' + esc(sumTxt) + '</div>' : '')

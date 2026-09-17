@@ -243,6 +243,21 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     return m ? parseFloat(m[1]) : NaN;
   }
   function esc2(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  /* 第42轮: 面板 stat 文案单出口 (总耗时·手数·token 用量) — afterMove 与 undoLastMove 共用。
+     原实现内联在 afterMove 里, 撤销路径无法复用, 于是撤销后 stat 一直显示撤销前的手数/累计耗时 (虚高)。 */
+  function panelStatText(side, secs) {
+    var Tm3 = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
+    var tok = '';
+    var h = agents[side];
+    if (h && h.agent && h.agent.usage) {
+      var u = h.agent.usage();
+      if (u && u.total) tok = (u.total > 999 ? (u.total / 1000).toFixed(1) : u.total) + 'tok';
+    }
+    var perMove = secs ? Tm3('think_per_move', { s: secs }) : '?';
+    return XQ.I18N
+      ? Tm3('think_stat_tpl', { t: thinkStat[side].total, m: thinkStat[side].moves, p: perMove }) + (tok ? '·' + tok : '')
+      : thinkStat[side].total + 's·' + thinkStat[side].moves + '手·' + perMove + (tok ? '·' + tok : '');
+  }
   function decisionPanelOpts(side) {
     var log = decisionLog[side] || [];
     if (log.length && XQ.UI.decisionCards) {
@@ -309,20 +324,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var newest33 = document.querySelector('#think-' + side + '-body .dcard:last-of-type:not(.d-thinking)');   // 第33轮: 仅最新决策卡入场
     if (newest33) newest33.classList.add('d-new');
     // 面板 stat: 总耗时·手数·token 用量 (不覆盖卡片模式, 只更新 stat)
-    var tok = '';
-    var h = agents[side];
-    if (h && h.agent && h.agent.usage) {
-      var u = h.agent.usage();
-      if (u && u.total) tok = (u.total > 999 ? (u.total / 1000).toFixed(1) + 'k' : u.total) + 'tok';
-    }
     thinkStat[side].lastSecs = secs;   // v1.5.5: 最近一手延迟 (面板 stat 实时显示)
     // 第40轮 i18n: 原 statTxt 直接拼裸中文 ('手' / 's/手') → EN 界面面板尾部显示 "11s·11手·1s/手"
-    var Tm3 = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
-    var perMove = secs ? Tm3('think_per_move', { s: secs }) : '?';
-    var statTxt = XQ.I18N
-      ? Tm3('think_stat_tpl', { t: thinkStat[side].total, m: thinkStat[side].moves, p: perMove }) + (tok ? '·' + tok : '')
-      : thinkStat[side].total + 's·' + thinkStat[side].moves + '手·' + perMove + (tok ? '·' + tok : '');
-    XQ.UI.thinkPanel(side, { stat: statTxt });
+    XQ.UI.thinkPanel(side, { stat: panelStatText(side, secs) });   // 第42轮: 文案走单出口 (撤销路径复用同一实现)
     playDrop(!!m.captured);
     // v1.5 观战动画: 滑动入位 + 吃子 ghost; 将军提示音 + 状态条已有文字
     view.pendingAnim = m;
@@ -417,7 +421,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           eo.insertAdjacentHTML('beforeend', '<div style="margin-top:8px"><button class="btn" id="eo-replay">' + Te('eo_replay_btn') + '</button></div>');   // 第26轮 i18n
           var eob = eo.querySelector('#eo-replay');
           if (eob) eob.onclick = function () { rpWatchRecord(); };
-          var eox = eo.querySelector('#eo-export');
+          /* 第42轮: 终局「💾 导出本局」的宿主是终局卡 (.eo-card), 与 #eo-stats 是兄弟节点; 原实现从 eo (=#eo-stats)
+             子树里 querySelector('#eo-export') 恒为 null → 该按钮自第33轮加入起从未生效 (点了没有任何反应)。 */
+          var eox = document.getElementById('eo-export');
           if (eox) eox.onclick = function () { if (currentRecord) XQ.Record.downloadFile(currentRecord); };   // 第33轮: 终局一键导出
         }
       }
@@ -445,6 +451,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     try { p = engine.pieceAt(kbCursor.x, kbCursor.y); } catch (eP) {}
     var sq = XQ.Move.sqName({ x: kbCursor.x, y: kbCursor.y });
     el.textContent = p ? Ta('sr_cursor_piece', { sq: sq, p: pg(p.color, p.type) }) : Ta('sr_cursor_empty', { sq: sq });
+  }
+  /* 第42轮 a11y: 光标清理单出口 — 原实现有 5 处各自 `kbCursor = null`, 都不清 #sr-cursor 的文本。
+     播报区留着上一格的文案, 读屏对「内容没有变化的重复写入」不会再次播报 → 清掉光标后回到同一格
+     (默认落点 f5 再按一次方向键仍是 f5) 就再也听不到坐标反馈。与第40轮「#sr-alert 收起时必须清空,
+     否则同一错误无法再次播报」同一条教训, 本轮把它补到光标播报区。 */
+  function clearKbCursor() {
+    kbCursor = null;
+    var el = document.getElementById('sr-cursor');
+    if (el) el.textContent = '';
   }
   function kbMove(dx, dy) {
     if (!kbCursor) { kbCursor = { x: 4, y: 5 }; }   // 缺省落在棋盘中央
@@ -630,6 +645,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   }
 
   function scheduleAgent() {
+    /* 第42轮: 回放态 (载入棋谱后 currentRecord 置空 = 明确「不记新档」) 不得让 AI 接管。
+       载入棋谱走的是 restartGame() → 其中排了 100ms 后的本函数, 而导入流程紧接着把 currentRecord 置空;
+       原实现没有这道闸门 → AI 会在刚导入的残局上继续走子, 而这些手既不进棋谱 (currentRecord=null) 也不进
+       终局结算, 界面状态自相矛盾 (像是「能续弈但存不下来」), 也与「导入棋谱JSON并重放」的按钮语义相反。 */
+    if (!currentRecord) return;
     if (engine.isOver() || aiBusy) return;
     var side = engine.turn();
     var gid = gameId;   // v1.0.daily 世代捕获: 重开/新局后迟到的调度作废
@@ -889,6 +909,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   function closeAISettings() {   // 第23轮 a11y: 统一关闭出口 (原 4 处各自 remove('show')); 关闭后焦点还给齿轮, Tab 不落回隐藏层
     document.getElementById('settings-overlay').classList.remove('show');
     var g = document.getElementById('gear-toggle');
+    if (g) g.setAttribute('aria-expanded', 'false');   // 第42轮 a11y: 与 openAISettings 对称 — 读屏可感知开关态
     try { g.focus({ preventScroll: true }); } catch (eF) { g.focus(); }
   }
 
@@ -909,6 +930,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         : (XQ.I18N ? XQ.I18N.t('server_warn') : '') + '<b>http://' + location.host + '</b>';
     }
     document.getElementById('settings-overlay').classList.add('show');
+    var gb = document.getElementById('gear-toggle');   // 第42轮 a11y: 展开态与 aria-haspopup="dialog" 配套
+    if (gb) gb.setAttribute('aria-expanded', 'true');
     // 第23轮 a11y: focus 延到下一渲染帧 — visibility 过渡起帧前元素仍按 hidden 计算, 同步/强制 reflow 的 focus 都被静默忽略 (实测定位)
     var fEl = document.getElementById('ai-red-enabled');
     var doFocus = function () { if (fEl) { try { fEl.focus({ preventScroll: true }); } catch (eF) { fEl.focus(); } } };
@@ -921,7 +944,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     gameId++;   // v1.0.daily 世代翻转: 任何新对局作废旧异步回调
     try { if (gameAbort) gameAbort.abort(); } catch (eAb) {}   // 第38轮: 中止上一局在飞请求
     gameAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    kbCursor = null;
+    clearKbCursor();   // 第42轮: 走单出口 (连播报区一起清, 否则新局回到同一格听不到反馈)
     syncArchive();
     var s = readSettings();
     // 新对局: 重置 LLM 对话上下文
@@ -975,6 +998,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   try { flipOn = localStorage.getItem('xq_flip') === '1'; } catch (eF0) {}
   function applyFlip() {   // 翻转: 渲染变量 + 行列标反转 (按钮/持久化调用)
     view.flip = flipOn;
+    /* 第42轮: dataset.flip 是两个读取点共同的事实源 (renderer 候选悬停高亮 / rpPaintBoard 回放盘面),
+       但全仓此前没有任何写入点 → 两处翻转感知恒为 false, 回放盘面与候选格高亮从不跟随主盘面翻转。此处补唯一写入点。 */
+    try { document.documentElement.dataset.flip = flipOn ? '1' : '0'; } catch (eF2) {}
     try { localStorage.setItem('xq_flip', flipOn ? '1' : '0'); } catch (eF1) {}
     var cols = document.querySelectorAll('#col-labels span');
     var rowsL = document.querySelectorAll('#row-labels span');
@@ -982,6 +1008,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     for (var ci = 0; ci < 9; ci++) if (cols[ci]) cols[ci].textContent = flipOn ? CL[8 - ci] : CL[ci];
     for (var ri = 0; ri < 10; ri++) if (rowsL[ri]) rowsL[ri].textContent = String(flipOn ? ri + 1 : 10 - ri);
     if (typeof refresh === 'function') refresh();
+    // 第42轮: 回放层开着时立即按新视角重画 (否则要等下一次步进才翻转, 与主盘面短暂不一致)
+    if (rpEl && rpEl.ov.style.display === 'block' && rpSession) { try { rpPaintBoard(rpSession.state(), false); } catch (eFB) {} }
   }
 
   /* 第30轮 悔棋: 人机局撤「人类+AI」一对; AI-vs-AI 撤 1 手并让对局继续。
@@ -995,6 +1023,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var steps = 1;
     var lastSide = engine.lastMove() && engine.lastMove().piece.color;
     if (lastSide && !agents[lastSide] && agents[engine.turn()]) steps = 2;   // 上手是人类且轮到 AI → 撤一对
+    var touched = {};
     while (steps-- > 0 && engine.ply() > 0) {
       var lm = engine.lastMove();
       if (!lm) break;
@@ -1003,15 +1032,29 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (currentRecord && currentRecord.moves.length) currentRecord.moves.pop();
       var le = document.querySelector('#move-log .log-entry:last-child');
       if (le) le.parentNode.removeChild(le);
-      if (decisionLog[side] && decisionLog[side].length) decisionLog[side].pop();
+      /* 第42轮: 撤销必须把面板状态一并回滚 — 原实现只弹 decisionLog 却不重绘思考面板
+         (撤销后卡片仍显示刚被撤掉的那一手), thinkStat 的累计耗时/手数也一直虚高。 */
+      if (decisionLog[side] && decisionLog[side].length) {
+        var popped = decisionLog[side].pop();
+        if (popped && popped.secs) thinkStat[side].total = Math.max(0, thinkStat[side].total - popped.secs);
+        if (thinkStat[side].moves > 0) thinkStat[side].moves--;
+        touched[side] = true;
+      }
       if (lm.captured && capturedBy[side].length) {
         capturedBy[side].pop();
         XQ.UI.capturedTray(side, capturedBy[side]);
       }
       if (evalHist[side].length) { evalHist[side].pop(); XQ.UI.evalSpark(side, evalHist[side]); }
     }
+    // 第42轮: 受影响侧的面板按回滚后的日志重绘 (卡片 + stat 同一口径)
+    Object.keys(touched).forEach(function (sd) {
+      var lg = decisionLog[sd] || [];
+      var opts = decisionPanelOpts(sd);
+      opts.stat = panelStatText(sd, lg.length ? lg[lg.length - 1].secs : 0);
+      XQ.UI.thinkPanel(sd, opts);
+    });
     replayStack = [];
-    selected = null; kbCursor = null;
+    selected = null; clearKbCursor();
     ['red', 'black'].forEach(function (sd) {
       var h = agents[sd];
       if (h && h.agent && typeof h.agent.reset === 'function') h.agent.reset();
@@ -1098,7 +1141,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
     XQ.UI.capturedTray('red', capturedBy.red); XQ.UI.capturedTray('black', capturedBy.black);
     XQ.UI.evalSpark('red', evalHist.red); XQ.UI.evalSpark('black', evalHist.black);
-    selected = null; kbCursor = null;
+    selected = null; clearKbCursor();
     syncArchive(); refresh();
     setTimeout(scheduleAgent, 200);
   }
@@ -1133,6 +1176,14 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       try { navigator.serviceWorker.register('sw.js').catch(function (eSW) { if (window.console && console.warn) console.warn('[sw] registration failed:', eSW && eSW.message); }); } catch (eSW) {}
     }
     initSoundToggle();
+    /* 第42轮: 状态条时钟的补位 tick — renderStatus 只在 render() 时写 #status-info, 而 renderer 的 updateClock
+       自第41轮收敛成单出口后始终没有调用点 (纯导出) → 没有 AI 在思考时 (人机局等人类落子 / 双方人类的观战局)
+       时钟整段冻结在上一手的时刻, 限着计数同样不刷新。此处按秒补位; AI 思考期间该元素由 bannerThinking 的
+       ticker 独占 (避免两处每秒互写打架)。 */
+    setInterval(function () {
+      if (view.aiThinking || engine.isOver()) return;
+      try { XQ.UI.updateClock(engine, view); } catch (eUC) {}
+    }, 1000);
     // v3.9c 语言切换 (ui-lang 下拉: zh/en, localStorage xq_lang 持久化, 切换即刷新全部 data-i18n)
     var langSel = document.getElementById('ui-lang');
     if (langSel && XQ.I18N) {
@@ -1370,7 +1421,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (!so3 || !so3.classList.contains('show')) return;
       if (ev.key === 'Escape') {
         closeAISettings();
-        if (kbCursor) { kbCursor = null; refresh(); }
+        if (kbCursor) { clearKbCursor(); refresh(); }
         return;
       }
       // 第24轮 a11y: aria-modal=true 的配套 Tab 焦点陷阱 — 焦点在层内循环 (原 Tab 可逃出面板落到被遮住的棋盘)
@@ -1443,8 +1494,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var k = (ev.key || '').toLowerCase();
       if (k === 'escape') {   // Esc 必须先于模态守卫求值 (关闭面板 + 清理棋盘光标是它的既有职责)
         var so2 = document.getElementById('settings-overlay');
-        if (so2 && so2.classList.contains('show')) { closeAISettings(); if (kbCursor) { kbCursor = null; refresh(); } ev.preventDefault(); return; }   // v1.0.daily: Esc 关设置; 第23轮: 统一出口
-        if (kbCursor) { kbCursor = null; refresh(); ev.preventDefault(); return; }
+        if (so2 && so2.classList.contains('show')) { closeAISettings(); if (kbCursor) { clearKbCursor(); refresh(); } ev.preventDefault(); return; }   // v1.0.daily: Esc 关设置; 第23轮: 统一出口
+        if (kbCursor) { clearKbCursor(); refresh(); ev.preventDefault(); return; }
       }
       /* 第41轮 a11y: 设置层是 aria-modal="true" 对话 (背景对读屏/键盘声明为惰性), 但键盘快捷键不走 Tab 序 —
          面板开着时按 R/U/M/F 会在用户看不见的遮罩后面重开对局/悔棋/静音/全屏; 方向键/Enter 还会把棋盘光标
@@ -1457,6 +1508,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       }
       if (k === 'enter' || k === ' ') {
         if (!kbCursor) return;   // v1.0.daily 复审修复: 无光标时放行原生行为 (Tab 聚焦按钮的 Enter/Space 激活不再被吞)
+        /* 第42轮: 「无光标才放行」不够 — 光标存在时焦点若落在某个自身处理 Enter/Space 的控件上, 这条分支会再叠加
+           一次棋盘动作: 焦点在走法条目上按 Enter = 跳局面 + 顺手选/走一子; 面板折叠头 (role=button) 同理。
+           凡「该键已被消费」(defaultPrevented) 或「目标自身就是可交互控件」一律放行, 由控件自己的语义处理。 */
+        var tEl = ev.target;
+        var selfActing = !!(tEl && tEl.tagName && /^(BUTTON|A|INPUT|TEXTAREA|SELECT)$/.test(tEl.tagName))
+          || !!(tEl && tEl.getAttribute && tEl.getAttribute('role') === 'button');
+        if (ev.defaultPrevented || selfActing) return;
         ev.preventDefault();
         if (!engine.isOver() && !aiBusy) { onCellClick(kbCursor.x, kbCursor.y); }
         return;
@@ -1531,12 +1589,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '      <span class="rp-eb-val" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#f0d9a0;font-size:11px;font-weight:bold;text-shadow:0 1px 2px rgba(0,0,0,.8);min-width:42px;text-align:center" data-i18n="rp_even">均势</span>'
       + '    </div>'
       + '    <div id="rp-info" aria-live="polite" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:10px 12px;color:#f0e0c0;font-size:13px;line-height:1.7;min-height:160px"></div>'
-      + '    <input id="rp-moves-filter" data-i18n="rp_filter_placeholder" placeholder="🔍 过滤走法 (summary / 坐标)">'
+      + '    <input id="rp-moves-filter" data-i18n="rp_filter_placeholder" data-i18n-aria="rp_filter_placeholder" aria-label="🔍 过滤走法 (summary / 坐标)" placeholder="🔍 过滤走法 (summary / 坐标)">'
       + '    <ol id="rp-moves" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:6px 8px;margin:0;color:#e8d5ae;font-size:12px;line-height:1.5;max-height:140px;overflow-y:auto"></ol>'
       + '    <div id="rp-timechart" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:6px 10px;font-size:11px;color:#c4a56e"><div class="rp-tc-cap" style="margin-bottom:4px"></div></div>'
       + '    <div id="rp-evalchart" style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:6px 10px;font-size:11px;color:#c4a56e"><div class="rp-ec-cap" style="margin-bottom:4px"></div></div>'
       + '    <div style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:10px 12px">'
-      + '      <input id="rp-range" type="range" min="0" max="0" value="0" step="1" style="width:100%;accent-color:#e0a030">'
+      + '      <input id="rp-range" type="range" min="0" max="0" value="0" step="1" data-i18n-aria="rp_jump_label" aria-label="跳转" style="width:100%;accent-color:#e0a030">'
       + '      <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px">'
       + '        <button class="btn" id="rp-loop" data-i18n-title="rp_loop_title" title="循环播放 (L)">🔁</button>'
       + '        <button class="btn" id="rp-start" data-i18n-title="rp_start_title" title="回到开头">⏮</button>'
@@ -1725,7 +1783,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       };
       input.click();
     };
-    rpEl.range.setAttribute('aria-label', XQ.I18N ? XQ.I18N.t('rp_jump_label') : '跳转');   // 第28轮: 进度条读屏语义
+    /* 第42轮: 进度条的读屏名称改由 data-i18n-aria 声明式提供 (apply() 在语言热切时自动刷新)。
+       原实现只在此处 setAttribute 一次 — 切语言后名称停在旧语言, 直到下次打开回放层才更新。 */
     rpEl.movelist.addEventListener('click', function (e) {
       var li = e.target.closest('li[data-ply]');
       if (li && rpCtrl) rpCtrl.gotoPly(parseInt(li.dataset.ply, 10));
@@ -1890,6 +1949,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     try { pos = parseInt(localStorage.getItem('xq_replay_pos_' + record.id) || '0', 10); } catch (e) {}
     if (pos < 0 || pos > rpSession.total()) pos = 0;
     if (pos > 0) rpCtrl.gotoPly(pos); else rpCtrl.gotoPly(0);
+    /* 第42轮: 控制器的手动导航在「目标位置 == 当前位置」时不发状态 (replay.js session.goto 无位移返回 false →
+       controller.manual 跳过 emit), 而首次打开某局时记忆进度恰好是 0 → gotoPly(0) 是空操作,
+       于是盘面 90 格 / 信息面板 / 时长与评值图 / 进度条上限 全部停在初始空白, 直到用户点一次上/下一步。
+       显式补一次首绘: 回放层不得以空白开场 (有位移时这次重绘是幂等的, 且不再触发落子动画)。 */
+    rpOnState(rpSession.state());
     if (rpGetSetting('autoplay') === '1') setTimeout(function () { rpCtrl && rpCtrl.play(); }, 300);
   }
   var _rpHeavyTick = 0;   // 第30轮 (第28轮该编辑曾随脚本中断丢失, 本轮落地)
@@ -2132,7 +2196,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     input.click();
   }
   function rpShowHelp() {
-    if (document.getElementById('rp-help-overlay')) return;
+    /* 第42轮: 帮助层自述「再次按下或点击遮罩关闭」(rp_hk_help 双语文案), 但原实现遇到已存在就 return —
+       再按 ? 是空操作, 用户会以为按键失灵。改为开关, 与自己的帮助文案一致。 */
+    var ex = document.getElementById('rp-help-overlay');
+    if (ex) { ex.remove(); return; }
     var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
     var row = function (keys, label) { return '<tr><td>' + keys + '</td><td>' + label + '</td></tr>'; };
     var html = '<div id="rp-help-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">'
@@ -2425,8 +2492,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   function rpWatchRecord() {
     if (!currentRecord || !currentRecord.moves || !currentRecord.moves.length) return;
     rpEnsure();
+    /* 第42轮 a11y: 终局卡「🎬 回放本局」此前绕过 rpOpen 的焦点管理 — 层已遮蔽全屏而焦点仍留在终局卡按钮上,
+       且 rpOpener 为空 → 关闭回放后焦点无处可还 (读屏用户被丢回背景)。与 rpOpen 同口径: 记录打开者 + 焦点入层。 */
+    rpOpener = document.activeElement && rpEl.ov.contains(document.activeElement) ? null : document.activeElement;
     rpEl.ov.style.display = 'block';
     rpLockScroll(true);
+    try { rpEl.pick.focus({ preventScroll: true }); } catch (eF6) { try { rpEl.pick.focus(); } catch (eF8) {} }
     try { history.replaceState(null, '', '#rp=' + encodeURIComponent('ls:' + currentRecord.id)); } catch (eH4) {}   // v3.8: 终局回放本局同样写深链
     rpStart(currentRecord);
   }

@@ -81,6 +81,7 @@
     badge_quick: '⚡快答',
     d_conf: '信',
     d_more: '…更早 {n} 条决策',
+    d_reason_toggle: '思考过程',   // 第42轮: 决策卡 💭 折叠按钮的 aria-label 原硬编码英文 'reasoning' (中文界面读屏播报英文)
     lvl_none: '无', lvl_low: '低', lvl_mid: '中', lvl_high: '高',
     think_wait: '等待对局开始…',
     think_busy: '⚡ 思考中…',
@@ -256,6 +257,7 @@
     badge_quick: '⚡Quick',
     d_conf: 'conf',
     d_more: '…{n} earlier decisions',
+    d_reason_toggle: 'Reasoning',
     lvl_none: 'None', lvl_low: 'Low', lvl_mid: 'Mid', lvl_high: 'High',
     think_wait: 'Waiting for the game to start…',
     think_busy: '⚡ Thinking…',
