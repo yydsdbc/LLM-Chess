@@ -180,7 +180,7 @@ LLM-chess/
 | `node test/cn_notation_check.js` | 中文记谱 25 项 (经典谱锚点/同列多兵前中后消歧/同列多车马边界/旧键哨兵) |
 | `node test/i18n_check.js` | i18n 守护 11 组 (zh/en 键集一致/键值非空/占位符一致/静态与动态键覆盖(含T家族别名)/哨兵键/静态CJK文本漏挂/静态CJK属性漏挂/JS侧属性CJK挂载/JS动态写入口裸中文/非首参形态键存在性) |
 | `node test/link_check.js` | 文档链接守护 (全仓 .md 相对链接指向的文件必须存在) |
-| `node test/check_ui.js` | 语法 (17 文件) + getElementById/HTML 交叉核查 + script src/localStorage 前缀/发布文件/HTML 净化/PWA manifest(图标+截图+分类)+SW 守护/回放对话框语义/生命周期世代守卫/a11y+PWA 源串守卫(#sr-alert 播报区/#sr-cursor 键盘光标播报/label for=/走法列表键盘/拖拽中止/终局卡焦点归还/设置层模态闸门/SW 全壳预缓存+导航兜底+写缓存兜底/棋子字单出口/兑底判定按原始 summary) + 接线/写入点守卫(静态 id 只许文档层取用/终局导出绑定/dataset.flip 写入点/隐藏工具条可聚焦性/状态条时钟补位/Enter·Space 让位/光标播报区清理/回放首绘/面板 stat 单出口/回放态 AI 闸门) |
+| `node test/check_ui.js` | 语法 (17 文件) + getElementById/HTML 交叉核查 + script src/localStorage 前缀/发布文件/HTML 净化/PWA manifest(图标+截图+分类)+SW 守护/回放对话框语义/生命周期世代守卫/a11y+PWA 源串守卫(#sr-alert 播报区/#sr-cursor 键盘光标播报/label for=/走法列表键盘/拖拽中止/终局卡焦点归还/设置层模态闸门/SW 全壳预缓存+导航兜底+写缓存兜底/棋子字单出口/兑底判定按原始 summary) + 接线/写入点守卫(静态 id 只许文档层取用/终局导出绑定/dataset.flip 写入点/隐藏工具条可聚焦性/状态条时钟补位/Enter·Space 让位/光标播报区清理/回放首绘/面板 stat 单出口/回放态 AI 闸门/终局卡别名先赋值后使用) |
 | `node test/_prompt_level_smoke.js` | 提示词分级注入守护 (每级长度恒定 + legacy 兼容 + 前缀缓存不变式) |
 | `node test/replay_risk_check.js` | 回放疑误着法检测 + 存档配额兜底 |
 | `node test/_committee_agent.js` | 同方多 LLM 委员会: 会诊投票/平票决胜/轮换/全灭/用量聚合 |

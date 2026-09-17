@@ -341,5 +341,12 @@ const schedBody = (appCode.match(/function scheduleAgent\(\) \{[\s\S]*?\n  \}/) 
 if (!/if \(!currentRecord\) return;/.test(schedBody)) wireIssues.push('scheduleAgent 缺 currentRecord 闸门 (载入棋谱后 AI 会继续走导入的残局且不入档)');
 // (n) 回放层首绘兜底: 记忆进度为 0 时控制器不发状态回调 → 必须显式补一次首绘, 否则回放以空白盘面开场
 if (!/rpOnState\(rpSession\.state\(\)\);/.test(appCode)) wireIssues.push('回放层缺首绘兜底 (记忆进度=0 时 gotoPly(0) 不触发状态回调 → 盘面/信息面板全空)');
-console.log('接线/写入点守卫:', wireIssues.length ? wireIssues.join(' | ') : 'OK (静态 id 文档层取用 + 导出按钮绑定 + dataset.flip 写入 + btn-row visibility + 时钟补位 + Enter/Space 让位 + 光标清理单出口 + 齿轮 aria + 回放 aria 声明式 + 帮助层开关 + 直达回放焦点 + 卡片标签本地化 + stat 单出口 + 回放态 AI 闸门)');
+// (o) 终局卡文案别名 Te/TAe 必须先赋值后使用 — var 只提升声明不提升赋值, 在字面声明之前调用 = TypeError;
+//     该异常被 scheduleAgent 的 AI 失败 catch 吞掉, 表现为「AI 对 AI 局终局卡整块不渲染 + 棋谱 note 写入垃圾」
+const iTAeDecl = appCode.indexOf('TAe = XQ.I18N ? XQ.I18N.tArgs');
+const iTAeUse = appCode.indexOf("TAe('eo_elo'");
+if (iTAeDecl < 0 || iTAeUse < 0 || iTAeDecl > iTAeUse) {
+  wireIssues.push('终局卡 Te/TAe 早于赋值被调用 (var 提升无赋值 → AI 对 AI 局 TypeError, 统计/Elo/终局按钮整块跳过且被 catch 吞掉)');
+}
+console.log('接线/写入点守卫:', wireIssues.length ? wireIssues.join(' | ') : 'OK (静态 id 文档层取用 + 导出按钮绑定 + dataset.flip 写入 + btn-row visibility + 时钟补位 + Enter/Space 让位 + 光标清理单出口 + 齿轮 aria + 回放 aria 声明式 + 帮助层开关 + 直达回放焦点 + 卡片标签本地化 + stat 单出口 + 回放态 AI 闸门 + 回放首绘 + 终局卡别名先赋值后使用)');
 if (wireIssues.length) process.exit(1);

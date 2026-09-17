@@ -389,6 +389,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         });
         XQ.Record.finish(currentRecord, res.status, Date.now() - startTime);
         XQ.Record.save(currentRecord);
+        /* 第42轮: Te/TAe 必须在**首次使用之前**赋值 — 原实现在终局卡渲染处 (且嵌在 `if (eo)` 内) 才声明, 而下面
+           Elo 行已经调用了 TAe; var 只提升声明不提升赋值 → AI 对 AI 局 (双方都非人类, 即本项目主场景) 走到该行必抛
+           `TypeError: TAe is not a function`, 终局卡统计/Elo 行/两个按钮整块被跳过, 且异常被 scheduleAgent 的
+           AI 失败 catch 吞掉 (误判为模型失败 → 弹错误横幅 + 往棋谱 note 写入垃圾 + 在已终局局面再排一次随机兑底走子)。
+           实机证据: 一局 489 手自然限着判和的棋谱 note = `#489(TAe is not a function)随机;`。 */
+        var Te = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TAe = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };   // 第26轮 i18n
         // 第28轮: Elo 实时记账 (双方均非人类才入表 — 人类执子成绩不污染模型对战胜率表)
         var eloHtml = '';
         if (agents.red && agents.black && agents.red.kind !== 'human' && agents.black.kind !== 'human'
@@ -403,7 +409,6 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         // v1.7 终局结算数据
         var eo = document.getElementById('eo-stats');
         if (eo) {
-          var Te = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TAe = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };   // 第26轮 i18n
           var rAvg = thinkStat.red.moves ? (thinkStat.red.total / thinkStat.red.moves).toFixed(1) : '-';
           var bAvg = thinkStat.black.moves ? (thinkStat.black.total / thinkStat.black.moves).toFixed(1) : '-';
           var fmtT = function (x) { return x ? (x > 999 ? (x / 1000).toFixed(1) + 'k' : x) : '-'; };
