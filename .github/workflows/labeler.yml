@@ -21,6 +21,6 @@ jobs:
             gh label create "$l" --color "$c" --force || true
           done
 
-      - uses: actions/labeler@v5
+      - uses: actions/labeler@v7
         with:
           sync-labels: true
