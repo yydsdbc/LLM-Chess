@@ -185,6 +185,37 @@ jsFiles.forEach(function (f) {
 });
 ok(miss11.length === 0, 'I11 T 家族同行引用的键均存在于字典 (非首参形态)' + (miss11.length ? ' (不存在: ' + miss11.join(' ; ') + ')' : ''));
 
-console.log('i18n_check: ' + (11 - fails.length) + '/11 groups PASS, ' + zk.length + ' keys');
+// I12 第43轮: 按钮文案漏挂守护 — I9 的豁免条件是「同行出现 data-i18n」, 而 `data-i18n-title` 也含该子串,
+//   于是「只挂了 title 没挂文本」的按钮整类逃过扫描: 回放层 ▶播放 / ⏪吃 / 吃子⏩ 三个按钮的**文本**
+//   长期硬编码中文 (EN 界面原样显示), 其中 ▶播放 连首绘都没走字典 (打开回放层后停在模板文案)。
+//   规则: <button …>TEXT</button> 的 TEXT 含 CJK 且**完全不走字典** → 报红; 文案由 T() 家族拼接
+//   (或 XQ.I18N ? t('k') : '中文兜底' 这种无 i18n 环境兜底写法) 的按钮不受影响。
+var miss12 = [];
+function scanBtnText(src, label) {
+  var re12 = /<button\b([^>]*)>([^<]*)<\/button>/g, m12;
+  while ((m12 = re12.exec(src)) != null) {
+    if (!CJK7.test(m12[2])) continue;
+    if (/(?:^|\s)data-i18n=/.test(m12[1])) continue;
+    if (/[tT][A-Za-z0-9]*\(/.test(m12[2]) || m12[2].indexOf('XQ.I18N') >= 0) continue;   // 走字典 (含 no-i18n 兜底形态)
+    miss12.push(label + ' <button> "' + m12[2].trim().slice(0, 24) + '"');
+  }
+}
+jsFiles.forEach(function (f) { scanBtnText(fs.readFileSync(path.join(ROOT, f), 'utf8'), f); });
+scanBtnText(htmlNoScript, 'index.html');
+ok(miss12.length === 0, 'I12 按钮文案含中文必须挂 data-i18n (非仅 -title)' + (miss12.length ? ' (漏挂: ' + miss12.join(' ; ') + ')' : ' (0 漏挂)'));
+
+// I13 第43轮: 「界面偏好」类 option 文案漏挂 — I7/I8 有意豁免 option (服务商品牌名/语言名不可译),
+//   但同一豁免把偏好类下拉也放过了: #ui-pieces 的 汉字/Letters 是硬编码, 而字典里 pieces_cn/pieces_en
+//   早已存在却全仓零引用 (孤儿键) — EN 界面下该下拉显示「汉字 / Letters」。
+//   规则: #ui-pieces 的每个 option 必须挂 data-i18n 且键存在于字典 (品牌名下拉不受影响)。
+var sel13 = (html.match(/<select[^>]*id="ui-pieces"[\s\S]*?<\/select>/) || [''])[0];
+var opt13 = sel13.match(/<option\b[^>]*>/g) || [];
+var opt13keys = opt13.map(function (o) { return (o.match(/data-i18n="([a-z0-9_]+)"/) || [])[1]; });
+ok(opt13.length >= 2 && opt13keys.every(function (k) { return !!k; }),
+  'I13 棋子显示下拉的选项文案挂 data-i18n (偏好类文案不得硬编码)' + (opt13keys.some(function (k) { return !k; }) ? ' (漏挂 ' + (opt13.length - opt13keys.filter(Boolean).length) + ' 个)' : ''));
+ok(opt13keys.filter(Boolean).every(function (k) { return ZH[k] != null && EN[k] != null; }),
+  'I13 棋子显示下拉引用的键双语齐备 (' + opt13keys.filter(Boolean).join(',') + ')');
+
+console.log('i18n_check: ' + (13 - fails.length) + '/13 groups PASS, ' + zk.length + ' keys');
 if (fails.length) { process.exit(1); }
 process.exit(0);

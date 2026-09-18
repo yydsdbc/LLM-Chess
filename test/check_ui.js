@@ -323,8 +323,8 @@ if (!/g\.setAttribute\('aria-expanded', 'false'\)/.test(appCode)) wireIssues.pus
 if (!/id="rp-range"[^']*data-i18n-aria="rp_jump_label"/.test(appCode)) wireIssues.push('回放进度条读屏名称未挂 data-i18n-aria (切语言后停在旧语言)');
 if (/rpEl\.range\.setAttribute\('aria-label'/.test(appCode)) wireIssues.push('回放进度条仍一次性硬设 aria-label (语言热切后过期)');
 if (!/id="rp-moves-filter"[^']*aria-label="/.test(appCode)) wireIssues.push('回放走法过滤框只有 placeholder 无读屏名称');
-// (i) 帮助层可再次按键关闭 (与 rp_hk_help 文案承诺一致)
-if (!/if \(ex\) \{ ex\.remove\(\); return; \}/.test(appCode)) wireIssues.push('回放帮助层仍不可再次按下关闭 (与帮助文案承诺不符)');
+// (i) 帮助层可再次按键关闭 (与 rp_hk_help 文案承诺一致); 第43轮: 关闭走统一模态出口 (原内联 remove() 不归还焦点)
+if (!/if \(ex\) \{ rpHelpClose\(\); return; \}/.test(appCode)) wireIssues.push('回放帮助层仍不可再次按下关闭 (与帮助文案承诺不符)');
 // (j) 终局卡直达回放的焦点管理
 const rpWatchBody = (appCode.match(/function rpWatchRecord\(\) \{[\s\S]*?\n  \}/) || [''])[0];
 if (!/rpOpener = document\.activeElement/.test(rpWatchBody)) wireIssues.push('终局直达回放未记录焦点宿主 (关闭后焦点无处可还)');
@@ -350,3 +350,77 @@ if (iTAeDecl < 0 || iTAeUse < 0 || iTAeDecl > iTAeUse) {
 }
 console.log('接线/写入点守卫:', wireIssues.length ? wireIssues.join(' | ') : 'OK (静态 id 文档层取用 + 导出按钮绑定 + dataset.flip 写入 + btn-row visibility + 时钟补位 + Enter/Space 让位 + 光标清理单出口 + 齿轮 aria + 回放 aria 声明式 + 帮助层开关 + 直达回放焦点 + 卡片标签本地化 + stat 单出口 + 回放态 AI 闸门 + 回放首绘 + 终局卡别名先赋值后使用)');
 if (wireIssues.length) process.exit(1);
+
+// 17) 第43轮 源串/结构守卫 — 本轮三类缺陷的共同形态: 「写死的展示值」与「键取在错误的时点」。
+//     (a) 回放工具条三个按钮的文案硬编码中文 (只挂了 data-i18n-title → 所有 CJK 守护放行);
+//     (b) ▶播放 连首绘都没走字典 (只在「播放态变化」时才写文本 → 首次打开停在模板文案);
+//     (c) Elo 天梯浮层无对话语义/无键盘出口/无快捷键闸门, 且排序入口是键盘不可达的 th;
+//     (d) 重复计数的键取在 undoMove **之后** (取到恢复出来的局面 → 悔棋重走虚增计数 → 误判三次重复和棋);
+//     (e) 引擎热路径 memo 必须存在且由 bumpVer 统一失效。
+const wire43 = [];
+// (a) 回放工具条文案走字典
+if (!/T\('btn_play'\)/.test(appCode)) wire43.push('回放播放/暂停按钮文案未走字典 (EN 界面显示硬编码中文)');
+if (!/T\('rp_prevcap'\)/.test(appCode) || !/T\('rp_nextcap'\)/.test(appCode)) wire43.push('回放上一手/下一手吃子按钮文案未走字典 (字典无键时 EN 界面显示中文)');
+['▶ 播放', '⏪吃', '吃子⏩'].forEach(function (lit) {
+  if (appCode.indexOf('>' + lit + '<') >= 0) wire43.push('回放按钮仍存在硬编码文案 "' + lit + '"');
+});
+/* (a2) 回放层是**建一次缓存复用**的 (rpEnsure 只在首次打开时构建, 之后只切 display) — 模板里由 T('键')
+      写死的按钮文案必须同时挂 data-i18n, 否则「英文打开 → 关闭 → 切中文 → 再打开」仍是旧语言
+      (apply() 只刷 data-i18n 元素; 缓存节点不会重建)。播放/暂停键豁免: 它的文案是状态相关的,
+      由 rpOnPlayState 单出口维护 (i18n 监听内已按当前语言重解析)。 */
+var rpEnsureBody = (appCode.match(/function rpEnsure\(\) \{[\s\S]*?\n  \}/) || [''])[0];
+var btnTRe = /<button\b([^>]*)>'\s*\+\s*T\('([a-z0-9_]+)'\)\s*\+\s*'/g, mB;
+while ((mB = btnTRe.exec(rpEnsureBody)) !== null) {
+  if (mB[2] === 'btn_play') continue;
+  if (!new RegExp('data-i18n="' + mB[2] + '"').test(mB[1])) {
+    wire43.push('回放层缓存模板按钮 ' + mB[2] + ' 未挂 data-i18n (关回放后切语言再打开仍是旧语言)');
+  }
+}
+// (b) 播放态首绘: rpStart 内必须显式调用一次 rpOnPlayState (条件性回调不会在首次打开时到达)
+var rpStartBody = (appCode.match(/function rpStart\(record\) \{[\s\S]*?\n  \}/) || [''])[0];
+if (!/rpOnPlayState\(rpCtrl\.playing/.test(rpStartBody)) wire43.push('rpStart 缺播放态首绘 (首次打开回放时 ▶播放 按钮停在模板文案, EN 下即中文)');
+// (c) Elo 天梯浮层: 对话语义 + 唯一关闭出口 + 快捷键闸门 + 键盘可达排序入口
+if (!/id="rp-elo-overlay" role="dialog" aria-modal="true" aria-labelledby="rp-elo-title"/.test(appCode)) wire43.push('Elo 天梯浮层缺对话语义 (role=dialog/aria-modal/labelledby)');
+if (!/function rpEloClose\(\)/.test(appCode)) wire43.push('Elo 天梯浮层缺唯一关闭出口 rpEloClose (Esc/✕/遮罩三处必须同一出口并归还焦点)');
+if (/onclick="if\(event\.target===this\)this\.remove\(\)"/.test(appCode)) wire43.push('全屏模态浮层仍用内联 onclick=this.remove() 关闭 (摘节点不归还焦点, 且无 Esc 出口)');
+if (!/function modalClose\(id\)/.test(appCode) || !/function modalKeyGate\(ev, id, closeFn, toggleKeys\)/.test(appCode)) wire43.push('缺模态浮层统一出口 modalClose / 键盘闸门 modalKeyGate');
+if (!/modalKeyGate\(ev, 'rp-elo-overlay', rpEloClose\)/.test(appCode)) wire43.push('Elo 天梯打开时未接管键盘 (Esc 会被下层回放层接走 → 关掉下层回放层, 天梯留在主界面上)');
+if (!/modalKeyGate\(ev, 'rp-help-overlay', rpHelpClose, \['\?', '\/'\]\)/.test(appCode)) wire43.push('回放帮助层打开时未接管键盘 (自述「再次按下 ? 关闭」须成立, 且 Esc 不得穿透到下层回放层)');
+if (!/if \(!ov\) return false;/.test(appCode)) wire43.push('modalKeyGate 未在浮层不存在时放行 (会吞掉全部全局快捷键)');
+var gateBody = (appCode.match(/function modalKeyGate\(ev, id, closeFn, toggleKeys\) \{[\s\S]*?\n  \}/) || [''])[0];
+if (!/return true;/.test(gateBody)) wire43.push('模态闸门未对「其余按键」整体让位 (方向键/空格会在遮罩后面步进棋局)');
+if (!/ev\.key === 'Escape'\) \{ closeFn\(\)/.test(gateBody)) wire43.push('模态闸门未把 Esc 接给关闭出口 (会被下层回放层接走 → 关掉下层回放层, 浮层留在主界面上)');
+if (!/if \(toggleKeys && toggleKeys\.indexOf\(ev\.key\) >= 0\)/.test(gateBody)) wire43.push('模态闸门未支持「自述再次按下关闭」的浮层开关键');
+if (!/modalMarkOpen\('rp-elo-overlay', ov\)/.test(appCode) || !/modalMarkOpen\('rp-help-overlay', ov\)/.test(appCode)) wire43.push('两个模态浮层未走统一开启出口 modalMarkOpen (焦点入层/遮罩关闭/焦点归还)');
+if (!/id="rp-help-overlay" role="dialog" aria-modal="true" aria-labelledby="rp-help-title"/.test(appCode)) wire43.push('回放帮助层缺对话语义 (role=dialog/aria-modal/labelledby)');
+if (!/id="rp-help-close"/.test(appCode)) wire43.push('帮助层 ✕ 缺 id (无法走统一出口, 原为内联 remove)');
+if (!/class="btn elo-sort"/.test(appCode) || !/aria-sort="none"/.test(appCode)) wire43.push('Elo 排序入口非键盘可达的 button / 缺 aria-sort (th+cursor:pointer 键盘不可达且无排序语义)');
+if (!/thR\.setAttribute\('aria-sort'/.test(appCode)) wire43.push('Elo 排序态未写回 aria-sort (读屏不知当前按哪列排序)');
+// (d) 重复计数: 被撤局面的键必须在 undoMove 之前取
+var undoBody = (appCode.replace(/\s+/g, ' ') === '' ? '' : '') + (function () {
+  var m17 = codeOnly(fs.readFileSync(__dirname + '/../core/engine.js', 'utf8'));
+  return m17;
+})();
+var iUndoFn = undoBody.indexOf('undoPly: function () {');
+var iKey = undoBody.indexOf('var undoneKey = posKey();', iUndoFn);
+var iUndoMove = undoBody.indexOf('board.undoMove(m);', iUndoFn);
+if (iUndoFn < 0 || iKey < 0 || iUndoMove < 0 || iKey > iUndoMove) {
+  wire43.push('重复计数的键取在 undoMove 之后 (取到恢复出来的局面 → 悔棋重走虚增计数, 第3次重走误判三次重复和棋)');
+}
+if (!/bumpPos\(-1, undoneKey\)/.test(undoBody)) wire43.push('undoPly 未把被撤局面的键传给 bumpPos (扣错键)');
+// (e) 热路径 memo: 存在且由 bumpVer 统一失效 (inCheck 按方别分键, posKey 按状态版本分键)
+if (!/var _chkCache = null;/.test(undoBody) || !/_chkCache = null;/.test((undoBody.match(/function bumpVer\(\)[^\n]*/) || [''])[0])) {
+  wire43.push('inCheck 缺 memo 或 bumpVer 未失效它 (每帧两次全盘攻击图扫描)');
+}
+if (!/_chkCache\.color === c/.test(undoBody)) wire43.push('inCheck memo 未按方别分键 (两方询问会互相覆盖)');
+if (!/var _pkCache = null;/.test(undoBody) || !/_pkCache\.ver !== _stateVer/.test(undoBody)) {
+  wire43.push('posKey 缺盘面文本 memo (snapshot 每帧重建 90 格文本)');
+}
+// (f) 人类执子方名字走字典 + replay 摘要兜底走字典
+if (!/T\('type_human'\)/.test(appCode)) wire43.push('人类执子方名字未走字典 (EN 回放列表/头部显示「人类」)');
+if (!/title: currentRecord && currentRecord\[sd\]/.test(appCode)) wire43.push('语言热切重绘面板名时未传回 title (thinkPanel 契约 title||name → 切一次语言就把表头悬停的模型名覆盖成方别名)');
+if (/agents\.red \? \(agents\.red\.model \|\| agents\.red\.label\) : '人类'/.test(appCode)) wire43.push('人类执子方名字仍是硬编码中文常量');
+var repCode = codeOnly(fs.readFileSync(__dirname + '/../replay/replay.js', 'utf8'));
+if (!/XQ\.I18N \? XQ\.I18N\.t\('status_side_red'\)/.test(repCode)) wire43.push('回放摘要兜底名未走字典 (无名导入棋谱在 EN 列表显示「红方」)');
+console.log('第17节 展示值/时点守卫:', wire43.length ? wire43.join(' | ') : 'OK (回放按钮文案走字典 + 播放态首绘 + Elo 浮层对话语义/键盘出口/闸门 + 排序 button/aria-sort + 重复计数键时点 + 热路径 memo + 人类名与回放兜底走字典)');
+if (wire43.length) process.exit(1);

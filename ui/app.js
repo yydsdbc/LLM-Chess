@@ -946,6 +946,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
 
   /* ── 记录/存档 ── */
   function startRecord() {
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
     gameId++;   // v1.0.daily 世代翻转: 任何新对局作废旧异步回调
     try { if (gameAbort) gameAbort.abort(); } catch (eAb) {}   // 第38轮: 中止上一局在飞请求
     gameAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
@@ -958,10 +959,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (h && h.agent && typeof h.agent.reset === 'function') h.agent.reset();
     });
     currentRecord = XQ.Record.blank({
-      redName: agents.red ? (agents.red.model || agents.red.label) : '人类',
+      /* 第43轮 i18n: 人类执子方的名字此前硬编码 '人类' 入谱 — EN 界面下回放列表/回放头部/面板提示
+         都会原样显示「人类 vs deepseek」(纯中文常量, 三组 CJK 守护都只看「是否挂了 data-i18n」, 属性赋值不算)。 */
+      redName: agents.red ? (agents.red.model || agents.red.label) : T('type_human'),
       redKind: agents.red ? agents.red.kind : 'human', redModel: agents.red && agents.red.model, redStyle: agents.red && agents.red.style,
       redModels: agents.red && agents.red.models || null,   // 第31轮: 委员会阵容入谱
-      blackName: agents.black ? (agents.black.model || agents.black.label) : '人类',
+      blackName: agents.black ? (agents.black.model || agents.black.label) : T('type_human'),
       blackKind: agents.black ? agents.black.kind : 'human', blackModel: agents.black && agents.black.model, blackStyle: agents.black && agents.black.style,
       blackModels: agents.black && agents.black.models || null
     });
@@ -1216,7 +1219,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       }
       refresh();
       ['red', 'black'].forEach(function (sd) {
-        XQ.UI.thinkPanel(sd, { name: XQ.I18N ? XQ.I18N.t(sd === 'red' ? 'status_side_red' : 'status_side_black') : (sd === 'red' ? '红方' : '黑方') });
+        /* 第43轮: 这里必须把 title 一并传回 — thinkPanel 的契约是 nameEl.title = opts.title || opts.name,
+           只传 name 会把面板表头的悬停全名 (模型名 / 「人类」) 覆盖成方别名 (「红方」/Red),
+           即「切一次语言就丢掉模型名」。title 与 startRecord 同源 (currentRecord[side].name)。 */
+        XQ.UI.thinkPanel(sd, {
+          name: XQ.I18N ? XQ.I18N.t(sd === 'red' ? 'status_side_red' : 'status_side_black') : (sd === 'red' ? '红方' : '黑方'),
+          title: currentRecord && currentRecord[sd] ? currentRecord[sd].name : undefined
+        });
         var lg = decisionLog[sd] || [];
         if (lg.length) XQ.UI.thinkPanel(sd, { cards: XQ.UI.decisionCards(lg.slice(-4), lg.length) });
       });
@@ -1447,6 +1456,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     // 快捷键: M 静音 / R 重开
     document.addEventListener('keydown', function (ev) {
       if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) return;
+      /* 第43轮 a11y: Elo 天梯与回放帮助层都是盖在回放层之上的 aria-modal 浮层 — 打开期间全局快捷键
+         必须整体让位。原实现没有任何闸门: Esc 被下层回放层接走 (关掉**下层**回放层, 浮层留在主界面上),
+         方向键/空格还会在遮罩后面步进棋局。帮助层自述「再次按下 ? 关闭」, 故把 ? 也交给它当开关。 */
+      if (modalKeyGate(ev, 'rp-elo-overlay', rpEloClose)) return;
+      if (modalKeyGate(ev, 'rp-help-overlay', rpHelpClose, ['?', '/'])) return;
       /* v1.6 回放模式快捷键: ←/→ 步进, 空格 播放/暂停, Esc 退出 */
       if (rpEl && rpEl.ov.style.display === 'block') {
         if (ev.key === 'Tab') {   // 第37轮 a11y: aria-modal=true 的配套 Tab 陷阱 (与设置层同款) — 焦点在回放对话框内循环, 不逃到背后棋盘
@@ -1558,6 +1572,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
 
   function rpEnsure() {
     if (rpEl) return rpEl;
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };   // 第43轮: 模板里的按钮文案此前硬编码中文 (▶播放 / ⏪吃 / 吃子⏩ 在 EN 界面原样显示)
     var ov = document.createElement('div');
     ov.id = 'replay-overlay';
     ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:rgba(10,6,2,.82);display:none;overflow:auto;padding:18px';
@@ -1604,15 +1619,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '        <button class="btn" id="rp-loop" data-i18n-title="rp_loop_title" title="循环播放 (L)">🔁</button>'
       + '        <button class="btn" id="rp-start" data-i18n-title="rp_start_title" title="回到开头">⏮</button>'
       + '        <button class="btn" id="rp-prev" data-i18n-title="rp_prev_title" title="上一步">◀</button>'
-      + '        <button class="btn" id="rp-toggle" data-i18n-title="rp_toggle_title" title="播放/暂停 (Space)" style="min-width:72px">▶ 播放</button>'
+      + '        <button class="btn" id="rp-toggle" data-i18n-title="rp_toggle_title" title="播放/暂停 (Space)" style="min-width:72px">' + T('btn_play') + '</button>'
       + '        <button class="btn" id="rp-next" data-i18n-title="rp_next_title" title="下一步">▶|</button>'
       + '        <button class="btn" id="rp-end" data-i18n-title="rp_end_title" title="跳到结尾">⏭</button>'
       + '        <button class="btn" id="rp-back5" data-i18n-title="rp_back5_title" title="后退5手" style="font-size:11px">⏪-5</button>'
       + '        <button class="btn" id="rp-back10" data-i18n-title="rp_back10_title" title="后退10手" style="font-size:11px">⏪-10</button>'
       + '        <button class="btn" id="rp-skip5" data-i18n-title="rp_skip5_title" title="快进5手" style="font-size:11px">+5⏩</button>'
       + '        <button class="btn" id="rp-skip10" data-i18n-title="rp_skip10_title" title="快进10手" style="font-size:11px">+10⏩</button>'
-      + '        <button class="btn" id="rp-prev-cap" data-i18n-title="rp_prevcap_title" title="上一手吃子 (Shift+C)" style="font-size:11px">⏪吃</button>'
-      + '        <button class="btn" id="rp-next-cap" data-i18n-title="rp_nextcap_title" title="下一手吃子 (C)" style="font-size:11px">吃子⏩</button>'
+      + '        <button class="btn" id="rp-prev-cap" data-i18n="rp_prevcap" data-i18n-title="rp_prevcap_title" title="上一手吃子 (Shift+C)" style="font-size:11px">' + T('rp_prevcap') + '</button>'
+      + '        <button class="btn" id="rp-next-cap" data-i18n="rp_nextcap" data-i18n-title="rp_nextcap_title" title="下一手吃子 (C)" style="font-size:11px">' + T('rp_nextcap') + '</button>'
       + '      </div>'
       + '      <div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:8px;flex-wrap:wrap">'
       + '        <span style="color:#c4a56e;font-size:12px" data-i18n="speed">倍速</span>'
@@ -1950,6 +1965,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     rpPaintLoop();
     rpPaintHead();
     rpPaintMoveList();
+    /* 第43轮: 播放/暂停按钮同样需要首绘 — rpOnPlayState 原先只在「播放态变化」与语言热切时被调用,
+       而首次打开回放时没有任何播放态变化 → 按钮停在模板里的初始文案 (EN 界面下就是硬编码中文「▶ 播放」),
+       要等用户按一次播放才可能变。与第42轮「回放层首绘缺失」同类: 依赖对端条件性通知的路径必须自补首帧。 */
+    rpOnPlayState(rpCtrl.playing ? rpCtrl.playing() : false);
     var pos = 0;
     try { pos = parseInt(localStorage.getItem('xq_replay_pos_' + record.id) || '0', 10); } catch (e) {}
     if (pos < 0 || pos > rpSession.total()) pos = 0;
@@ -2134,7 +2153,53 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     a.click();
     
   }
-  /* 第30轮 Elo 天梯浮层 (回放层 🏆) */
+  /* 第43轮: 全屏模态浮层 (Elo 天梯 / 回放帮助层) 的统一开启与收尾 —
+     两处原先都用内联 onclick="…remove()" 关闭: 摘节点即完事, 焦点留在已摘掉的按钮上; 且都没有 Esc 出口
+     → Esc 被**下层**回放层的处理器接走 (关掉下层回放层, 浮层孤零零留在主界面上)。 */
+  var _modalOpener = {};
+  function modalClose(id) {
+    var ov = document.getElementById(id);
+    if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
+    var back = _modalOpener[id];
+    delete _modalOpener[id];
+    if (back && back.isConnected && typeof back.focus === 'function') { try { back.focus({ preventScroll: true }); } catch (eFM) { back.focus(); } }
+  }
+  function modalMarkOpen(id, ov) {
+    _modalOpener[id] = (document.activeElement && document.activeElement !== document.body) ? document.activeElement : null;
+    ov.addEventListener('click', function (ev) { if (ev.target === ov) modalClose(id); });   // 遮罩点击关闭 (与 Esc/✕ 同一出口)
+    var btn = ov.querySelector('button');
+    // 焦点入层: 与设置层同口径 (双 rAF 等 visibility 过渡起帧, 同步 focus 会被静默忽略)
+    var focusIn = function () { if (btn && document.getElementById(id)) { try { btn.focus({ preventScroll: true }); } catch (eFM2) { btn.focus(); } } };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { requestAnimationFrame(focusIn); });
+    else setTimeout(focusIn, 0);
+  }
+  /* 模态浮层的统一键盘闸门 (Esc 关闭 / Tab 陷阱 / 其余按键整体让位) — 返回 true 表示已接管该按键 */
+  function modalKeyGate(ev, id, closeFn, toggleKeys) {
+    var ov = document.getElementById(id);
+    if (!ov) return false;
+    if (ev.key === 'Escape') { closeFn(); ev.preventDefault(); return true; }
+    if (toggleKeys && toggleKeys.indexOf(ev.key) >= 0) { closeFn(); ev.preventDefault(); return true; }   // 自述「再次按下关闭」的浮层
+    if (ev.key === 'Tab') {
+      var fables = Array.prototype.filter.call(
+        ov.querySelectorAll('button, input, select, [tabindex="0"]'),
+        function (el) { return el.offsetParent !== null && !el.disabled; }
+      );
+      if (fables.length) {
+        var act = document.activeElement;
+        if (ev.shiftKey) {
+          if (act === fables[0] || !ov.contains(act)) { fables[fables.length - 1].focus(); ev.preventDefault(); }
+        } else if (act === fables[fables.length - 1] || !ov.contains(act)) { fables[0].focus(); ev.preventDefault(); }
+      }
+    }
+    return true;   // 浮层打开期间其余按键一律不落到棋盘/回放快捷键
+  }
+
+  /* 第30轮 Elo 天梯浮层 (回放层 🏆)
+     第43轮 a11y: 它是盖在回放层之上的全屏 aria-modal 对话, 但此前既无对话语义也无键盘出口 —
+     只能鼠标点遮罩关闭; 而 Esc 会被下层回放层的处理器接走 (关掉**下层**回放层, 天梯孤零零留在主界面上),
+     方向键/空格还会在遮罩后面步进棋局。现补: 对话语义 + 唯一关闭出口 (Esc/✕/遮罩同一出口, 归还焦点)
+     + 打开期间全局快捷键整体让位 + Tab 焦点陷阱。 */
+  function rpEloClose() { modalClose('rp-elo-overlay'); }
   function rpShowElo() {
     if (document.getElementById('rp-elo-overlay')) return;
     var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
@@ -2148,22 +2213,40 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           }).join('')
         : '<tr><td colspan="6" style="text-align:center;padding:10px;color:#c4a56e">' + T('elo_empty') + '</td></tr>';
       var ov = document.getElementById('rp-elo-overlay');
+      if (!ov) return;   // 已关闭 (paint 由排序/清空触发, 可能晚于 Esc 关闭)
       ov.querySelector('#rp-elo-body').innerHTML = body;
+      // 第43轮 a11y: 排序态对读屏可感知 — aria-sort 只能落在列头 th 上 (放在按钮上无效)
+      var thR = ov.querySelector('#elo-s-rating'), thG = ov.querySelector('#elo-s-games');
+      if (thR) thR.setAttribute('aria-sort', sortKey === 'rating' ? 'descending' : 'none');
+      if (thG) thG.setAttribute('aria-sort', sortKey === 'games' ? 'descending' : 'none');
     }
-    var html = '<div id="rp-elo-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:310;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">'
+    /* 第43轮 a11y: 排序入口改原生 <button> — 原实现是带 cursor:pointer 的 <th> + onclick, 键盘不可达且无排序语义 */
+    var sortBtn = function (k2, label) {
+      return '<button type="button" class="btn elo-sort" data-k="' + k2 + '" style="background:none;border:0;padding:0 2px;color:#c4a56e;font:inherit;cursor:pointer">' + label + '</button>';
+    };
+    var html = '<div id="rp-elo-overlay" role="dialog" aria-modal="true" aria-labelledby="rp-elo-title" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:310;display:flex;align-items:center;justify-content:center">'
       + '<div style="background:#2a1a0c;border:1px solid #7a5a2a;border-radius:14px;padding:20px 24px;min-width:420px;color:#f0e0c0;box-shadow:0 8px 32px rgba(0,0,0,.7)">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b style="color:#f0d9a0;font-size:18px">' + T('elo_title') + '</b>'
-      + '<button id="rp-elo-reset" class="btn" style="background:rgba(192,57,43,.3)">' + T('elo_reset') + '</button></div>'
-      + '<table style="width:100%;font-size:13px"><thead><tr style="color:#c4a56e"><th style="text-align:left;padding:2px 10px">Model</th><th style="text-align:right;padding:2px 10px;cursor:pointer" id="elo-s-rating">' + T('elo_th_rating') + '</th><th style="text-align:right;padding:2px 10px;cursor:pointer" id="elo-s-games">' + T('elo_th_games') + '</th><th style="text-align:right;padding:2px 10px" colspan="3">' + T('elo_th_wdl') + '</th></tr></thead>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px"><b id="rp-elo-title" style="color:#f0d9a0;font-size:18px">' + T('elo_title') + '</b>'
+      + '<span style="display:flex;gap:8px">'
+      + '<button id="rp-elo-close" class="btn" data-i18n-aria="overlay_close" aria-label="' + T('overlay_close') + '" title="Esc">✕</button>'
+      + '<button id="rp-elo-reset" class="btn" style="background:rgba(192,57,43,.3)">' + T('elo_reset') + '</button></span></div>'
+      + '<table style="width:100%;font-size:13px"><thead><tr style="color:#c4a56e">'
+      + '<th scope="col" style="text-align:left;padding:2px 10px">' + T('elo_th_model') + '</th>'
+      + '<th scope="col" id="elo-s-rating" aria-sort="none" style="text-align:right;padding:2px 10px">' + sortBtn('rating', T('elo_th_rating')) + '</th>'
+      + '<th scope="col" id="elo-s-games" aria-sort="none" style="text-align:right;padding:2px 10px">' + sortBtn('games', T('elo_th_games')) + '</th>'
+      + '<th scope="col" colspan="3" style="text-align:right;padding:2px 10px">' + T('elo_th_wdl') + '</th></tr></thead>'
       + '<tbody id="rp-elo-body"></tbody></table></div></div>';
     var d = document.createElement('div');
     d.innerHTML = html;
     var ov = d.firstChild;
+    modalMarkOpen('rp-elo-overlay', ov);
+    ov.addEventListener('click', function (ev) {
+      var k2 = ev.target && ev.target.getAttribute ? ev.target.getAttribute('data-k') : null;
+      if (k2) { sortKey = k2; paint(); }
+    });
     document.body.appendChild(ov);
-    var setKey = function (k2) { sortKey = k2; paint(); };   // 第33轮: 列头点击排序
-    ov.querySelector('#elo-s-rating').onclick = function () { setKey('rating'); };
-    ov.querySelector('#elo-s-games').onclick = function () { setKey('games'); };
     paint();
+    ov.querySelector('#rp-elo-close').onclick = rpEloClose;
     ov.querySelector('#rp-elo-reset').onclick = function () {
       if (!window.confirm(T('elo_reset_confirm'))) return;
       XQ.Elo.resetAll();
@@ -2200,17 +2283,20 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     };
     input.click();
   }
+  function rpHelpClose() { modalClose('rp-help-overlay'); }
   function rpShowHelp() {
     /* 第42轮: 帮助层自述「再次按下或点击遮罩关闭」(rp_hk_help 双语文案), 但原实现遇到已存在就 return —
-       再按 ? 是空操作, 用户会以为按键失灵。改为开关, 与自己的帮助文案一致。 */
+       再按 ? 是空操作, 用户会以为按键失灵。改为开关, 与自己的帮助文案一致。
+       第43轮: 该层挂在 document.body 上 (不在回放层内), 却同样没有 Esc 出口与对话语义 — Esc 会关掉下层
+       回放层而把它留在主界面上; 关闭走内联 remove() 也不归还焦点。现与 Elo 天梯统一走模态出口。 */
     var ex = document.getElementById('rp-help-overlay');
-    if (ex) { ex.remove(); return; }
+    if (ex) { rpHelpClose(); return; }
     var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
     var row = function (keys, label) { return '<tr><td>' + keys + '</td><td>' + label + '</td></tr>'; };
-    var html = '<div id="rp-help-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">'
+    var html = '<div id="rp-help-overlay" role="dialog" aria-modal="true" aria-labelledby="rp-help-title" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;display:flex;align-items:center;justify-content:center">'
       + '<div style="background:#2a1a0c;border:1px solid #7a5a2a;border-radius:14px;padding:20px 24px;max-width:520px;color:#f0e0c0;box-shadow:0 8px 32px rgba(0,0,0,.7)">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b style="color:#f0d9a0;font-size:18px">' + T('rp_help_title_h') + '</b>'
-      + '<button onclick="document.getElementById(&quot;rp-help-overlay&quot;).remove()" class="btn" style="background:#c0392b">✕</button></div>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b id="rp-help-title" style="color:#f0d9a0;font-size:18px">' + T('rp_help_title_h') + '</b>'
+      + '<button id="rp-help-close" class="btn" data-i18n-aria="overlay_close" aria-label="' + T('overlay_close') + '" style="background:#c0392b">✕</button></div>'
       + '<table style="width:100%;font-size:13px;line-height:2">'
       + row('<kbd>←</kbd> / <kbd>→</kbd>', T('rp_hk_prev_next'))
       + row('<kbd>Home</kbd> / <kbd>End</kbd>', T('rp_hk_home_end'))
@@ -2230,7 +2316,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '</div></div>';
     var d = document.createElement('div');
     d.innerHTML = html;
-    document.body.appendChild(d.firstChild);
+    var ov = d.firstChild;
+    modalMarkOpen('rp-help-overlay', ov);
+    document.body.appendChild(ov);
+    ov.querySelector('#rp-help-close').onclick = rpHelpClose;
   }
   function rpHeadSideStats() {
     var rec = rpSession.record;

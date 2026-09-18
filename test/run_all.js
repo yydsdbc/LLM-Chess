@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* test/run_all.js — 并行测试运行器 (v1.0.3, 第4项优化)
- * 12 套件并行跑 (串行 33.5s → 并行 ~15s, 2.3x)。
+ * 15 套件并行跑 (串行 33.5s → 并行 ~15s, 2.3x)。
  * 零依赖 (child_process); Windows/Unix 兼容; 任一套件失败即整体失败 (CI 友好)。
  * 原串行链保留: npm run test:serial (test_llm_convo 带 mock 时序, 并行安全已验证)
  */

@@ -40,17 +40,25 @@
     var lastMove = null;
     var _tgtCache = null;   // 第37轮: legalTargets memo (任意盘面变更即由 apply/undo 重置)
     var _dgrCache = null;   // 第39轮: dangerTargets memo (选中格每帧重算静态交换 → 记忆化)
+    var _chkCache = null;   // 第43轮: inCheck memo (渲染一帧内 render 逐格判定 + renderStatus 各调一次 → 全盘攻击图扫描减半)
     var _stateVer = 0;      // 第39轮: 盘面变更版本 — memo 键用它 (原用 history.length: undo 后换着法重演回同一手数会过期命中)
-    function bumpVer() { _stateVer++; _tgtCache = null; _dgrCache = null; }
+    function bumpVer() { _stateVer++; _tgtCache = null; _dgrCache = null; _chkCache = null; }
     var over = false, result = 'normal', winner = null;
     var listeners = [];
     var posCounts = {};      // v1.7.7 重复局面计数: key=盘面文本|执子方 — 三次重复判和/长将检测基础
     var checkStreaks = { red: 0, black: 0 };   // v1.7.8 长将追踪: 各方"最近连续将军手数" (每手都将军则累加, 不将军则清零)
     var naturalCap = typeof opts.naturalCap === 'number' ? opts.naturalCap : 120;   // v3.8 自然限着: 连续 120 半回合 (60 回合) 无吃子判和 (0=关闭); 亚洲棋规 60 回合自然限着
     var naturalClock = 0;    // v3.8: 当前连续无吃子半回合数 (吃子即清零)
-    function posKey() { return board.toText() + '|' + turn; }
-    function bumpPos(delta) {
-      var k = posKey();
+    /* 第43轮: 盘面文本 memo (键 = _stateVer) — snapshot 每帧都要 posCounts[posKey()], 原先每帧重建一次
+       90 格文本; _stateVer 覆盖全部盘面/执子方变更 (apply/undo/newGame 均 bumpVer), 故同版本内结果恒定。 */
+    var _pkCache = null;
+    function posKey() {
+      if (_pkCache === null || _pkCache.ver !== _stateVer) _pkCache = { ver: _stateVer, key: board.toText() + '|' + turn };
+      return _pkCache.key;
+    }
+    /** 重复局面计数进出 (key 可显式传入: undoPly 必须扣「被撤销的那个局面」, 见该处注释) */
+    function bumpPos(delta, key) {
+      var k = key || posKey();
       if (delta > 0) posCounts[k] = (posCounts[k] || 0) + 1;
       else if (posCounts[k]) { posCounts[k]--; if (!posCounts[k]) delete posCounts[k]; }
     }
@@ -76,7 +84,13 @@
       repetitionCount: function () { return posCounts[posKey()] || 0; },   // v1.7.7 当前局面已出现次数 (含本次; 3=可判和)
       naturalClock: function () { return naturalClock; },   // v3.8 当前连续无吃子半回合数 (naturalCap 时判和)
       checkStreak: function (color) { return checkStreaks[color || turn] || 0; },   // v1.7.8 某方最近连续将军手数 (4+=长将风险)
-      inCheck: function (color) { return Rules.inCheck(board, color || turn); },
+      inCheck: function (color) {
+        var c = color || turn;
+        if (_chkCache && _chkCache.color === c && _chkCache.ver === _stateVer) return _chkCache.val;   // 第43轮 memo (键含方别: 两方各一次不可互相覆盖)
+        var v = Rules.inCheck(board, c);
+        _chkCache = { color: c, ver: _stateVer, val: v };
+        return v;
+      },
       pieceAt: function (x, y) { return board.get(x, y) || null; },
       kingPos: function (color) { return board.kingPos(color); },
 
@@ -133,8 +147,9 @@
         history.push(m);
         lastMove = m;
         turn = Piece.opponent(turn);
+        bumpVer();   // 第39轮: 盘面变更 → memo 失效; 第43轮: 必须先于 bumpPos — posKey 的盘面文本 memo 按 _stateVer 判定,
+                     //            否则这里会命中「走子前」的旧键, 把重复计数记到上一个局面上
         bumpPos(1);
-        bumpVer();   // 第39轮: 盘面变更 → memo 失效
         var st = refreshStatus();
         // v1.7.8 长将追踪: 走完后对方被将军 → 该方连续将军计数+1, 否则清零
         if (st.result === 'check') checkStreaks[m.piece.color]++; else checkStreaks[m.piece.color] = 0;
@@ -170,9 +185,15 @@
       undoPly: function () {
         if (!history.length) return false;
         var m = history.pop();
+        /* 第43轮关键修复: 重复计数的键必须在 undoMove **之前**取 — bumpPos 用 posKey() 取的是「当前盘面」,
+           而撤销后当前盘面已经是恢复出来的那个局面, 于是扣的是「恢复后的局面」而不是「刚被撤掉的局面」:
+           被撤局面的计数永远留着, 恢复后的局面反而被无故扣减/删除。表现: 悔棋后重走同一着, 同一局面
+           在盘上其实只出现过一次, posCounts 却累加到 3 → 第 3 次重走当场判「三次重复和棋」(实测 2,3,4,5 递增)。
+           修: 先取被撤销局面的键, 再 undoMove, 再把计数扣在那个键上。 */
+        var undoneKey = posKey();
         board.undoMove(m);
         turn = m.piece.color;
-        bumpPos(-1);   // v1.7.7: 撤销走法同步回退重复计数
+        bumpPos(-1, undoneKey);
         bumpVer();     // 第39轮: memo 失效 (undo 后重选/重演不复用旧盘面结果)
         // A2 v3.9 修复: 旧版从标准开局盘 Board.create() 重放 — 自定义起始局面 (opts.startBoard) 时 genesis 错位,
         // 长将计数/自然限着时钟在含将军/吃子的历史下全错; 改从真正的起始原像一次性重算 (与 applyPlayerMove 单步语义同源)

@@ -421,6 +421,8 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
 }).then(function () {
   l14Round42();               // 第42轮: 决策卡无障碍标签本地化
 }).then(function () {
+  l15Round43();               // 第43轮: 重复计数 undo 键 + inCheck/posKey memo
+}).then(function () {
   console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
   process.exit(fails.length ? 1 : 0);
   }, function (e) {
@@ -510,3 +512,109 @@ function l14Round42() {
   I14.setLang('zh', false);
 }
 
+
+/* ═══ L15 第43轮: 重复局面计数 undo 键修复 + 引擎热路径 memo (inCheck / posKey) ═══
+   ① 缺陷形态 (实测): undoPly 在 board.undoMove **之后**才取重复计数的键 — 取到的是「恢复出来的局面」,
+      于是扣错了键: 被撤局面的计数永远留着, 恢复后的局面反而被无故扣减。表现: 悔棋后重走同一着,
+      该局面在盘上其实只出现过一次, posCounts 却累加到 3 → 第 3 次重走当场判「三次重复和棋」。
+   ② memo 形态: render 每帧逐格判定 + 状态条各调一次 engine.inCheck (每次都全盘 90 格扫描 + 敌方每子
+      伪着生成), snapshot 每帧都要 posCounts[posKey()] (每次重建 90 格盘面文本) — 与既有
+      legalTargets/dangerTargets 同款按 _stateVer 记忆化; 本组用「调用次数」+「换局面必须失效」双向钉住。 */
+function l15Round43() {
+  var E = sandbox.XQ.Engine;
+
+  // ① undo 扣错键: 走一着 → 悔一着, 重复计数必须回到「该局面只出现一次」而不是虚增
+  var e1 = E.create();
+  var counts = [];
+  for (var i = 0; i < 4; i++) {
+    var mv = e1.generateLegalMoves()[0];
+    var r = e1.applyPlayerMove(mv.from.x, mv.from.y, mv.to.x, mv.to.y);
+    if (!r.ok) { ok(false, 'L15 前置失败: 首着非法 (' + r.reason + ')'); return; }
+    counts.push(e1.repetitionCount());
+    if (!e1.undoPly()) { ok(false, 'L15 前置失败: undoPly 返回 false'); return; }
+  }
+  ok(counts.join(',') === '1,1,1,1', 'L15 悔棋后重走同一着不得虚增重复计数 (实测 ' + counts.join(',') + '; 修前为 1,2,3,4 → 第3次重走误判三次重复和棋)');
+  ok(!e1.isOver(), 'L15 4 轮「走+悔」后对局未结束 (未误判和棋)');
+  ok(e1.repetitionCount() === 0, 'L15 全部撤销后计数归零 (无残留)');
+  /* 关键区分探针: 连撤两手且中间不读计数 — 此时 posKey 缓存停在「第一手撤销前」的版本,
+     若实现退回「undoMove 之后才取键」, 第二手撤销会取到恢复出来的局面 (P1) 并把它扣掉 → 读到 0。
+     本断言正是「显式传入被撤键」与「靠缓存侥幸正确」的分水岭 (实测: 修复版 1, 回退版 0)。 */
+  var e1b = E.create();
+  var s1b = [[1, 9, 2, 7], [1, 0, 2, 2], [2, 7, 1, 9]];
+  for (var jb = 0; jb < s1b.length; jb++) {
+    var rb = e1b.applyPlayerMove(s1b[jb][0], s1b[jb][1], s1b[jb][2], s1b[jb][3]);
+    if (!rb.ok) { ok(false, 'L15 前置失败: 连续撤销序列第 ' + (jb + 1) + ' 着非法'); return; }
+  }
+  e1b.undoPly(); e1b.undoPly();   // 连撤两手, 中间不读 (不预热缓存)
+  ok(e1b.repetitionCount() === 1, 'L15 连续两手悔棋扣的是各自被撤局面 (读到恢复后的 P1 = 1 次, 实测 ' + e1b.repetitionCount() + '; 扣错键会得 0)');
+
+  // ② posKey memo: 连续快照/查询只重建一次盘面文本; 但盘面一变必须失效
+  var t2 = { n: 0 };
+  var realCreate = sandbox.XQ.Board.create;
+  sandbox.XQ.Board.create = function () {
+    var b = realCreate.apply(this, arguments), raw = b.toText;
+    b.toText = function () { t2.n++; return raw.apply(this, arguments); };
+    return b;
+  };
+  var e2 = E.create();
+  t2.n = 0;
+  e2.snapshot(); e2.snapshot(); e2.repetitionCount();
+  ok(t2.n === 1, 'L15 posKey memo: 2 次 snapshot + 1 次 repetitionCount 只重建 1 次盘面文本 (实测 ' + t2.n + '; 修前 3)');
+  var mv2 = e2.generateLegalMoves()[0];
+  e2.applyPlayerMove(mv2.from.x, mv2.from.y, mv2.to.x, mv2.to.y);
+  t2.n = 0;
+  var rc2 = e2.repetitionCount();
+  ok(rc2 === 1, 'L15 走子后重复计数正确 (memo 未串到旧键, 实测 ' + rc2 + ')');
+  ok(t2.n === 0, 'L15 走子时已按新版本重建并缓存 → 紧随其后的读数零重建 (实测 ' + t2.n + ')');
+  e2.undoPly();
+  /* 关键失效探针: 撤销前先「预热」缓存 (snapshot 让 memo 持有 B 局面的键), 撤销后读到的必须是 A 局面。
+     若 undo 未使缓存失效, 会读到已被撤销的 B 局面 → 计数 0 而不是 1 (旧实现正是扣错键, 此断言即红)。 */
+  var e3 = E.create();
+  var s3 = [[1, 9, 2, 7], [1, 0, 2, 2]];
+  for (var j = 0; j < s3.length; j++) {
+    var r3 = e3.applyPlayerMove(s3[j][0], s3[j][1], s3[j][2], s3[j][3]);
+    if (!r3.ok) { ok(false, 'L15 前置失败: 第 ' + (j + 1) + ' 着非法'); return; }
+  }
+  e3.snapshot();   // 预热 posKey 缓存 (持有 B 局面键)
+  e3.undoPly();    // 撤黑马 → 回到 A 局面 (红马在 c3, 该局面本局出现过 1 次)
+  ok(e3.repetitionCount() === 1, 'L15 undo 后 posKey memo 已失效 — 读到恢复后的 A 局面 (实测 ' + e3.repetitionCount() + ', 未失效会得 0)');
+  sandbox.XQ.Board.create = realCreate;
+
+  // ③ inCheck memo: 同一局面同一方重复询问只算一次; 不同方互不覆盖; 换局面必须失效
+  var chk = { n: 0 };
+  var realIn = sandbox.XQ.Rules.inCheck;
+  sandbox.XQ.Rules.inCheck = function (b, c) { chk.n++; return realIn(b, c); };
+  var e4 = E.create();
+  chk.n = 0;
+  e4.inCheck('red'); e4.inCheck('red'); e4.inCheck('black'); e4.inCheck('black');
+  ok(chk.n === 2, 'L15 inCheck memo: 4 次询问 (2 方各 2 次) 只做 2 次真实扫描 (实测 ' + chk.n + '; 修前 4)');
+  // 真将军局面: 空盘 + 双将 + 红车 e5 直线照将黑将 e10 (棋子自建, 不依赖开局)
+  function checkBoard() {
+    var gb = sandbox.XQ.Board.makeFromGrid(new Array(90).fill(null));
+    gb.set(4, 0, { color: 'black', type: 'king', id: 'bk' });
+    gb.set(4, 9, { color: 'red', type: 'king', id: 'rk' });
+    gb.set(4, 5, { color: 'red', type: 'rook', id: 'rr' });
+    return gb;
+  }
+  var e5 = E.create({ startBoard: checkBoard(), turn: 'black' });
+  ok(e5.inCheck('black') === true && e5.inCheck('black') === true, 'L15 inCheck memo 命中仍返回真 (黑将被红车照将)');
+  ok(e5.inCheck('red') === false, 'L15 换方询问不被上一条缓存覆盖 (红方未被将)');
+  ok(e5.inCheck('black') === true, 'L15 回到黑方仍为真 (memo 按方别分键)');
+  var esc = e5.applyPlayerMove(4, 0, 3, 0);   // 黑将 e10→d10 应将
+  ok(esc.ok === true, 'L15 前置: 黑将应将合法');
+  ok(e5.inCheck('black') === false, 'L15 走子后 inCheck memo 失效 (应将后不再被将, 未失效会得 true)');
+  sandbox.XQ.Rules.inCheck = realIn;
+  // ④ memo 与渲染联动: 一帧内只扫描一次, 且被将方的将格必须带 in-check 类 (memo 不得吞掉真实将军)
+  var chk2 = { n: 0 };
+  var realIn2 = sandbox.XQ.Rules.inCheck;
+  sandbox.XQ.Rules.inCheck = function (b, c) { chk2.n++; return realIn2(b, c); };
+  var e6 = E.create({ startBoard: checkBoard(), turn: 'black' });
+  var viewK = { boardEl: mkEl('div'), selected: null, flip: false, pendingAnim: null, startTime: Date.now(), arrow: true };
+  viewK.boardEl.parentNode = mkEl('div');
+  sandbox.XQ.UI.render(e6, viewK);
+  var cellsK = viewK.boardEl.children || [], marked = 0;
+  for (var ci = 0; ci < cellsK.length; ci++) { if (cellsK[ci]._cls && cellsK[ci]._cls['in-check']) marked++; }
+  ok(chk2.n === 1, 'L15 真实渲染一帧内 inCheck 只做 1 次全盘扫描 (实测 ' + chk2.n + '; 修前 2 — 逐格判定与状态条各一次)');
+  ok(marked === 1, 'L15 被将方的将格渲染出 in-check 类 (memo 与渲染联动, 实测 ' + marked + ' 格)');
+  sandbox.XQ.Rules.inCheck = realIn2;
+}

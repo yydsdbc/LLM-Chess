@@ -30,7 +30,7 @@ git push                 # 直连优先；失败: git -c http.https://github.com
 
 - `CHANGELOG.md` 保持 Keep a Changelog 格式。
 - 发版流程：bump `package.json` → CHANGELOG 建版本段 → commit → tag `vX.Y.Z` → push tag（`release.yml` 自动跑测试门禁并发 Release）。
-- `test/check_ui.js` 守护 README 徽章版本号 = package.json——改版本号三处同步。
+- `test/check_ui.js` 守护 README 双语 H1 版本号一致、且与 package.json 的主次版本前缀对齐 (无版本徽章; 只比 `v\d+.\d+` 前缀, 补丁号不校验)——改版本号记得同步 README 双语 H1。
 - 历史版本：v1.0.2（2026-09-05 上午）、v1.0.3（2026-09-05 晚，prompt-level tiers + CORS/限流/ETag）。
 
 ## 每日 cron 代理约定（llmchess-daily-optimize-report，09:00）

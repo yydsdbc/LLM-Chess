@@ -24,6 +24,6 @@ jobs:
           pr-message: |
             🎉 Thanks for your first PR! 感谢第一个 PR!
 
-            - Before review, make sure `npm test` (7 suites) and `npm run check` (syntax + prompt gate) pass locally. 评审前请本地跑 `npm test` 与 `npm run check` (含提示词硬门禁)。
+            - Before review, make sure `npm test` (15 suites) and `npm run check` (syntax + prompt gate) pass locally. 评审前请本地跑 `npm test` 与 `npm run check` (含提示词硬门禁)。
             - Zero-dependency rule: browser modules must not use `require()`/npm packages. 零依赖规则详见 CONTRIBUTING.md。
             - Never commit `config/keys.json`. 密钥文件严禁入库。

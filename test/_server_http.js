@@ -88,7 +88,7 @@ async function main() {
   const fS = require('fs');   // 第29轮: 文件级 const fs 在 133 行 (TDZ), main 顶部先取独立引用
   const keysFile = path.join(ROOT, 'temp', 'guard-keys-' + process.pid + '.json');
   fS.mkdirSync(path.dirname(keysFile), { recursive: true });
-  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key' }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', protocol: 'anthropic', apiKey: 'anthropic-test-key' }, stubnokey: { name: 'StubNoKey', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: '' } } }));
+  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key' }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', protocol: 'anthropic', apiKey: 'anthropic-test-key' }, stubnokey: { name: 'StubNoKey', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: '' }, stubheaders: { name: 'StubHdr', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key', headers: { 'X-Custom-Auth': 'hdr-ok' } } } }));
 
   server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile }) });
   const up = await waitHealth(40);   // ~6s 上限
@@ -178,6 +178,25 @@ async function main() {
   const clampRes = await postChat({ provider: 'stubprov', model: 'stub-model', messages: [{ role: 'user', content: 'x' }], max_tokens: 999999 });
   ok(clampRes.status === 200 && clampRes.body.indexOf('"echo_max_tokens":32768') >= 0, 'max_tokens 钳制: 999999 → 转发 32768 (上游回显断言)');
 
+  /* ── 第43轮: 上游请求构造口径 (server.js 零改动) ──
+     providerCfg.headers 是 v3.5 文档承诺的能力 (部分网关需额外鉴权头), 此前零自动化覆盖;
+     thinking 字段只对 GLM 系 (bigmodel/tokenrhythm) 透传, 其余上游收到未知字段会直接 400 — 属真实回归风险;
+     缺省值 (temperature/max_tokens/stream) 是「不传就按默认」的口径, 一旦漂移会静默改变上游采样行为。 */
+  const hdrRes = await postChat({ provider: 'stubheaders', model: 'stub-model', messages: [{ role: 'user', content: 'h' }], thinking: true });
+  ok(hdrRes.status === 200, '上游请求构造: 带自定义 headers 的服务商可正常中继 (200)');
+  let hdrUp = null;
+  try { hdrUp = { h: lastUpReq.headers, b: JSON.parse(lastUpReq.body) }; } catch (eH2) {}
+  ok(!!hdrUp && hdrUp.h['x-custom-auth'] === 'hdr-ok', '上游请求构造: providerCfg.headers 自定义头透传到上游 (v3.5 特性此前零覆盖)');
+  ok(!!hdrUp && hdrUp.h['content-type'] === 'application/json' && hdrUp.h.authorization === 'Bearer test-key',
+    '上游请求构造: 自定义头合并不覆盖默认头 (Content-Type / Authorization 仍在)');
+  ok(!!hdrUp && !('thinking' in hdrUp.b), '上游请求构造: 非 GLM 系上游不注入 thinking 字段 (严格校验的上游会 400)');
+  ok(!!hdrUp && hdrUp.b.temperature === 0.3 && hdrUp.b.max_tokens === 2048 && hdrUp.b.stream === false && !('stream_options' in hdrUp.b),
+    '上游请求构造: 缺省口径 temperature 0.3 / max_tokens 2048 / stream false / 无 stream_options');
+  const tRes = await postChat({ provider: 'stubprov', model: 'stub-model', messages: [{ role: 'user', content: 't' }], temperature: 0.9, max_tokens: 512 });
+  let tUp = null;
+  try { tUp = JSON.parse(lastUpReq.body); } catch (eT2) {}
+  ok(tRes.status === 200 && !!tUp && tUp.temperature === 0.9 && tUp.max_tokens === 512, '上游请求构造: 显式 temperature/max_tokens 原样透传 (不被缺省覆盖)');
+
   // 第37轮: anthropic 协议中继穿越 — 最复杂的转换路径 (system 提取/同角色合并/鉴权头/SSE 合成/错误映射) 此前零自动化覆盖
   // 节奏: 前 4 个 chat POST 同秒内就绪 → 先睡一个完整秒窗, 让本块 + 后续 415 断言均匀落在新秒窗 (8/s 限流下同秒连发自己打自己)
   await new Promise(function (r) { setTimeout(r, 1100); });
@@ -205,6 +224,10 @@ async function main() {
   const streamRes = await postChat({ provider: 'stubprov', model: 'stub-model', messages: [{ role: 'user', content: 's' }], stream: true });
   ok(streamRes.status === 200 && /text\/event-stream/.test(streamRes.headers['content-type'] || '') && streamRes.body.indexOf('stream-chunk') >= 0 && streamRes.body.indexOf('[DONE]') >= 0, 'openai 中继流式: stream:true → 上游 SSE 帧直通 (含内容与 [DONE])');
   ok(streamRes.headers['cache-control'] === 'no-store', 'openai 中继流式: Cache-Control no-store (流式响应不缓存)');
+  let streamUp = null;
+  try { streamUp = JSON.parse(lastUpReq.body); } catch (eS2) {}
+  ok(!!streamUp && streamUp.stream === true && !!streamUp.stream_options && streamUp.stream_options.include_usage === true,
+    'openai 中继流式: 请求体带 stream_options.include_usage (上游才会回报用量; 非流式路径已断言不带)');
   ok(relayRes.headers['access-control-allow-origin'] === '*', 'openai 中继非流式: 响应带 ACAO (无 Origin → *)');
   let healthVer = '', pkgVer = '';
   try { healthVer = JSON.parse(health.body).version; } catch (eV1) {}
@@ -214,6 +237,31 @@ async function main() {
   ok(dirReq.status === 404, 'GET /ui (目录) → 404 (EISDIR 不崩连接)');
   const bslash = await req('GET', '/' + encodeURIComponent('..\\') + 'server.js');
   ok(bslash.status !== 200 && bslash.body.indexOf('API Key 只保存在服务端') < 0, '反斜杠穿越 (..\\server.js) → 非 200 且不泄露源码 (Windows/POSIX 双向断言)');
+
+  /* ── 第43轮: 静态内容缓存 (_staticCache, 第37轮引入的 mtime+size 判据) — 此前零自动化覆盖 ──
+     风险面: 判据一旦失效 (例如永远复用首读字节), 用户改了 js/css 后强刷仍拿到旧代码, 带 query 的
+     cache-bust 也救不回来 (query 与裸路径共用同一 ETag/缓存项)。本组用真实文件改动双向钉住。 */
+  const cacheName = 'guard-static-' + process.pid + '.txt';
+  const cachePath = path.join(ROOT, 'temp', cacheName);
+  const cacheUrl = '/temp/' + cacheName;
+  fS.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fS.writeFileSync(cachePath, 'AAAA');
+  const sc1 = await req('GET', cacheUrl);
+  ok(sc1.status === 200 && sc1.body === 'AAAA', '静态缓存: 首读返回文件内容 + 200');
+  const sc2 = await req('GET', cacheUrl);
+  ok(sc2.status === 200 && sc2.body === 'AAAA' && sc2.headers.etag === sc1.headers.etag, '静态缓存: 二次请求命中缓存 (同字节同 ETag, 零磁盘回读)');
+  await new Promise(function (r) { setTimeout(r, 30); });
+  fS.writeFileSync(cachePath, 'BBBBBBBB');   // 长度与内容都变
+  const sc3 = await req('GET', cacheUrl);
+  ok(sc3.status === 200 && sc3.body === 'BBBBBBBB' && sc3.headers.etag !== sc1.headers.etag,
+    '静态缓存: 文件改动后立即失效 (不返回旧字节/旧 ETag — 否则改代码强刷无效)');
+  await new Promise(function (r) { setTimeout(r, 30); });
+  fS.writeFileSync(cachePath, 'CCCCCCCC');   // 长度不变, 只有 mtime 变 → 单独钉住 mtime 判据
+  const sc4 = await req('GET', cacheUrl);
+  ok(sc4.body === 'CCCCCCCC', '静态缓存: 同长度改内容仍失效 (mtime 判据独立生效, 非仅靠 size)');
+  try { fS.rmSync(cachePath, { force: true }); } catch (eSC) {}
+  const sc5 = await req('GET', cacheUrl);
+  ok(sc5.status === 404, '静态缓存: 文件删除后回到 404 (缓存不复活已删文件)');
 
   // 第37轮: CORS 策略 (req_origin_safe 零覆盖) — localhost 回显 / 异源与无 Origin 均 '*' (走 OPTIONS 预检, 不耗限流窗)
   const or1 = await req('OPTIONS', '/api/chat', null, { Origin: 'http://localhost:5173' });
@@ -284,6 +332,7 @@ function finish() {
   try { if (server) server.kill(); } catch (e) {}
   try { upstream.close(); } catch (eU) {}
   try { fs.rmSync(keysFile, { force: true }); } catch (eK) {}
+  try { fs.rmSync(path.join(ROOT, 'temp', 'guard-static-' + process.pid + '.txt'), { force: true }); } catch (eK2) {}   // 第43轮: 静态缓存测试的临时文件兜底清理
   setTimeout(function () {
     console.log('_server_http (port ' + PORT + '):');
     console.log(results.join('\n'));

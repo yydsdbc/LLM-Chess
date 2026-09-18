@@ -335,9 +335,33 @@ check('E7 重复局面计数: 马进退一回合 → 当前局面出现1次, und
   e.applyPlayerMove(2, 2, 1, 0);   // 黑马 c8-b10 (回) — 盘面回到开局
   if (e.repetitionCount() !== 1) return false;
   e.undoPly(); e.undoPly();
-  if (e.repetitionCount() !== 0) return false;   // 撤两步回到 c3/c8 局面 (未重复)
+  /* 第43轮 语义修正: 撤两步后当前局面是 c3/c8 (红走), 该局面在本局历史里**出现过一次** (第 2 手之后),
+     故计数应为 1。原期望 0 是钉住了错误实现: 旧 undoPly 在 undoMove **之后**取键, 扣的是「恢复后的局面」
+     而不是「刚被撤掉的局面」, 于是 P2 被无故扣掉、而真正该扣的 P4 永远留着 (重走同一着时计数虚增 →
+     第 3 次重走当场判「三次重复和棋」)。语义正解 = 计数反映**当前历史**里该局面出现的次数。 */
+  if (e.repetitionCount() !== 1) return false;   // 撤两步回到 c3/c8 局面 — 该局面在剩余历史中出现 1 次
   e.undoPly(); e.undoPly();
   return e.repetitionCount() === 0 && e.ply() === 0;   // 全部撤销: 开局位置计数为0 (未再入)
+})());
+check('E23 悔棋后重走同一着不得虚增重复计数 (第43轮: 旧实现 3 次重走即误判三次重复和棋)', (function () {
+  var e = XQ.Engine.create();
+  for (var i = 0; i < 4; i++) {
+    var mv = e.generateLegalMoves()[0];   // 每轮都取「当前行棋方」的首个合法着法 (红黑交替)
+    var r = e.applyPlayerMove(mv.from.x, mv.from.y, mv.to.x, mv.to.y);
+    if (!r.ok || r.status.result !== 'normal') return false;   // 4 轮「走一着 + 悔一着」都不得触发终局
+    if (e.repetitionCount() !== 1) return false;              // 同一局面在盘上只出现过一次 → 恒为 1
+    if (!e.undoPly()) return false;
+  }
+  if (e.isOver() || e.repetitionCount() !== 0) return false;   // 全撤: 回到开局, 无残留计数
+  /* 反向: 真·三次重复仍须判和 (修复不得把规则一并放宽) — 马来回 3 回合 = 第 12 手判和 (E16 同口径) */
+  var g = XQ.Engine.create();
+  var seq = [[1,9,2,7],[1,0,2,2],[2,7,1,9],[2,2,1,0],[1,9,2,7],[1,0,2,2],[2,7,1,9],[2,2,1,0],[1,9,2,7],[1,0,2,2],[2,7,1,9],[2,2,1,0]];
+  for (var j = 0; j < seq.length && !g.isOver(); j++) {
+    var r2 = g.applyPlayerMove(seq[j][0], seq[j][1], seq[j][2], seq[j][3]);
+    if (!r2.ok) return false;   // 终局前不得出现非法着法
+  }
+  var res = g.result();
+  return g.isOver() && res.result === 'repetition' && res.winner === null;
 })());
 check('E8 两回合来回 → 重复计数2; newGame 清零', (function () {
   var e = XQ.Engine.create();

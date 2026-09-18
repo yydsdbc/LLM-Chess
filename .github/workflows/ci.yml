@@ -40,5 +40,5 @@ jobs:
       - name: Syntax + prompt gate (npm run check)
         run: npm run check
 
-      - name: Run full test suite (9 suites)
+      - name: Run full test suite (15 suites)
         run: npm test

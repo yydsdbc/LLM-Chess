@@ -54,7 +54,8 @@ LLM-chess/
 │   └── engine.js       #   Engine facade (the only entry point for the UI)
 ├── ai/
 │   ├── random_agent.js #   uniform random legal moves (baseline opponent)
-│   └── llm_agent.js    #   OpenAI-protocol agent (via /api/chat relay, retries + self-validation)
+│   ├── llm_agent.js    #   OpenAI-protocol agent (via /api/chat relay, retries + self-validation)
+│   └── committee_agent.js # same-side multi-LLM council (vote / tie-break / rotation)
 ├── benchmark/
 │   ├── match.js        #   match manager (any two agents → game record)
 │   ├── record.js       #   records: localStorage + JSON import/export
@@ -65,7 +66,9 @@ LLM-chess/
 │   └── position.js          # PositionEvaluator: mobility / king safety / threats / pawn lines → Chinese summary
 ├── ui/
 │   ├── renderer.js     #   pure renderer (reads engine snapshots only)
-│   └── app.js          #   controller: interaction / sound / saves / agent scheduling / replay overlay
+│   ├── i18n.js         #   zh/EN dictionary + data-i18n apply + language hot-swap event
+│   ├── app.js          #   controller: interaction / sound / saves / agent scheduling / replay overlay
+│   └── icon.svg        #   PWA/app icon (any + maskable)
 ├── replay/
 │   ├── replay.js            # replay data layer: record → engine state machine (tolerant of dirty data)
 │   └── replay_controller.js # replay control: play/pause/step/seek/7 speeds/loop
@@ -162,19 +165,19 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 | Command | Coverage |
 |---------|----------|
 | `npm test` | runs the full suite below |
-| `node test/run_tests.js` | engine, 49 checks (perft gold standard, repetition, perpetual-check tracking, moveTag, threefold draw, hanging guard, natural-rule draw) |
+| `node test/run_tests.js` | engine, 50 checks (perft gold standard, repetition, perpetual-check tracking, moveTag, threefold draw, hanging guard, natural-rule draw) |
 | `node test/test_evaluation.js` | evaluation knowledge, 88 checks (phases / dynamic values / advisors / aged pawns / bare cannon / palace horse / central pawn / gate control / pawn-in-palace / bottom cannon / side+corner horse) |
 | `node test/test_llm_convo.js` | LLM agent, 151 checks (prompts / retries / fallback valve / opening guard / warnings / full-width rescue / confidence / attempts / external abort / signal-getter form) |
-| `node test/replay_smoke.js` | replay, 53 checks (data/control layers, speeds, seek, tolerance, parseEval direction, imported records, capture-jump) |
+| `node test/replay_smoke.js` | replay, 52 checks (data/control layers, speeds, seek, tolerance, parseEval direction, imported records, capture-jump) |
 | `node test/_clean_reason_check.js` | reasoning-stream cleaner, 10 checks |
 | `node test/cn_notation_check.js` | Chinese notation, 25 checks (classic anchors / file-disambiguation 前中后 / legacy-key sentinel) |
-| `node test/i18n_check.js` | i18n guards, 11 groups (zh/en key parity, placeholder parity, data-i18n / t() coverage, static & JS-side CJK attribute hooks, dynamic write-entry CJK, key-existence for non-first-argument key references) |
+| `node test/i18n_check.js` | i18n guards, 13 groups (zh/en key parity, placeholder parity, data-i18n / t() coverage, static & JS-side CJK attribute hooks, dynamic write-entry CJK, key-existence for non-first-argument key references, button-label hooks — `data-i18n-title` alone no longer exempts a button's text, preference-option hooks) |
 | `node test/link_check.js` | docs link guard — relative links in all `.md` files must resolve to real files |
-| `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest (icons/screenshots/categories) + SW guard + replay-dialog semantics + life-cycle generation guards + a11y/PWA source guards (#sr-alert announcer, `#sr-cursor` keyboard-cursor announcement, label `for=`, move-log keyboard, drag abort, end-card focus return, settings-modal shortcut gate, SW full-shell precache + navigation fallback + cache-write catch, piece-glyph single outlet, fallback detection off raw meta) + wire-up/write-point guards (static ids must be taken from `document`, end-card export binding, `dataset.flip` write, hidden `#btn-row` focusability, status-clock ticker, Enter/Space yield to controls, cursor-announcer clearing, replay first paint, panel-stat single outlet, replay-mode AI gate, end-game alias declaration order) |
+| `node test/check_ui.js` | syntax (17 files) + ID cross-check + script-src existence + localStorage prefix guard + release files + HTML hygiene + PWA manifest (icons/screenshots/categories) + SW guard + replay-dialog semantics + life-cycle generation guards + a11y/PWA source guards (#sr-alert announcer, `#sr-cursor` keyboard-cursor announcement, label `for=`, move-log keyboard, drag abort, end-card focus return, settings-modal shortcut gate, SW full-shell precache + navigation fallback + cache-write catch, piece-glyph single outlet, fallback detection off raw meta) + wire-up/write-point guards (static ids must be taken from `document`, end-card export binding, `dataset.flip` write, hidden `#btn-row` focusability, status-clock ticker, Enter/Space yield to controls, cursor-announcer clearing, replay first paint, panel-stat single outlet, replay-mode AI gate, end-game alias declaration order) + a display-value/timing section (replay toolbar labels from the dictionary, play/pause first paint, dialog semantics + one shared keyboard exit for both full-screen overlays, the repetition-counter key taken before `undoMove`, engine hot-path memos invalidated by `bumpVer`) |
 | `node test/_prompt_level_smoke.js` | prompt-tier injection: each level constant + legacy style map + prefix-cache invariance |
 | `node test/replay_risk_check.js` | replay risk detector + record quota fallback |
 | `node test/_committee_agent.js` | same-side multi-LLM committee: council vote, tie-break, rotation, all-fail, usage sum |
-| `node test/_server_http.js` | server.js HTTP behavior, 61 checks (incl. real relay traversal via injected stub upstream) (spawns a real server: health shape+version / static+ETag/304 incl. sw.js and the `?query` form / 404 / path-traversal 403 incl. sibling-prefix dir + backslash form / malformed-encoding 400 / OPTIONS on api+static / bad-json 400 / empty body 400 / >2MB abort / unknown provider 400 / missing-apiKey 400 / missing model-field 400 / providers shape + no-key-leak / HEAD+ETag / manifest+icon+sw MIME / method guards / wrong-ETag 200 / rate-limit 429 + Retry-After / OpenAI streaming SSE passthrough / directory 404 / keys.json hot-reload + half-written tolerance) |
+| `node test/_server_http.js` | server.js HTTP behavior, 73 checks (incl. real relay traversal via injected stub upstream) (spawns a real server: health shape+version / static+ETag/304 incl. sw.js and the `?query` form / 404 / path-traversal 403 incl. sibling-prefix dir + backslash form / malformed-encoding 400 / OPTIONS on api+static / bad-json 400 / empty body 400 / >2MB abort / unknown provider 400 / missing-apiKey 400 / missing model-field 400 / providers shape + no-key-leak / HEAD+ETag / manifest+icon+sw MIME / method guards / wrong-ETag 200 / rate-limit 429 + Retry-After / OpenAI streaming SSE passthrough / directory 404 / keys.json hot-reload + half-written tolerance / **static-cache invalidation** (changed or same-size-rewritten file must not serve stale bytes) / **upstream request construction** (per-provider custom headers merged without clobbering defaults, `thinking` injected only for GLM-family upstreams, `stream_options` only when streaming, documented defaults)) |
 | `node test/analyze_blunders.js <log.json>` | blunder detector (hanging moves, missed mates, shuffling; `--top=N --type=...`) |
 | `node test/match_headless.js <provider> <model> [n]` | headless LLM game, n moves |
 
@@ -233,7 +236,7 @@ API keys exist only in server-side `config/keys.json` (never commit it — it is
 - **Replay: 跳到下一手吃子 / 上一手吃子 (键盘 `C` / `Shift+C`, 按钮 `⏪吃` / `吃子⏩`)** — 长局 (几十手) 跳过拉扯段快速看子力交换点; controller 新增 `stepNextCapture` / `stepPrevCapture` (边界: 末尾/起点; 零吃子平跳); 走法表/帮助模态同步。
 - **Evaluation: 槽心马/挂角马知识 (v3.9.2)** — 检测己方马已逼近对方九宫侧翼位 (x∈{1,2,6,7} + 对方宫城行 ±1), 双向点名 (攻方「可跴将抽车取势, 护住马眼勿轻兑」/ 守方「勿随手送马, 可驱赶/走跴」); 与窝心马 v2.5 (x=4 宫心) 互斥; 初始局零噪音。
 - **PGN 导出加中文记谱 (v3.9.2)** — rpExportPGN 每手 comment 追加 `{cn: 炮八平五}` (与原 summary 并列), 中文用户直接看走子, 国际 PGN 解析器忽略额外字段。
-- 5 项总计; test 151 / 88 / 49 / 53 / 10 / 25 / check_ui EXIT 0; 完整清单见 [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md) 11 轮。
+- 5 项总计; test 151 / 88 / 50 / 52 / 10 / 25 / check_ui EXIT 0; 完整清单见 [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md) 11 轮。
 
 ## Roadmap
 

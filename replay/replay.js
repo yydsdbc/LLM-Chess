@@ -12,8 +12,10 @@
     return {
       id: rec.id || ('r' + d.getTime()),
       stamp: d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()),
-      red: (rec.red && rec.red.name) || '红方',
-      black: (rec.black && rec.black.name) || '黑方',
+      /* 第43轮 i18n: 兜底名此前硬编码 '红方'/'黑方' — 无名字的导入棋谱在 EN 回放列表/头部显示中文。
+         改走字典 (status_side_red/black); node 侧无 i18n 时保持原字面量。 */
+      red: (rec.red && rec.red.name) || (XQ.I18N ? XQ.I18N.t('status_side_red') : '红方'),
+      black: (rec.black && rec.black.name) || (XQ.I18N ? XQ.I18N.t('status_side_black') : '黑方'),
       redModel: (rec.red && rec.red.model) || null,
       blackModel: (rec.black && rec.black.model) || null,
       redModels: (rec.red && rec.red.models) || null,
