@@ -59,6 +59,50 @@ const rFree = XQ.Replay.moveRisk(sFree.engine(), XQ.Move.parseSq('e3'), XQ.Move.
 ok('免费吃卒 负风险', rFree < 0, 'risk=' + rFree);
 ok('prev 回退后 risks 表仍可用 (memo 保留)', s.prev() === true && Object.keys(s.risks()).length === 3, 'keys=' + Object.keys(s.risks()).length);   // 第37轮: 懒计算 memo 后退不丢
 
+/* ── 第44轮: 懒补齐必须定位到「该手走之前」的局面 ──
+   原 computeRisk 把引擎留在调用时的位置, 于是**跳转** (点走法条目 / 拖进度条 / End / 回跳) 之后
+   generateLegalMoves 里找不到那一手 → 恒 0 且不写 mark: 疑误着法徽章 (⚠) 与 将/杀/困 标注整体消失,
+   而跳转正是回放层最主要的浏览方式 (逐手 next 才会算对, 因为 next 里是在 apply 之前调用 moveRisk)。 */
+// ① 2 手谱: 1.红相 c1-a3  2.黑炮 b8xb1 (吃红马, d1 仕为炮架) → 将军
+const recChk = {
+  id: 'chk_case', date: new Date().toISOString(),
+  red: { name: '红', kind: 'llm' }, black: { name: '黑', kind: 'llm' },
+  moves: [
+    { n: 1, side: 'red', piece: 'bishop', from: 'c1', to: 'a3' },
+    { n: 2, side: 'black', piece: 'cannon', from: 'b8', to: 'b1', captured: 'knight' }
+  ]
+};
+const cStep = XQ.Replay.create(recChk);
+while (cStep.idx() < cStep.total()) cStep.next();
+ok('逐手 next: 将军手标注「将」', cStep.marks()[2] === '将', 'marks=' + JSON.stringify(cStep.marks()));
+const cJump = XQ.Replay.create(recChk);
+cJump.goto(2);   // 与点走法条目 / 拖进度条 / End 同一条路径
+ok('跳转 goto: 将军手同样标注「将」', cJump.marks()[2] === '将', 'marks=' + JSON.stringify(cJump.marks()));
+ok('跳转后 state().mark 暴露「将」', cJump.state().mark === '将', 'mark=' + cJump.state().mark);
+// ② 逐手与跳转的 risks 表必须逐键一致 (跳转路径不得退化为全 0)
+ok('逐手与跳转 risks 表一致', JSON.stringify(cStep.risks()) === JSON.stringify(cJump.risks()),
+  'step=' + JSON.stringify(cStep.risks()) + ' jump=' + JSON.stringify(cJump.risks()));
+// ③ 回跳 (rebuild 清 memo) 后重新补齐仍一致
+const cBack = XQ.Replay.create(recChk);
+cBack.goto(2); cBack.risks(); cBack.goto(1); cBack.goto(2);
+ok('回跳后重新补齐 risks 一致', JSON.stringify(cBack.risks()) === JSON.stringify(cStep.risks()),
+  'back=' + JSON.stringify(cBack.risks()));
+ok('回跳后重新补齐 marks 一致', cBack.marks()[2] === '将', 'marks=' + JSON.stringify(cBack.marks()));
+// ④ 懒补齐不得把引擎位置与 idx 弄脱钩 (原实现在 ply>idx 时会把 eng 留在 ply 而 idx 回退)
+const cSync = XQ.Replay.create(recChk);
+cSync.goto(1); cSync.risks(); cSync.marks();
+const cRef = XQ.Replay.create(recChk);
+cRef.next();
+ok('补齐后引擎盘面与 idx 仍同步', JSON.stringify(cSync.state().cells) === JSON.stringify(cRef.state().cells),
+  'idx=' + cSync.idx() + '/' + cRef.idx());
+// ⑤ 风险标注也不得在跳转路径消失 (用既有 recRisk: 第4手砲吃护兵)
+const rStep = XQ.Replay.create(recRisk);
+while (rStep.idx() < rStep.total()) rStep.next();
+const rJump = XQ.Replay.create(recRisk);
+rJump.goto(4);
+ok('跳转路径同样标出疑误着法 (第4手 ≥3)', (rJump.risks()[4] || 0) >= 3, 'jump risk4=' + rJump.risks()[4]);
+ok('跳转与逐手 risk4 相等', rJump.risks()[4] === rStep.risks()[4], 'jump=' + rJump.risks()[4] + ' step=' + rStep.risks()[4]);
+
 /* 真实棋谱 (match_headless) 全程检测不崩 + 风险值非 NaN
    第29轮 CI 修复: 文件可能不存在 (logs/ 被 gitignore, 本地才有) — 缺文件时合成 4 手谱, 不再 ENOENT
    (与第12轮 replay_smoke CI 红灯同款教训) */

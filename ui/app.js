@@ -1015,6 +1015,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var CL = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
     for (var ci = 0; ci < 9; ci++) if (cols[ci]) cols[ci].textContent = flipOn ? CL[8 - ci] : CL[ci];
     for (var ri = 0; ri < 10; ri++) if (rowsL[ri]) rowsL[ri].textContent = String(flipOn ? ri + 1 : 10 - ri);
+    /* 第44轮 a11y: 翻转是切换式按钮 — 补 aria-pressed, 读屏可感知当前视角 (此前只有「⇅ 翻转」文案, 无开/关态) */
+    var bfP = document.getElementById('btn-flip');
+    if (bfP) bfP.setAttribute('aria-pressed', flipOn ? 'true' : 'false');
     if (typeof refresh === 'function') refresh();
     // 第42轮: 回放层开着时立即按新视角重画 (否则要等下一次步进才翻转, 与主盘面短暂不一致)
     if (rpEl && rpEl.ov.style.display === 'block' && rpSession) { try { rpPaintBoard(rpSession.state(), false); } catch (eFB) {} }
@@ -1105,6 +1108,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (document.fullscreenElement) { document.exitFullscreen(); return; }
     var el = document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen();
+  }
+  /* 第44轮 a11y: 全屏按钮是切换式按钮 (aria-pressed 语义) — 此前只改文案, 读屏不知当前是否已全屏。
+     状态唯一事实源 = document.fullscreenElement; 浏览器原生 Esc 退全屏也会派发 fullscreenchange, 故两条路径同源。 */
+  function paintFullscreenPressed(on) {
+    var b = document.getElementById('btn-fullscreen');
+    if (b) b.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
 
   /* ── 音效开关 ── */
@@ -1266,6 +1275,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     document.getElementById('btn-restart').onclick = userRestart;   // v1.0.daily 确认入口
     var bfEl = document.getElementById('btn-flip');   // 第34轮: 视角翻转
     if (bfEl) bfEl.onclick = function () { flipOn = !flipOn; applyFlip(); };
+    paintFullscreenPressed(!!document.fullscreenElement);   // 第44轮 a11y: 全屏按钮初始 aria-pressed (刷新后仍处全屏时不误报「未全屏」)
     /* 第33轮: 服务商试连 (1-token 探活, 实测延迟/HTTP 错误) */
     ['red', 'black'].forEach(function (sd) {
       var tbtn = document.getElementById('ai-' + sd + '-testconn');
@@ -1362,10 +1372,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     }
     if (volEl) {
       volEl.value = savedVol;
+      /* 第44轮 性能: 拖动滑块时 input 每次像素移动都触发, 原来每次都同步落盘 localStorage
+         (localStorage 是同步写, 拖动一次产生上百次磁盘写)。拆开: input 只做实时生效 (增益),
+         change (松手/键盘结束) 才持久化 — 用户感知与落盘结果都不变。 */
       volEl.addEventListener('input', function () {
-        try { localStorage.setItem('xq_vol', String(volEl.value)); } catch (eV) {}
         volPct = parseInt(volEl.value, 10) || 0;
         if (mBus) mBus.gain.value = 0.9 * volPct / 100;
+      });
+      volEl.addEventListener('change', function () {
+        try { localStorage.setItem('xq_vol', String(volEl.value)); } catch (eV) {}
       });
     }
     if (dragEl) {
@@ -1398,29 +1413,37 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         }
       } catch (eW0) {}
       var spDrag = null;
-      var spApply = function (w) {
+      /* 第44轮 性能: 拖动分隔条时 pointermove 每次都同步写 localStorage (一次拖动上百次磁盘写)。
+         拆开: 拖动过程只改 CSS 变量 (实时观感), 松手/键盘调宽才落盘 (persist=true) — 落盘值与最终宽度一致。 */
+      var spApply = function (w, persist) {
         w = Math.max(170, Math.min(300, w));
         document.documentElement.style.setProperty('--panel-w', w + 'px');
-        try { localStorage.setItem('xq_panel_w', String(w)); } catch (eS2) {}
+        if (persist) { try { localStorage.setItem('xq_panel_w', String(w)); } catch (eS2) {} }
         if (spEl.setAttribute) spEl.setAttribute('aria-valuenow', String(w));
+        return w;
       };
       spEl.addEventListener('pointerdown', function (e) {
-        spDrag = { x: e.clientX, w: parseInt(getComputedStyle(document.querySelector('.think-panel')).width, 10) || 200 };
+        spDrag = { x: e.clientX, w: parseInt(getComputedStyle(document.querySelector('.think-panel')).width, 10) || 200, lastW: null };
         if (spEl.setPointerCapture) { try { spEl.setPointerCapture(e.pointerId); } catch (eC) {} }
         e.preventDefault();
       });
       spEl.addEventListener('pointermove', function (e) {
         if (!spDrag) return;
-        spApply(spDrag.w + (e.clientX - spDrag.x));
+        spDrag.lastW = spApply(spDrag.w + (e.clientX - spDrag.x), false);
       });
-      spEl.addEventListener('pointerup', function () {
+      var spCommit = function () {
+        if (!spDrag) return;
+        var w = spDrag.lastW;
         spDrag = null;
-      });
+        if (w != null) spApply(w, true);   // 松手才持久化 (仅拖动过才写)
+      };
+      spEl.addEventListener('pointerup', spCommit);
+      spEl.addEventListener('pointercancel', spCommit);   // 第44轮: 指针被系统夺走 (触屏转滚动) 时同样落盘, 与拖拽中止同口径
       spEl.addEventListener('keydown', function (e) {   // 第37轮 a11y: 键盘用户 ←/→ 调宽 (步长 10px, 与拖拽同口径持久化)
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
         e.preventDefault();
         var cur = parseInt(getComputedStyle(document.querySelector('.think-panel')).width, 10) || 200;
-        spApply(cur + (e.key === 'ArrowRight' ? 10 : -10));
+        spApply(cur + (e.key === 'ArrowRight' ? 10 : -10), true);
       });
     }
     // 第30轮: 页面隐藏兜底存档 (与每 5 手自动存档配套)
@@ -1581,17 +1604,17 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '<div id="rp-dialog" role="dialog" aria-modal="true" aria-labelledby="rp-title" style="max-width:1040px;margin:0 auto">'
       + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
       + '  <b id="rp-title" style="color:#f0d9a0;font-size:16px" data-i18n="rp_title">🎬 对局回放</b>'
-      + '  <select id="rp-pick" style="flex:1;min-width:260px;padding:6px;border-radius:6px;border:1px solid #7a5a2a;background:#2a1a0c;color:#f0e0c0;font-size:12px"></select>'
+      + '  <select id="rp-pick" data-i18n-aria="rp_pick_label" aria-label="选择棋谱" style="flex:1;min-width:260px;padding:6px;border-radius:6px;border:1px solid #7a5a2a;background:#2a1a0c;color:#f0e0c0;font-size:12px"></select>'
       + '  <button class="btn" id="rp-import" data-i18n="rp_import_btn" data-i18n-title="rp_import_title" title="导入本地棋谱 JSON (与主界面 保存棋谱 导出格式一致)">📂 导入</button>'
       + '  <label style="color:#c4a56e;font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="rp-autoplay" style="accent-color:#e0a030"><span data-i18n="rp_autoplay_label"> 自动播放</span></label>'
-      + '  <button class="btn" id="rp-next-record" data-i18n-title="rp_nextrecord_title" title="下一局">▶▶</button>'
-      + '  <button class="btn" id="rp-export-pgn" data-i18n-title="rp_export_pgn_title" title="导出 PGN">💾 PGN</button>'
-      + '  <button class="btn" id="rp-elo" data-i18n-title="elo_title" title="Elo 天梯">🏆</button>'
-      + '  <button class="btn" id="rp-backup" data-i18n-title="backup_btn" title="备份全部数据">📦</button>'
-      + '  <button class="btn" id="rp-restore" data-i18n-title="restore_btn" title="恢复备份">📥</button>'
-      + '  <button class="btn" id="rp-del" data-i18n-title="rp_delete_title" title="删除该棋谱" style="background:rgba(192,57,43,.25)">🗑</button>'
-      + '  <button class="btn" id="rp-help" data-i18n-title="rp_help_title" title="键盘帮助 (?)">⌨</button>'
-      + '  <button class="btn" id="rp-fullscreen" data-i18n-title="rp_full_title" title="全屏模式 (F)">⛶</button>'
+      + '  <button class="btn" id="rp-next-record" data-i18n-title="rp_nextrecord_title" data-i18n-aria="rp_nextrecord_title" aria-label="下一局" title="下一局">▶▶</button>'
+      + '  <button class="btn" id="rp-export-pgn" data-i18n-title="rp_export_pgn_title" data-i18n-aria="rp_export_pgn_title" aria-label="导出 PGN" title="导出 PGN">💾 PGN</button>'
+      + '  <button class="btn" id="rp-elo" data-i18n-title="elo_title" data-i18n-aria="elo_title" aria-label="Elo 天梯" title="Elo 天梯">🏆</button>'
+      + '  <button class="btn" id="rp-backup" data-i18n-title="backup_btn" data-i18n-aria="backup_btn" aria-label="备份" title="备份全部数据">📦</button>'
+      + '  <button class="btn" id="rp-restore" data-i18n-title="restore_btn" data-i18n-aria="restore_btn" aria-label="恢复" title="恢复备份">📥</button>'
+      + '  <button class="btn" id="rp-del" data-i18n-title="rp_delete_title" data-i18n-aria="rp_delete_title" aria-label="删除该棋谱" title="删除该棋谱" style="background:rgba(192,57,43,.25)">🗑</button>'
+      + '  <button class="btn" id="rp-help" data-i18n-title="rp_help_title" data-i18n-aria="rp_help_title" aria-label="键盘帮助 (?)" title="键盘帮助 (?)">⌨</button>'
+      + '  <button class="btn" id="rp-fullscreen" data-i18n-title="rp_full_title" data-i18n-aria="rp_full_title" aria-label="全屏模式 (F)" title="全屏模式 (F)">⛶</button>'
       + '  <button class="btn" id="rp-close" data-i18n="rp_close_btn" style="background:#c0392b">✕ 退出回放</button>'
       + '</div>'
       + '<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">'
@@ -1616,16 +1639,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '    <div style="background:rgba(30,18,8,.75);border:1px solid #7a5a2a;border-radius:10px;padding:10px 12px">'
       + '      <input id="rp-range" type="range" min="0" max="0" value="0" step="1" data-i18n-aria="rp_jump_label" aria-label="跳转" style="width:100%;accent-color:#e0a030">'
       + '      <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px">'
-      + '        <button class="btn" id="rp-loop" data-i18n-title="rp_loop_title" title="循环播放 (L)">🔁</button>'
-      + '        <button class="btn" id="rp-start" data-i18n-title="rp_start_title" title="回到开头">⏮</button>'
-      + '        <button class="btn" id="rp-prev" data-i18n-title="rp_prev_title" title="上一步">◀</button>'
+      + '        <button class="btn" id="rp-loop" data-i18n-title="rp_loop_title" data-i18n-aria="rp_loop_title" aria-label="循环播放 (L)" title="循环播放 (L)">🔁</button>'
+      + '        <button class="btn" id="rp-start" data-i18n-title="rp_start_title" data-i18n-aria="rp_start_title" aria-label="回到开头" title="回到开头">⏮</button>'
+      + '        <button class="btn" id="rp-prev" data-i18n-title="rp_prev_title" data-i18n-aria="rp_prev_title" aria-label="上一步" title="上一步">◀</button>'
       + '        <button class="btn" id="rp-toggle" data-i18n-title="rp_toggle_title" title="播放/暂停 (Space)" style="min-width:72px">' + T('btn_play') + '</button>'
-      + '        <button class="btn" id="rp-next" data-i18n-title="rp_next_title" title="下一步">▶|</button>'
-      + '        <button class="btn" id="rp-end" data-i18n-title="rp_end_title" title="跳到结尾">⏭</button>'
-      + '        <button class="btn" id="rp-back5" data-i18n-title="rp_back5_title" title="后退5手" style="font-size:11px">⏪-5</button>'
-      + '        <button class="btn" id="rp-back10" data-i18n-title="rp_back10_title" title="后退10手" style="font-size:11px">⏪-10</button>'
-      + '        <button class="btn" id="rp-skip5" data-i18n-title="rp_skip5_title" title="快进5手" style="font-size:11px">+5⏩</button>'
-      + '        <button class="btn" id="rp-skip10" data-i18n-title="rp_skip10_title" title="快进10手" style="font-size:11px">+10⏩</button>'
+      + '        <button class="btn" id="rp-next" data-i18n-title="rp_next_title" data-i18n-aria="rp_next_title" aria-label="下一步" title="下一步">▶|</button>'
+      + '        <button class="btn" id="rp-end" data-i18n-title="rp_end_title" data-i18n-aria="rp_end_title" aria-label="跳到结尾" title="跳到结尾">⏭</button>'
+      + '        <button class="btn" id="rp-back5" data-i18n-title="rp_back5_title" data-i18n-aria="rp_back5_title" aria-label="后退5手" title="后退5手" style="font-size:11px">⏪-5</button>'
+      + '        <button class="btn" id="rp-back10" data-i18n-title="rp_back10_title" data-i18n-aria="rp_back10_title" aria-label="后退10手" title="后退10手" style="font-size:11px">⏪-10</button>'
+      + '        <button class="btn" id="rp-skip5" data-i18n-title="rp_skip5_title" data-i18n-aria="rp_skip5_title" aria-label="快进5手" title="快进5手" style="font-size:11px">+5⏩</button>'
+      + '        <button class="btn" id="rp-skip10" data-i18n-title="rp_skip10_title" data-i18n-aria="rp_skip10_title" aria-label="快进10手" title="快进10手" style="font-size:11px">+10⏩</button>'
       + '        <button class="btn" id="rp-prev-cap" data-i18n="rp_prevcap" data-i18n-title="rp_prevcap_title" title="上一手吃子 (Shift+C)" style="font-size:11px">' + T('rp_prevcap') + '</button>'
       + '        <button class="btn" id="rp-next-cap" data-i18n="rp_nextcap" data-i18n-title="rp_nextcap_title" title="下一手吃子 (C)" style="font-size:11px">' + T('rp_nextcap') + '</button>'
       + '      </div>'
@@ -1639,8 +1662,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '        <button class="btn rp-speed" data-x="10">10x</button>'
       + '        <button class="btn rp-speed" data-x="20">20x</button>'
       + '        <span style="color:#c4a56e;font-size:12px;margin-left:8px" data-i18n="rp_jump_label">跳转</span>'
-      + '        <input id="rp-jump" type="number" min="0" step="1" data-i18n="rp_jump_placeholder" placeholder="手" style="width:64px;padding:4px;border-radius:6px;border:1px solid #7a5a2a;background:#2a1a0c;color:#f0e0c0;font-size:12px">'
-      + '        <button class="btn" id="rp-go">GO</button>'
+      + '        <input id="rp-jump" type="number" min="0" step="1" data-i18n="rp_jump_placeholder" data-i18n-aria="rp_jump_input_label" aria-label="跳转到指定手数" placeholder="手" style="width:64px;padding:4px;border-radius:6px;border:1px solid #7a5a2a;background:#2a1a0c;color:#f0e0c0;font-size:12px">'
+      + '        <button class="btn" id="rp-go" data-i18n="rp_go">' + T('rp_go') + '</button>'
       + '      </div>'
       + '    </div>'
       + '  </div>'
@@ -1733,11 +1756,14 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     }
     rpEl.btnFull.onclick = rpToggleFull;
     document.addEventListener('fullscreenchange', function () {
+      var on = !!document.fullscreenElement;
       if (rpEl && rpEl.btnFull) {
         var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
-        rpEl.btnFull.textContent = document.fullscreenElement ? '⤡' : '⛶';
-        rpEl.btnFull.title = document.fullscreenElement ? T('rp_exit_full_title') : T('rp_full_title');
+        rpEl.btnFull.textContent = on ? '⤡' : '⛶';
+        rpEl.btnFull.title = on ? T('rp_exit_full_title') : T('rp_full_title');
+        rpEl.btnFull.setAttribute('aria-label', on ? T('rp_exit_full_title') : T('rp_full_title'));   // 第44轮: 名称随态 (全屏中读屏听到「退出全屏」而非「全屏模式」)
       }
+      paintFullscreenPressed(on);   // 第44轮: 主界面全屏按钮同样随 fullscreenchange 同步 (Esc 退出也走这里)
     });
     rpEl.autoplay.checked = rpGetSetting('autoplay');
     rpEl.autoplay.onchange = function () { try { localStorage.setItem(RP_AUTOPLAY_KEY, this.checked ? '1' : '0'); } catch (e) {} };
@@ -1747,6 +1773,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     document.addEventListener('keydown', function (ev) {
       if (!rpEl || rpEl.ov.style.display !== 'block') return;
       if (ev.key !== 'Tab') return;
+      /* 第44轮: Elo 天梯/键盘帮助是挂在 document.body 上的**更高层** aria-modal 浮层 (不在 rpEl.ov 内)。
+         它们的 Tab 陷阱 (modalKeyGate) 注册更早, 但只在「焦点到边界」时才 preventDefault —
+         层内正常 Tab 时它放行, 随后本监听看到 activeElement 不在 rpEl.ov 内, 便强行把焦点拉回回放层控件:
+         用户每按一次 Tab 就被踢出打开着的对话, 落到遮罩**背后**的按钮上。凡有更高层模态打开, 本陷阱必须整体让位。 */
+      if (modalAnyOpen()) return;
       var fables = Array.prototype.filter.call(
         rpEl.ov.querySelectorAll('button, input, select, [tabindex="0"]'),
         function (el) { return el.offsetParent !== null && !el.disabled; }
@@ -1767,7 +1798,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
     ov.querySelector('#rp-go').onclick = rpJump;
     rpEl.jump.addEventListener('keydown', function (e) { if (e.key === 'Enter') rpJump(); });
-    rpEl.range.addEventListener('input', function () { rpCtrl && rpCtrl.gotoPly(parseInt(rpEl.range.value, 10)); });
+    /* 第44轮 性能: 拖动进度条时 input 每个像素都触发, 每次 gotoPly 都会整层重画 (90 格 DOM 重建 + 走法表/图表
+       innerHTML 全量替换)。同一帧内只认最后一次: rAF 合帧 — 拖动观感不变, 一帧最多一次重画。
+       无 rAF 环境 (老浏览器/测试桩) 退化为同步执行, 行为与修复前一致。 */
+    var rpRangePending = false;
+    rpEl.range.addEventListener('input', function () {
+      if (rpRangePending) return;
+      rpRangePending = true;
+      var apply = function () { rpRangePending = false; if (rpCtrl) rpCtrl.gotoPly(parseInt(rpEl.range.value, 10)); };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(apply); else apply();
+    });
     Array.prototype.forEach.call(ov.querySelectorAll('.rp-speed'), function (b) {
       b.onclick = function () { rpCtrl && rpCtrl.setSpeed(parseFloat(b.dataset.x)); rpPaintSpeeds(); try { localStorage.setItem('xq_replay:speed', b.dataset.x); } catch (e5) {} };
     });
@@ -2173,6 +2213,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { requestAnimationFrame(focusIn); });
     else setTimeout(focusIn, 0);
   }
+  /* 第44轮: 「当前是否有更高层模态浮层开着」的唯一事实源 — 供下层容器 (回放层) 的 Tab 陷阱让位用。
+     判据取 _modalOpener 的键 + 节点仍在文档内 (键在 modalClose 时删除, 故键存在即代表开启中)。 */
+  function modalAnyOpen() {
+    for (var id in _modalOpener) { if (document.getElementById(id)) return true; }
+    return false;
+  }
   /* 模态浮层的统一键盘闸门 (Esc 关闭 / Tab 陷阱 / 其余按键整体让位) — 返回 true 表示已接管该按键 */
   function modalKeyGate(ev, id, closeFn, toggleKeys) {
     var ov = document.getElementById(id);
@@ -2292,7 +2338,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var ex = document.getElementById('rp-help-overlay');
     if (ex) { rpHelpClose(); return; }
     var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
-    var row = function (keys, label) { return '<tr><td>' + keys + '</td><td>' + label + '</td></tr>'; };
+    /* 第44轮 a11y: 帮助表是「按键 → 行为」的对照表, 首列是行标题而非普通单元格 —
+       用 th[scope=row] 让读屏把按键与行为关联起来 (原为 <td>, 读屏只报一串无归属的文本)。样式保持原观感 (左对齐/常规字重)。 */
+    var row = function (keys, label) { return '<tr><th scope="row" style="text-align:left;font-weight:normal;padding:0">' + keys + '</th><td>' + label + '</td></tr>'; };
     var html = '<div id="rp-help-overlay" role="dialog" aria-modal="true" aria-labelledby="rp-help-title" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;display:flex;align-items:center;justify-content:center">'
       + '<div style="background:#2a1a0c;border:1px solid #7a5a2a;border-radius:14px;padding:20px 24px;max-width:520px;color:#f0e0c0;box-shadow:0 8px 32px rgba(0,0,0,.7)">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b id="rp-help-title" style="color:#f0d9a0;font-size:18px">' + T('rp_help_title_h') + '</b>'
@@ -2463,8 +2511,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           + '</div>';
       }
       if (e.votes && e.votes.length) {   // 第34轮: 会诊投票明细表 (逐选民落点/信心/失败)
+        /* 第44轮 a11y: 表头行原为 <td> → 读屏无法把「信心 0.8」关联到「信心」列。改 th[scope=col]
+           (样式显式保持原观感: 左对齐 + 常规字重, 避免 UA 默认的居中/加粗改变版式)。 */
+        var vth = 'padding:2px 6px;text-align:left;font-weight:normal';
         html += '<table style="width:100%;font-size:11px;margin-top:5px;border-collapse:collapse;background:rgba(0,0,0,.2);border-radius:6px">'
-          + '<tr style="color:#c4a56e"><td style="padding:2px 6px">' + T('votes_model') + '</td><td style="padding:2px 6px">' + T('votes_to') + '</td><td style="padding:2px 6px">' + T('votes_conf') + '</td></tr>';
+          + '<tr style="color:#c4a56e"><th scope="col" style="' + vth + '">' + T('votes_model') + '</th><th scope="col" style="' + vth + '">' + T('votes_to') + '</th><th scope="col" style="' + vth + '">' + T('votes_conf') + '</th></tr>';
         e.votes.forEach(function (v) {
           html += v.ok
             ? '<tr><td style="padding:2px 6px">' + esc2(v.model) + '</td><td style="padding:2px 6px;color:#f0d9a0">' + esc2(v.to) + '</td><td style="padding:2px 6px">' + (v.conf != null ? v.conf : '—') + '</td></tr>'
@@ -2536,6 +2587,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var rec = rpSession.record;
     var cur = rpSession.idx();
     var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TA = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
+    /* 第44轮 a11y: 本函数整体重建 innerHTML — 焦点若正落在某个 <li> 上 (键盘导航走法列表), 该节点会被摘掉,
+       焦点静默掉回 <body> (下一次 Tab 从页首重新开始, 读屏用户直接迷路)。重建前记住 ply, 重建后把焦点还给同一手。 */
+    var ae = document.activeElement;
+    var keepPly = (ae && ae.dataset && ae.dataset.ply && rpEl.movelist.contains(ae)) ? ae.dataset.ply : null;
     var risks = rpSession.risks ? rpSession.risks() : {};   // v1.7.6: 疑误着法静态风险分
     var marks = rpSession.marks ? rpSession.marks() : {};   // v1.7.9: 将/杀/困 一步效果标注
     var riskMark = (XQ.Replay && XQ.Replay.RISK_MARK) || 3;
@@ -2551,9 +2606,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var bmHtml = rpBookmarks.indexOf(i + 1) >= 0 ? '<span title="' + esc2(T('rp_bm_title')) + '" style="color:#ffd54a">🔖</span> ' : '';   // v1.0.daily 书签标记
       var risky = (risks[i + 1] || 0) >= riskMark ? '<span title="' + esc2(TA('rp_title_risky', { s: (risks[i + 1]).toFixed(1) })) + '" style="color:#e67e22">⚠</span> ' : '';
       var mk = marks[i + 1];   // v1.7.9: 将/杀/困 彩色标记 (杀 > 风险 > 将 > 标签)
-      var mkHtml = mk === '杀' ? '<span title="' + esc2(T('rp_title_mate')) + '" style="color:#ff5050;font-weight:bold">杀</span> '
-        : mk === '困' ? '<span title="' + esc2(T('rp_title_stuck')) + '" style="color:#ff5050">困</span> '
-        : mk === '将' ? '<span title="' + esc2(T('rp_title_check')) + '" style="color:#e0a030">将</span> ' : '';
+      /* 第44轮 i18n: mk 是 core/judge.js 的语言中立数据标记 ('杀'/'困'/'将'), 判定必须留在字面量上;
+         但**展示文本**此前把同一批汉字写死 → EN 界面下走法列表显示中文。现按字典取词 (zh 仍为一字, EN 为 Mate/Stuck/Check)。 */
+      var mkHtml = mk === '杀' ? '<span title="' + esc2(T('rp_title_mate')) + '" style="color:#ff5050;font-weight:bold">' + esc2(T('rp_mk_mate')) + '</span> '
+        : mk === '困' ? '<span title="' + esc2(T('rp_title_stuck')) + '" style="color:#ff5050">' + esc2(T('rp_mk_stuck')) + '</span> '
+        : mk === '将' ? '<span title="' + esc2(T('rp_title_check')) + '" style="color:#e0a030">' + esc2(T('rp_mk_check')) + '</span> ' : '';
       html += '<li' + cls + ' data-ply="' + (i + 1) + '" tabindex="0"><span class="rp-ml-side">' + sideTag + '</span><b>' + m.n + '</b><span style="flex:1">' + bmHtml + mkHtml + risky + esc2(label) + '</span></li>';
       visible++;
     }
@@ -2562,6 +2619,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     else rpEl.movelist.innerHTML = '<li style="color:#7a5a2a;justify-content:center">' + T('rp_no_match') + '</li>';
     if (rpEl.movesFilter) rpEl.movesFilter.title = visible + ' / ' + rec.moves.length;   // 第36轮: 过滤匹配计数
     if (visible > 0) { var act = rpEl.movelist.querySelector('li.active'); if (act) act.scrollIntoView({ block: 'nearest' }); }
+    /* 第44轮: 焦点归还 — 只在重建前焦点确实在本列表内时才接管, 否则会抢走过滤框/跳转框里的光标 */
+    if (keepPly != null) {
+      var back = rpEl.movelist.querySelector('li[data-ply="' + keepPly + '"]');
+      if (back && typeof back.focus === 'function') { try { back.focus({ preventScroll: true }); } catch (eFL) { back.focus(); } }
+    }
   }
   /* v1.6.1 边界禁用: 在起点 ⏮◀ 灰, 在终点 ⏭▶| 灰 (循环开启时 ▶ 在终点可继续) */
   function rpPaintButtons(st) {

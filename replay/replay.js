@@ -147,24 +147,35 @@ function parseEval(s) {
         rebuild(n);
       }
     }
+    /* 第44轮修复: 懒补齐必须把引擎定位到「该手走**之前**」的局面。
+       moveRisk 自己 cloneBoard + applyMove 复现这一手, 并用 eng.turn() 判定行动方 — 它要求传入的引擎停在
+       该手之前 (next() 里正是这么调的: 先算 risk 再 apply)。而原 computeRisk 把引擎留在调用时的位置:
+       用户「跳转」(点走法条目 / 拖进度条 / End / 回跳 rebuild) 之后 idx 已是目标手, 于是 generateLegalMoves
+       里根本找不到这一手 → picked 为 null → **恒返回 0 且不写任何 mark**。表现: 只有逐手 next 才有点评,
+       一旦跳转, 疑误着法徽章 (⚠) 与 将/杀/困 标注整体消失 — 而跳转恰恰是回放层最主要的浏览方式。
+       (实测 160 手随机局: 逐手 next 得 31 处风险 + 2 处「将」; goto(total) 后只剩 1 处风险、0 处标注。)
+       修: 用独立 scratch 引擎单调前进到 ply-1 (全量补齐 O(n)), 不碰调用方的 eng/idx (原实现在 ply>idx 时
+       会把 eng 留在 ply 而 idx 回退 → 引擎位置与 idx 脱钩, state() 会读到错的盘面), 也不走 rebuild
+       (rebuild 会清空 risks/marks memo, 使补齐退化为 O(n^2) 且丢结果)。 */
+    var scratch = null, scratchIdx = 0;   // scratchIdx = scratch 已应用的手数
+    function engineBefore(ply) {
+      if (!scratch || scratchIdx > ply - 1) { scratch = XQ.Engine.create({ ruleEnforce: false }); scratchIdx = 0; }
+      while (scratchIdx < ply - 1) {
+        var mm = moves[scratchIdx];
+        if (mm && mm.from && mm.to) {
+          var a = XQ.Move.parseSq(mm.from), b = XQ.Move.parseSq(mm.to);
+          scratch.applyPlayerMove(a.x, a.y, b.x, b.y);
+        }
+        scratchIdx++;
+      }
+      return scratch;
+    }
     function computeRisk(ply) {
       if (risks[ply] != null) return;
-      if (ply > idx) {   // 超前手的 risk 需先把引擎推进到该手 (懒计算按需重放)
-        var save = idx;
-        ensurePly(ply);
-        idx = save;
-        if (idx !== ply) {   // 被截断 (skip 手) — 直接前推
-          eng = XQ.Engine.create({ ruleEnforce: false });
-          skipped = {}; marks = {};
-          idx = 0;
-          for (var i = 0; i < ply; i++) applyPly(i);
-          idx = ply;
-        }
-      }
       var m = moves[ply - 1];
       if (!m || !m.from || !m.to) { risks[ply] = 0; return; }
       var f = XQ.Move.parseSq(m.from), t = XQ.Move.parseSq(m.to);
-      risks[ply] = moveRisk(eng, f, t, marks, ply);
+      risks[ply] = moveRisk(engineBefore(ply), f, t, marks, ply);
     }
 
     function next() {

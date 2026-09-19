@@ -423,6 +423,8 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
 }).then(function () {
   l15Round43();               // 第43轮: 重复计数 undo 键 + inCheck/posKey memo
 }).then(function () {
+  return l16Round44();        // 第44轮: sw.js 作用域相对 API 判定 + 写缓存挂事件生命周期
+}).then(function () {
   console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
   process.exit(fails.length ? 1 : 0);
   }, function (e) {
@@ -617,4 +619,74 @@ function l15Round43() {
   ok(chk2.n === 1, 'L15 真实渲染一帧内 inCheck 只做 1 次全盘扫描 (实测 ' + chk2.n + '; 修前 2 — 逐格判定与状态条各一次)');
   ok(marked === 1, 'L15 被将方的将格渲染出 in-check 类 (memo 与渲染联动, 实测 ' + marked + ' 格)');
   sandbox.XQ.Rules.inCheck = realIn2;
+}
+
+/* ═══ L16 第44轮: sw.js 两处「在线看着正常、只在特定部署/时序下坏掉」的行为 ═══
+   ① API 排除写死根绝对 '/api/' — 与全仓「作用域相对」设计不一致: 子路径部署 (GitHub Pages /LLM-Chess/) 下
+      app.js 的 fetch('api/providers') 解析成 /LLM-Chess/api/providers, 不以 '/api/' 开头 → 被当静态资源缓存
+      (离线拿到过期服务商列表)。修: 按 self.registration.scope 计算作用域根, 同时保留根绝对判定。
+   ② 写缓存是悬空 Promise (既不 return 也不 waitUntil) — respondWith 一 resolve 浏览器即可终止 SW, 写入被丢弃。
+      修: deferred + e.waitUntil, 四条路径都 settle。此处用「手动放行的 put」把生命周期差异变成可观测量。
+   独立 vm 沙箱 (子路径 scope), 与 L11 的根部署沙箱互不干扰。 */
+function l16Round44() {
+  var evs = {}, stored = {};
+  var sb = { console: console, URL: URL, location: { origin: 'http://localhost:8788', pathname: '/LLM-Chess/' } };
+  sb.globalThis = sb; sb.self = sb;
+  sb.registration = { scope: 'http://localhost:8788/LLM-Chess/' };
+  sb.addEventListener = function (t, fn) { evs[t] = fn; };
+  sb.skipWaiting = function () { return Promise.resolve(); };
+  sb.clients = { claim: function () { return Promise.resolve(); } };
+  sb.Response = { error: function () { return { ok: false, _browserErrorPage: true }; } };
+  var putRelease = null, putCalls = 0;
+  sb.fetch = function () { return Promise.resolve({ ok: true, type: 'basic', clone: function () { return { _copy: true }; } }); };
+  sb.caches = {
+    open: function () {
+      return Promise.resolve({
+        add: function (u) { stored[String(u)] = { ok: true }; return Promise.resolve(); },
+        put: function (req, res) { putCalls++; stored[typeof req === 'string' ? req : req.url] = res; return new Promise(function (r) { putRelease = r; }); }
+      });
+    },
+    keys: function () { return Promise.resolve([]); },
+    delete: function () { return Promise.resolve(true); },
+    match: function () { return Promise.resolve(undefined); }
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'), sb, { filename: 'sw.js' });
+
+  function fire(url, mode) {
+    var rec = { resp: null, wait: null, order: [] };
+    evs.fetch({
+      request: { method: 'GET', url: url, mode: mode || 'same-origin' },
+      respondWith: function (p) { rec.resp = p; rec.order.push('respondWith'); },
+      waitUntil: function (p) { rec.wait = p; rec.order.push('waitUntil'); }
+    });
+    return rec;
+  }
+  // ① 子路径部署: 作用域内的 api/* 必须放行 (旧实现恒不匹配 → 会被缓存)
+  var a = fire('http://localhost:8788/LLM-Chess/api/providers');
+  ok(a.resp === null && a.wait === null,
+    'L16 子路径部署下 /LLM-Chess/api/* 直接放行 (旧写死 /api/ 时会被当静态资源缓存)');
+  // ② 根绝对判定兼容保留 (根部署行为不变)
+  var b = fire('http://localhost:8788/api/health');
+  ok(b.resp === null, 'L16 根部署 /api/* 仍放行 (兼容保留, 不因改作用域相对而回归)');
+  // ③ 作用域内普通静态资源仍被 SW 接管
+  var c = fire('http://localhost:8788/LLM-Chess/ui/app.js');
+  ok(c.resp !== null, 'L16 作用域内普通静态资源仍走 SW (respondWith 被调用)');
+  var settled = false;
+  if (c.wait) c.wait.then(function () { settled = true; });
+  // ④ 写缓存挂事件生命周期: waitUntil 收到写入 promise, 且该 promise 在 put 真正落地前不 resolve
+  return c.resp.then(function () { return Promise.resolve(); }).then(function () { return Promise.resolve(); }).then(function () {
+    ok(putCalls === 1, 'L16 可缓存响应触发写缓存 (put 调用 ' + putCalls + ' 次)');
+    ok(!!c.wait, 'L16 写缓存挂在事件生命周期上 (waitUntil 收到 promise, 旧实现完全没调用 waitUntil)');
+    ok(settled === false, 'L16 put 落地前 waitUntil promise 未 resolve (旧实现 respondWith 一 resolve 即可被终止)');
+    if (putRelease) putRelease();
+    return c.wait;
+  }).then(function () {
+    ok(settled === true, 'L16 put 落地后 waitUntil promise resolve (SW 被保持到写入完成)');
+    // ⑤ 网络异常路径同样 settle (否则事件永不结束, SW 被长期占住)
+    sb.fetch = function () { return Promise.reject(new Error('offline')); };
+    var d = fire('http://localhost:8788/LLM-Chess/ui/app.js');
+    return d.resp.then(function () { return d.wait; }).then(function () {
+      ok(true, 'L16 网络异常路径同样 settle waitUntil (事件不悬挂)');
+    });
+  });
 }

@@ -424,3 +424,98 @@ var repCode = codeOnly(fs.readFileSync(__dirname + '/../replay/replay.js', 'utf8
 if (!/XQ\.I18N \? XQ\.I18N\.t\('status_side_red'\)/.test(repCode)) wire43.push('回放摘要兜底名未走字典 (无名导入棋谱在 EN 列表显示「红方」)');
 console.log('第17节 展示值/时点守卫:', wire43.length ? wire43.join(' | ') : 'OK (回放按钮文案走字典 + 播放态首绘 + Elo 浮层对话语义/键盘出口/闸门 + 排序 button/aria-sort + 重复计数键时点 + 热路径 memo + 人类名与回放兜底走字典)');
 if (wire43.length) process.exit(1);
+
+// 18) 第44轮 源串/结构守卫 — 本轮三类缺陷的共同形态:
+//     (a) 「元素有 title 但没有可访问名」— 纯符号按钮 (🏆 ⏮ ‹ ›) 的可访问名取内容, title 只在内容为空时兜底;
+//     (b) 「下层容器的键盘陷阱不认上层模态」— 回放层 Tab 陷阱把焦点从打开着的对话里拉回遮罩背后;
+//     (c) 「热路径每事件一次同步副作用」— 拖动/自动重复期间每次都落盘或整层重画。
+const wire44 = [];
+// (a1) 回放工具条: 挂了 data-i18n-title 的按钮必须同时挂 data-i18n-aria (符号按钮的可访问名)
+const rpToolIds = ['rp-next-record', 'rp-export-pgn', 'rp-elo', 'rp-backup', 'rp-restore', 'rp-del', 'rp-help', 'rp-fullscreen',
+  'rp-loop', 'rp-start', 'rp-prev', 'rp-next', 'rp-end', 'rp-back5', 'rp-back10', 'rp-skip5', 'rp-skip10'];
+rpToolIds.forEach(function (id) {
+  const m = rpEnsureSrc.match(new RegExp('<button\\b[^>]*id="' + id + '"[^>]*>'));
+  if (!m) { wire44.push('回放工具条缺按钮 #' + id); return; }
+  if (!/data-i18n-aria=/.test(m[0])) wire44.push('#' + id + ' 只有 title 没有可访问名 (读屏播报原始符号)');
+});
+// (a2) 回放下拉/跳转输入框必须有程序化名称 (原 #rp-pick 完全无名; #rp-jump 只有 placeholder)
+if (!/id="rp-pick"[^>]*data-i18n-aria=/.test(rpEnsureSrc)) wire44.push('#rp-pick 无可访问名称 (读屏只报「组合框」)');
+if (!/id="rp-jump"[^>]*data-i18n-aria=/.test(rpEnsureSrc)) wire44.push('#rp-jump 无可访问名称 (原只有 placeholder「手」)');
+// (a3) 翻页器 ‹ › 必须有无障碍名称 (第24轮做成 button 却只补了键盘可达)
+if (/class="pg-btn pg-prev"(?!\s+data-i18n-aria)/.test(renCode)) wire44.push('思考面板翻页 ‹ 按钮无可访问名');
+if (!/data-i18n-aria="pg_next"/.test(renCode)) wire44.push('思考面板翻页 › 按钮无可访问名');
+// (a4) 切换式按钮补 aria-pressed (翻转/全屏), 且全屏状态随 fullscreenchange 同步 (Esc 退出也走该事件)
+if (!/aria-pressed="false">⇅ 翻转/.test(html)) wire44.push('翻转按钮缺 aria-pressed 初值 (切换式按钮无开关态)');
+if (!/id="btn-fullscreen"[^>]*aria-pressed=/.test(html)) wire44.push('全屏按钮缺 aria-pressed 初值');
+if (!/function paintFullscreenPressed\(on\)/.test(appCode)) wire44.push('缺全屏 aria-pressed 同步出口 (Esc 原生退全屏后状态停在「已全屏」)');
+if (!/bfP\.setAttribute\('aria-pressed'/.test(appCode)) wire44.push('翻转按钮的 aria-pressed 未随 applyFlip 同步');
+if (!/rpEl\.btnFull\.setAttribute\('aria-label'/.test(appCode)) wire44.push('回放全屏按钮的 aria-label 未随全屏态切换 (全屏中仍念「全屏模式」)');
+// (a5) 试连结果是异步写入的, 必须投进 live region (否则读屏用户按了「试连」得不到任何反馈)
+if (!/id="ai-red-testres"[^>]*role="status"/.test(html) || !/id="ai-black-testres"[^>]*role="status"/.test(html)) {
+  wire44.push('服务商试连结果无 live region (读屏按「试连」后静默)');
+}
+// (b) 回放层 Tab 陷阱必须认「更高层模态」— 否则 Elo 天梯/帮助层打开时每按一次 Tab 就被拉回遮罩背后的回放控件
+if (!/function modalAnyOpen\(\)/.test(appCode)) wire44.push('缺 modalAnyOpen (下层容器无法感知上层模态)');
+const rpTrapBody = (appCode.match(/document\.addEventListener\('keydown', function \(ev\) \{\s*\n\s*if \(!rpEl \|\| rpEl\.ov\.style\.display !== 'block'\) return;\s*\n\s*if \(ev\.key !== 'Tab'\) return;[\s\S]*?\n    \}\)/) || [''])[0];
+if (!rpTrapBody) wire44.push('未定位到回放层 Tab 陷阱 (守卫锚点失效, 请同步更新)');
+else if (!/if \(modalAnyOpen\(\)\) return;/.test(rpTrapBody)) wire44.push('回放层 Tab 陷阱未对更高层模态让位 (焦点被拉出打开着的对话)');
+// (b2) 走法列表整表重建必须归还焦点 (键盘导航条目按 Enter 后焦点掉回 body)
+if (!/var keepPly = /.test(appCode) || !/querySelector\('li\[data-ply="' \+ keepPly \+ '"\]'\)[\s\S]{0,120}?\.focus\(/.test(appCode)) {
+  wire44.push('回放走法列表重建后未归还焦点 (Enter 激活条目后焦点丢到 body)');
+}
+// (b3) 表格语义: 会诊投票表头 th[scope=col], 帮助表首列 th[scope=row]
+if (!/<th scope="col"[^>]*>' \+ T\('votes_model'\)/.test(appCode)) {
+  wire44.push('会诊投票表表头仍是 <td> (读屏无法把信心值关联到列)');
+}
+if (!/th scope="row"/.test(appCode)) wire44.push('回放帮助表首列仍是 <td> (按键与行为无关联)');
+// (c1) i18n: 走法列表的 杀/困/将 展示文本与 #rp-go 文案必须走字典 (判定仍留在语言中立标记上)
+if (!/T\('rp_mk_mate'\)/.test(appCode) || !/T\('rp_mk_stuck'\)/.test(appCode) || !/T\('rp_mk_check'\)/.test(appCode)) {
+  wire44.push('走法列表 杀/困/将 展示文本未走字典 (EN 界面显示中文)');
+}
+if (!/mk === '杀'/.test(appCode)) wire44.push('走法标记判定被改写 (必须留在 core/judge.js 的语言中立标记上)');
+if (!/id="rp-go" data-i18n="rp_go"/.test(rpEnsureSrc)) wire44.push('#rp-go 文案仍硬编码 GO');
+// (c2) 拖拽幽灵: 移动路径不得读 offsetWidth/Height (写 left/top 后读尺寸 = 每次 pointermove 强制同步布局)
+const ghostMove = (renCode.match(/function dragGhostMove\(g, x, y\) \{[\s\S]*?\n  \}/) || [''])[0];
+if (!ghostMove) wire44.push('未定位到 dragGhostMove (守卫锚点失效)');
+else if (/offsetWidth|offsetHeight/.test(ghostMove)) wire44.push('dragGhostMove 仍读 offsetWidth/Height (每次 pointermove 强制同步布局)');
+if (!/g\._gw = gw; g\._gh = gh;/.test(renCode)) wire44.push('幽灵尺寸未在建时缓存 (拖拽热路径读布局)');
+// (c3) 拖动/自动重复期间的同步副作用必须收敛: 分隔条松手才落盘, 音量 change 才落盘, 进度条 input 合帧
+if (!/var spApply = function \(w, persist\)/.test(appCode)) wire44.push('面板分隔条未把「生效」与「落盘」拆开 (拖动每像素一次 localStorage 同步写)');
+if (!/spEl\.addEventListener\('pointercancel', spCommit\)/.test(appCode)) wire44.push('分隔条缺 pointercancel 落盘 (指针被系统夺走时宽度不持久化)');
+const volInput = (appCode.match(/volEl\.addEventListener\('input', function \(\) \{[\s\S]*?\n      \}\);/) || [''])[0];
+if (!volInput) wire44.push('未定位到音量滑块 input 处理器 (守卫锚点失效)');
+else if (/localStorage\.setItem\('xq_vol'/.test(volInput)) wire44.push('音量滑块仍在 input 里同步落盘 (拖动一次上百次磁盘写)');
+if (!/volEl\.addEventListener\('change'[\s\S]{0,120}localStorage\.setItem\('xq_vol'/.test(appCode)) wire44.push('音量滑块缺 change 落盘 (拆开后不持久化)');
+if (!/var rpRangePending = false;/.test(appCode)) wire44.push('回放进度条 input 未合帧 (拖动每像素一次整层重画)');
+// (c4) sw.js: API 判定作用域相对 + 写缓存挂事件生命周期
+const swCode = codeOnly(fs.readFileSync(__dirname + '/../sw.js', 'utf8'));
+if (!/function isApiPath\(pathname\)/.test(swCode)) wire44.push('sw.js 缺作用域相对的 API 判定 (子路径部署下 api/* 被当静态资源缓存)');
+if (!/if \(isApiPath\(url\.pathname\)\) return;/.test(swCode)) wire44.push('sw.js fetch 处理器未走作用域相对的 API 判定 (写死 /api/ 时子路径部署漏排除)');
+if (!/SCOPE_ROOT \+ 'api\/'/.test(swCode)) wire44.push('sw.js 未按作用域根匹配 api/ (与壳清单/导航兜底的作用域相对设计不一致)');
+if (!/e\.waitUntil\(putDone\)/.test(swCode)) wire44.push('sw.js 写缓存未挂 waitUntil (respondWith 一 resolve 写入即可能被丢弃)');
+if (/caches\.open\(CACHE\)\.then\(function \(c\) \{ return c\.put\(req, copy\); \}\)\.catch\(function \(\) \{\}\);/.test(swCode)) {
+  wire44.push('sw.js 写缓存仍是悬空 Promise (未 return 未 waitUntil)');
+}
+// (c5) manifest: 启动底色必须与首屏**生效的**底色一致 (否则冷启动闪色); 截图声明尺寸必须等于真实像素
+//      第44轮教训: index.html 里有两条 body 规则, 后一条 (#080607 + radial) 才是生效的 — 取第一条匹配
+//      会得出 #1a0f08 这个被覆盖的旧值。故取「最后一条含 background 的 body 规则」, 优先其中的纯色声明。
+const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
+const bodyRules = (html.match(/body\{[^}]*\}/g) || []).map(function (r) { return r.replace(/^body\{|\}$/g, ''); });
+const bgRule = bodyRules.reverse().find(function (r) { return /background/.test(r); }) || '';
+const bgSolid = (bgRule.match(/background:\s*(#[0-9a-fA-F]{6})/) || [])[1];
+const bgStops = bgRule.match(/#[0-9a-fA-F]{6}/g) || [];
+const bodyBg = bgSolid || bgStops[bgStops.length - 1] || null;
+if (!bodyBg) wire44.push('未从 index.html 取到生效的首屏底色 (守卫锚点失效)');
+else if (String(mf.background_color).toLowerCase() !== bodyBg.toLowerCase()) {
+  wire44.push('manifest background_color (' + mf.background_color + ') 与首屏生效底色 (' + bodyBg + ') 不一致 (冷启动闪色)');
+}
+(mf.screenshots || []).forEach(function (s) {
+  let buf; try { buf = fs.readFileSync(__dirname + '/../' + s.src); } catch (e) { wire44.push('manifest 截图不存在: ' + s.src); return; }
+  const real = buf.readUInt32BE(16) + 'x' + buf.readUInt32BE(20);
+  if (s.sizes !== real) wire44.push('manifest 截图 ' + s.src + ' 声明 ' + s.sizes + ' 实际 ' + real + ' (安装卡预览失效)');
+});
+const iconPurposes = (mf.icons || []).map(function (i) { return i.purpose; });
+if (iconPurposes.indexOf('any') < 0 || iconPurposes.indexOf('maskable') < 0) wire44.push('manifest 图标 purpose 未同时覆盖 any + maskable');
+console.log('第18节 a11y/i18n/热路径/PWA 守卫:', wire44.length ? wire44.join(' | ') : 'OK (工具条可访问名 + 下拉/跳转/翻页名 + aria-pressed + 试连 live region + 模态让位 + 焦点归还 + 表格语义 + 展示文本走字典 + 拖拽/分隔条/音量/进度条热路径 + sw 作用域相对与 waitUntil + manifest 底色/截图尺寸)');
+if (wire44.length) process.exit(1);
+

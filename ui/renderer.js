@@ -81,14 +81,19 @@
   function dragGhostCreate(pieceEl) {
     var g = pieceEl.cloneNode(true);
     g.className = 'piece drag-ghost ' + (pieceEl.className.indexOf('red') >= 0 ? 'red' : 'black');
-    g.style.width = pieceEl.offsetWidth + 'px';
-    g.style.height = pieceEl.offsetHeight + 'px';
+    var gw = pieceEl.offsetWidth, gh = pieceEl.offsetHeight;
+    g.style.width = gw + 'px';
+    g.style.height = gh + 'px';
+    /* 第44轮 性能: 幽灵尺寸在整个拖拽期间恒定 — 建时读一次存下, 免去 pointermove 里读 g.offsetWidth/Height。
+       原写法每次 pointermove 都「写 left/top → 读 offsetWidth/Height」, 强制同步布局 (高刷鼠标一拖上百次),
+       是拖拽卡顿的直接来源 (幽灵尺寸不可能在拖动中变化)。 */
+    g._gw = gw; g._gh = gh;
     document.body.appendChild(g);
     return g;
   }
   function dragGhostMove(g, x, y) {
-    g.style.left = (x - g.offsetWidth / 2) + 'px';
-    g.style.top = (y - g.offsetHeight / 2) + 'px';
+    g.style.left = (x - g._gw / 2) + 'px';
+    g.style.top = (y - g._gh / 2) + 'px';
   }
   function cellAtPoint(x, y) {
     var el = document.elementFromPoint(x, y);
@@ -529,7 +534,9 @@
     if (!pg) {
       pg = document.createElement('div');
       pg.className = 'think-pager';
-      pg.innerHTML = '<button type="button" class="pg-btn pg-prev">‹</button><span class="pg-info"></span><button type="button" class="pg-btn pg-next">›</button>';   // 第24轮: span→button — 翻页器键盘可达 (Tab 聚焦 + Enter 原生触发)
+      /* 第44轮 a11y: 翻页按钮此前是裸 ‹ › — 可访问名计算取内容优先, title 兜底, 二者皆无 → 读屏只报
+         「按钮」, 用户不知道是上一页还是下一页。名称走字典 (data-i18n-aria, 语言热切时由 apply() 自动刷新)。 */
+      pg.innerHTML = '<button type="button" class="pg-btn pg-prev" data-i18n-aria="pg_prev" aria-label="' + esc(T('pg_prev')) + '">‹</button><span class="pg-info"></span><button type="button" class="pg-btn pg-next" data-i18n-aria="pg_next" aria-label="' + esc(T('pg_next')) + '">›</button>';   // 第24轮: span→button — 翻页器键盘可达 (Tab 聚焦 + Enter 原生触发)
       root.appendChild(pg);
       pg.querySelector('.pg-prev').onclick = function (e) {
         e.stopPropagation();

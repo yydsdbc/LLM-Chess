@@ -495,7 +495,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                     <div class="set-row llm-only"><label for="ai-red-provider" data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
                         <select id="ai-red-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
                         <button type="button" class="btn" id="ai-red-testconn" data-i18n="test_conn" style="margin-top:5px;width:100%;font-size:11px">⚡ 试连</button>
-                        <span id="ai-red-testres" style="font-size:11px"></span>
+                        <span id="ai-red-testres" role="status" aria-live="polite" style="font-size:11px"></span>
                     </div>
                     <div class="set-row llm-only"><label for="ai-red-model" data-i18n="model">模型名称</label>
                         <input type="text" id="ai-red-model" list="model-datalist" data-i18n="model_placeholder" placeholder="选或填模型名">
@@ -513,7 +513,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                     <div class="set-row llm-only"><label for="ai-black-provider" data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
                         <select id="ai-black-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
                         <button type="button" class="btn" id="ai-black-testconn" data-i18n="test_conn" style="margin-top:5px;width:100%;font-size:11px">⚡ 试连</button>
-                        <span id="ai-black-testres" style="font-size:11px"></span>
+                        <span id="ai-black-testres" role="status" aria-live="polite" style="font-size:11px"></span>
                     </div>
                     <div class="set-row llm-only"><label for="ai-black-model" data-i18n="model">模型名称</label>
                         <input type="text" id="ai-black-model" list="model-datalist" data-i18n="model_placeholder" placeholder="选或填模型名">
@@ -573,7 +573,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 <div id="sr-move" class="sr-only" aria-live="polite"></div>
 <div id="sr-cursor" class="sr-only" aria-live="polite"></div>   <!-- 第41轮 a11y: 键盘走子光标播报 (方向键移动时读屏才知落点与格上棋子; 独立于 #sr-move, 互不覆盖) -->
 <div id="sr-alert" class="sr-only" role="alert" aria-live="assertive"></div>   <!-- 第40轮 a11y: 错误/警告专属断言式播报区 — #ai-banner 思考中每秒 tick 会重写全局计时, 整体挂 aria-live 会每秒刷屏 -->
-<div id="btn-row"><button class="btn" id="btn-flip" data-i18n="btn_flip">⇅ 翻转</button><button class="btn" id="btn-undo" data-i18n="btn_undo" data-i18n-title="undo_tip" title="↩ 悔棋 (快捷键 U)">↩ 悔棋</button><button class="btn" id="btn-restart" data-i18n="btn_reset">🔄 重新开始</button><button class="btn" id="btn-replay-watch" data-i18n="btn_watch_replay" data-i18n-title="btn_watch_replay_title" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" data-i18n="btn_fullscreen" data-i18n-title="btn_fullscreen_title" title="全屏观战 (F 键)">⛶ 全屏</button></div>
+<div id="btn-row"><button class="btn" id="btn-flip" data-i18n="btn_flip" aria-pressed="false">⇅ 翻转</button><button class="btn" id="btn-undo" data-i18n="btn_undo" data-i18n-title="undo_tip" title="↩ 悔棋 (快捷键 U)">↩ 悔棋</button><button class="btn" id="btn-restart" data-i18n="btn_reset">🔄 重新开始</button><button class="btn" id="btn-replay-watch" data-i18n="btn_watch_replay" data-i18n-title="btn_watch_replay_title" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" data-i18n="btn_fullscreen" data-i18n-title="btn_fullscreen_title" aria-pressed="false" title="全屏观战 (F 键)">⛶ 全屏</button></div>   <!-- 第44轮 a11y: 翻转/全屏是切换式按钮, 补 aria-pressed 初值 (JS 侧随状态同步) -->
 <div id="archive-row">
     <button class="btn" id="btn-save" data-i18n="btn_save_short" data-i18n-title="btn_save" title="导出棋谱JSON" disabled>💾 存棋谱</button>
     <button class="btn" id="btn-load" data-i18n="btn_load" data-i18n-title="btn_load" title="导入棋谱JSON并重放">📂 载入棋谱</button>

@@ -13,6 +13,10 @@
  *     .title = '…中文…' 赋值必须走 t/tArgs 家族 (第27轮; I8 只扫 index.html, JS 构建的 DOM 是第三盲区)
  *  I10 JS 动态写入口 (textContent=/aiBanner()/innerHTML=) 裸中文必须走 t 家族或挂 data-i18n (第37轮)
  *  I11 T 家族同行引用的 snake_case 字面量键必须存在于字典 — 补 I5 只认「键紧跟左括号」的盲区 (第40轮)
+ *  I12 按钮文案含中文必须挂 data-i18n (非仅 -title) (第43轮)
+ *  I13 偏好类下拉 (#ui-pieces) 的 option 文案必须挂 data-i18n 且键双语齐备 (第43轮)
+ *  I14 JS 模板里的 data-i18n* 引用键必须存在于字典 — 补 I4 (只扫 index.html) / I5 (只认 t() 调用) 的第四盲区 (第44轮)
+ *  I15 纯符号/emoji 按钮必须有无障碍名称 (aria-label / data-i18n-aria) (第44轮)
  * 用法: node test/i18n_check.js
  */
 'use strict';
@@ -204,6 +208,40 @@ jsFiles.forEach(function (f) { scanBtnText(fs.readFileSync(path.join(ROOT, f), '
 scanBtnText(htmlNoScript, 'index.html');
 ok(miss12.length === 0, 'I12 按钮文案含中文必须挂 data-i18n (非仅 -title)' + (miss12.length ? ' (漏挂: ' + miss12.join(' ; ') + ')' : ' (0 漏挂)'));
 
+// I14 第44轮: JS 模板里的 data-i18n / -title / -aria 引用键必须存在于字典 —
+//   I4 只扫 index.html, I5 只认 t('key') 字面量调用, 于是「JS 构建 DOM 时挂的 data-i18n 键」
+//   (rpEnsure 回放层模板 / renderer 动态面板) 是第四盲区: 键名写错只会静默显示键名本身。
+var re14 = /data-i18n(?:-title|-aria)?="([a-z0-9_]+)"/g;
+var jsAttrKeys = {}, m14;
+jsFiles.concat(['benchmark/record.js', 'ai/random_agent.js']).forEach(function (f) {
+  var src = fs.readFileSync(path.join(ROOT, f), 'utf8');
+  var mm; while ((mm = re14.exec(src)) != null) jsAttrKeys[mm[1]] = f;
+});
+var jsAttrList = Object.keys(jsAttrKeys);
+var jsAttrMiss = jsAttrList.filter(function (k) { return ZH[k] == null || EN[k] == null; });
+ok(jsAttrList.length >= 20 && jsAttrMiss.length === 0,
+  'I14 JS 模板 data-i18n* 引用键双语齐备 (' + jsAttrList.length + ' 键)' + (jsAttrMiss.length ? ' (缺失: ' + jsAttrMiss.map(function (k) { return k + '@' + jsAttrKeys[k]; }).join(',') + ')' : ''));
+
+// I15 第44轮 a11y: 「无字面文本」的按钮必须有无障碍名称 —
+//   可访问名计算优先取内容, title 仅在内容为空时兜底; 纯符号/emoji 按钮 (‹ › 🏆 ⏮ …) 的内容
+//   本身就是那个符号, 读屏只会念「按钮」/念出 emoji 名。故: 按钮文本里没有任何字母或汉字时,
+//   必须带 aria-label 或 data-i18n-aria。翻页器 ‹ › 长期裸奔 (第24轮把它们做成 button 却只补了键盘可达)。
+var miss15 = [];
+function scanGlyphBtn(src, label) {
+  var re15 = /<button\b([^>]*)>([^<]*)<\/button>/g, m15;
+  while ((m15 = re15.exec(src)) != null) {
+    var attrs = m15[1], txt = m15[2];
+    if (txt.indexOf('+') >= 0) continue;                       // 拼接模板 (动态文本, 另有 I10 把关)
+    if (!txt.trim()) continue;                                 // 空文本按钮由其他规则覆盖
+    if (/[A-Za-z\u4e00-\u9fff]/.test(txt)) continue;           // 含字母/汉字 → 内容即可访问名
+    if (/aria-label|data-i18n-aria/.test(attrs)) continue;
+    miss15.push(label + ' <button> "' + txt.trim().slice(0, 12) + '"');
+  }
+}
+jsFiles.forEach(function (f) { scanGlyphBtn(fs.readFileSync(path.join(ROOT, f), 'utf8'), f); });
+scanGlyphBtn(htmlNoScript, 'index.html');
+ok(miss15.length === 0, 'I15 纯符号按钮必须有无障碍名称 (aria-label / data-i18n-aria)' + (miss15.length ? ' (漏挂: ' + miss15.join(' ; ') + ')' : ' (0 漏挂)'));
+
 // I13 第43轮: 「界面偏好」类 option 文案漏挂 — I7/I8 有意豁免 option (服务商品牌名/语言名不可译),
 //   但同一豁免把偏好类下拉也放过了: #ui-pieces 的 汉字/Letters 是硬编码, 而字典里 pieces_cn/pieces_en
 //   早已存在却全仓零引用 (孤儿键) — EN 界面下该下拉显示「汉字 / Letters」。
@@ -216,6 +254,6 @@ ok(opt13.length >= 2 && opt13keys.every(function (k) { return !!k; }),
 ok(opt13keys.filter(Boolean).every(function (k) { return ZH[k] != null && EN[k] != null; }),
   'I13 棋子显示下拉引用的键双语齐备 (' + opt13keys.filter(Boolean).join(',') + ')');
 
-console.log('i18n_check: ' + (13 - fails.length) + '/13 groups PASS, ' + zk.length + ' keys');
+console.log('i18n_check: ' + (15 - fails.length) + '/15 groups PASS, ' + zk.length + ' keys');
 if (fails.length) { process.exit(1); }
 process.exit(0);
