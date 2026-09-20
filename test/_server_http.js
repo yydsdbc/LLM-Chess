@@ -61,7 +61,7 @@ async function main() {
     let ubody = '';
     uReq.on('data', function (c) { ubody += c; });
     uReq.on('end', function () {
-      lastUpReq = { headers: uReq.headers, body: ubody };
+      lastUpReq = { headers: uReq.headers, body: ubody, url: uReq.url };   // 第45轮: 记录上游请求路径 (URL 构造口径此前零覆盖)
       var jb = {};
       try { jb = JSON.parse(ubody) || {}; } catch (eP) {}
       if (jb.model === 'stub-err') {   // anthropic 错误映射路径 (type:error → 客户端 JSON error)
@@ -88,7 +88,15 @@ async function main() {
   const fS = require('fs');   // 第29轮: 文件级 const fs 在 133 行 (TDZ), main 顶部先取独立引用
   const keysFile = path.join(ROOT, 'temp', 'guard-keys-' + process.pid + '.json');
   fS.mkdirSync(path.dirname(keysFile), { recursive: true });
-  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key' }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', protocol: 'anthropic', apiKey: 'anthropic-test-key' }, stubnokey: { name: 'StubNoKey', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: '' }, stubheaders: { name: 'StubHdr', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key', headers: { 'X-Custom-Auth': 'hdr-ok' } } } }));
+  /* 第45轮: 一个「必定拒绝连接」的端口 (先监听再立即释放) — 用来驱动上游错误分支 (server.js 的 502 映射零覆盖) */
+  const deadSrv = http.createServer(function () {});
+  await new Promise(function (r) { deadSrv.listen(0, '127.0.0.1', r); });
+  const deadPort = deadSrv.address().port;
+  await new Promise(function (r) { deadSrv.close(r); });
+  /* 第45轮: stubprov 的 baseUrl **故意带尾斜杠** — 去掉它, 「baseUrl 去尾斜杠」这条判据就无从区分
+     (无尾斜杠时拼不拼都得到同一路径, 断言会静默变成恒真); stubglm 的 chatPath **故意不等于默认值** —
+     否则「chatPath 生效」与「回落默认」得到同一路径, 同样恒真。 */
+  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1/', apiKey: 'test-key' }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', protocol: 'anthropic', apiKey: 'anthropic-test-key' }, stubnokey: { name: 'StubNoKey', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: '' }, stubheaders: { name: 'StubHdr', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key', headers: { 'X-Custom-Auth': 'hdr-ok' } }, stubglm: { name: 'StubGLM', baseUrl: 'http://127.0.0.1:' + upPort + '/tokenrhythm/v1', chatPath: '/v2/chat', apiKey: 'glm-key' }, stubdead: { name: 'StubDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', apiKey: 'dead-key' } } }));
 
   server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile }) });
   const up = await waitHealth(40);   // ~6s 上限
@@ -171,6 +179,7 @@ async function main() {
 
   // 第29轮五期: 真实中继穿越 (本地 stub 上游) — 回归 v1.0.3 起的 req 脱作用域崩进程 bug
   const relayRes = await postChat({ provider: 'stubprov', model: 'stub-model', messages: [{ role: 'system', content: 'sys' }, { role: 'user', content: 'usr' }] });
+  const relayUpPath = lastUpReq && lastUpReq.url;   // 第45轮: 钉住「baseUrl 去尾斜杠 + 默认 chatPath」的拼接结果
   ok(relayRes.status === 200, '中继穿越: POST /api/chat (stub 上游) → 200');
   ok(relayRes.body.indexOf('upstream-ok') >= 0, '中继穿越: 上游应答原文透传 (SSE 帧含 content)');
   const healthAfter = await req('GET', '/api/health');
@@ -237,6 +246,26 @@ async function main() {
   ok(dirReq.status === 404, 'GET /ui (目录) → 404 (EISDIR 不崩连接)');
   const bslash = await req('GET', '/' + encodeURIComponent('..\\') + 'server.js');
   ok(bslash.status !== 200 && bslash.body.indexOf('API Key 只保存在服务端') < 0, '反斜杠穿越 (..\\server.js) → 非 200 且不泄露源码 (Windows/POSIX 双向断言)');
+
+  /* ── 第45轮: 上游 URL 构造口径 / GLM 系 thinking 正向注入 / providers 元字段 / 上游失败映射 ──
+     四者此前都只有「一半」覆盖或零覆盖, 且回归后完全静默:
+     (a) baseUrl 尾斜杠若不去掉 → '//v1/chat/completions', 上游 404, 前端只看到泛化的中继错误;
+     (b) thinking 只测过「非 GLM 不注入」, 而 GLM 系 (bigmodel/tokenrhythm) 的**注入**从未被断言 —
+         漏注入会让 GLM 的思考开关静默失效 (界面上勾了快答模式却没关思考);
+     (c) /api/providers 的 hasKey 是前端「已配置」指示的唯一依据, models 供模型下拉预填;
+     (d) 上游连不上时的 502 映射 (server.js 的 upReq.on('error') 分支) 零覆盖 — 回归会变成挂起或错状态码。 */
+  ok(relayUpPath === '/v1/chat/completions', '上游 URL 构造: baseUrl 尾斜杠去除 + 默认 chatPath /chat/completions (实为 ' + relayUpPath + ')');
+  const glmRes = await postChat({ provider: 'stubglm', model: 'stub-model', messages: [{ role: 'user', content: 'g' }], thinking: true });
+  let glmUp = null;
+  try { glmUp = { b: JSON.parse(lastUpReq.body), url: lastUpReq.url }; } catch (eG2) {}
+  ok(glmRes.status === 200 && !!glmUp && glmUp.b.thinking === true, '上游请求构造: GLM 系上游 (baseUrl 含 tokenrhythm) 正向注入 thinking (原只断言了非 GLM 不注入)');
+  ok(!!glmUp && glmUp.url === '/tokenrhythm/v1/v2/chat', '上游 URL 构造: providerCfg.chatPath 覆盖默认路径 (实为 ' + (glmUp && glmUp.url) + ')');
+  const deadRes = await postChat({ provider: 'stubdead', model: 'stub-model', messages: [{ role: 'user', content: 'd' }] });
+  ok(deadRes.status === 502 && /relay upstream error/.test(deadRes.body), '上游连接失败 → 502 + relay upstream error (原为挂起/错误状态码)');
+  const provStub = (provList || []).filter(function (p) { return p.id === 'stubprov' || p.id === 'stubnokey'; });
+  const hasKeyOf = function (id) { var hit = provStub.filter(function (p) { return p.id === id; })[0]; return hit && hit.hasKey; };
+  ok(hasKeyOf('stubprov') === true && hasKeyOf('stubnokey') === false, 'providers: hasKey 布尔正确反映是否配置 apiKey (前端「已配置」指示依赖)');
+  ok(prov.headers['cache-control'] === 'no-store', 'providers: Cache-Control no-store (服务商列表不得被浏览器缓存)');
 
   /* ── 第43轮: 静态内容缓存 (_staticCache, 第37轮引入的 mtime+size 判据) — 此前零自动化覆盖 ──
      风险面: 判据一旦失效 (例如永远复用首读字节), 用户改了 js/css 后强刷仍拿到旧代码, 带 query 的

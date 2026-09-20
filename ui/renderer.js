@@ -177,6 +177,12 @@
     for (var i = 0; i < 90; i++) {
       var c = document.createElement('div');
       c.className = 'cell';
+      /* 第45轮 a11y: 每格都有 aria-label (坐标 + 格上棋子, 见下方 _glyph 分支), 但元素本身是无角色的 <div> —
+         隐式 generic 角色的 Name From 是 prohibited, 浏览器/读屏按规范**直接忽略**该 aria-label,
+         于是「读屏可逐格探索盘面」这句注释承诺的能力从未生效 (键盘用户实际只能靠 #sr-cursor 的方向键播报)。
+         要命名就必须先有一个允许命名的角色: 格子对键盘不可操作 (走子是方向键光标 + 回放走法列表),
+         声明成 button 会说谎; role=img 既让 aria-label 生效, 又把内部棋子字折叠成这个名字, 语义准确。 */
+      c.setAttribute('role', 'img');
       c.dataset.x = i % 9;
       c.dataset.y = (i / 9) | 0;   // 第33轮: 拖拽落点定位用 (池内坐标恒定)
       boardEl.appendChild(c);
@@ -373,9 +379,24 @@
   }
 
   var RES_KEYS = { stalemate: 1, checkmate: 1, perpetual: 1, repetition: 1, natural: 1 };   // 第40轮: 终局原因字典键白名单 (兼容 r.result 其他取值 → 空副标题)
+  /* 第45轮 a11y: 终局卡的键盘出口。遮罩点击可以收起卡片回到盘面看终局局面 (卡内文案与既有交互都以此为前提),
+     而键盘用户没有任何等价路径 — 卡内只有「再来一局」(会丢掉刚结束的局面) 与「导出本局」。
+     收起必须落一个「已收起」旗标: renderOverlay 在 engine.isOver() 时无条件 add('show'), 只摘类名的话
+     下一次 refresh() (时钟补位之外的任意渲染) 会把卡重新弹回来。旗标在对局不再结束时复位 (重开/新局)。 */
+  function dismissEndOverlay() {
+    var overlay = document.getElementById('end-overlay');
+    if (!overlay || !overlay.classList.contains('show')) return false;
+    overlay._dismissed = true;
+    overlay.classList.remove('show');
+    if (overlay.contains(document.activeElement)) {
+      var board = document.getElementById('board');   // tabindex=-1 的程序化落点, 不进 Tab 序
+      if (board && board.focus) { try { board.focus({ preventScroll: true }); } catch (eD) { board.focus(); } }
+    }
+    return true;
+  }
   function renderOverlay(engine, view) {
     var overlay = document.getElementById('end-overlay');
-    if (engine.isOver()) {
+    if (engine.isOver() && !overlay._dismissed) {
       var r = engine.result();
       /* 第40轮 i18n: 原 5 条中文终局原因硬编码在本三元链 — EN 界面终局卡副标题整段中文漏挂。
          I10 守护只匹配同行字面量赋值, 跨行装进 reason 变量后赋值躲过了扫描, 属真实漏挂而非误报。 */
@@ -405,6 +426,7 @@
       }
       overlay._opener = null;
       overlay._wasShown = false;   // 复位: 下一局终局再次焦点入卡
+      overlay._dismissed = false;  // 第45轮: 对局不再结束 (重开/新局) → 清掉「已收起」, 否则下一局的终局卡不再弹出
     }
   }
 
@@ -439,6 +461,10 @@
     e.className = 'log-entry';
     e.dataset.ply = n;   // v1.5.5: 点击复盘 — 点击该手跳到该局面
     e.tabIndex = 0;      // 第40轮 a11y: 走法列表是核心导航 (点击跳转局面) 却只有 click — 补键盘可达 (回放层走法表第37轮已同样处理)
+    /* 第45轮 a11y: 可聚焦却无角色 = 读屏把它念成一串无归属的文本, 用户不知道 Enter/Space 能跳局面
+       (可访问名有、动作语义没有)。补 role=button 后读屏会宣告「按钮」并提示可激活;
+       顺带让全局 Enter/Space 分支的 selfActing 判定也能认出它 (双保险, 条目自身已 stopPropagation)。 */
+    e.setAttribute('role', 'button');
     var Tl = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return 'Click to jump to move ' + a.n; };   // 第27轮 i18n: 条目 title 原硬编码中文 (I9 守护点)
     e.title = Tl('log_entry_title', { n: n }) + (cn ? ' · ' + cn : '');   // v1.7: 中文记谱
     var dispPiece = logGlyph(side, pieceChar);   // 第40轮: 子名随棋子显示偏好 (Letters 模式 → 字母)
@@ -582,7 +608,24 @@
       // v1.5 决策卡片模式: 结构化信息 (策略/候选/评价) 替代长文本; 分页器隐藏
       st.cards = opts.cards;
       body.classList.add('card-mode');
+      /* 第45轮 a11y: 整块重建会摘掉焦点所在的 💭 按钮 (焦点静默掉回 body, 下一次 Tab 从页首重来) —
+         与第44轮回放走法列表同一处理: 重建前记下 ply, 重建后把焦点还给同一颗按钮。 */
+      var aeT = document.activeElement;
+      var keepToggle = (aeT && aeT.classList && aeT.classList.contains('d-toggle') && body.contains(aeT)) ? aeT.dataset.ply : null;
       body.innerHTML = opts.cards.length ? opts.cards.join('') : '<div class="d-empty">' + T('think_wait') + '</div>';   // 第27轮 i18n: 空态原硬编码中文 (复用 think_wait)
+      /* 第45轮 a11y: 展开态同样要跨重建存活 — innerHTML 会把 .d-reason 的内联 display 与按钮的 aria-expanded
+         一起清掉, 于是「展开一条推理」会在下一手落子 (每手都重建) 时被静默折叠。openPlys 由 💭 点击处理器维护。 */
+      (st.openPlys || []).forEach(function (ply) {
+        var rEl = body.querySelector('.d-reason[data-ply="' + ply + '"]');
+        var bEl = body.querySelector('.d-toggle[data-ply="' + ply + '"]');
+        if (!rEl) return;
+        rEl.style.display = 'block';
+        if (bEl) { bEl.classList.add('on'); bEl.setAttribute('aria-expanded', 'true'); }
+      });
+      if (keepToggle != null) {
+        var tb = body.querySelector('.d-toggle[data-ply="' + keepToggle + '"]');
+        if (tb && typeof tb.focus === 'function') { try { tb.focus({ preventScroll: true }); } catch (eFT) { tb.focus(); } }
+      }
       body.scrollTop = body.scrollHeight;   // v1.7.1: 卡片模式自动滚到底部 (最新决策可见)
     } else if (body) {
       body.classList.remove('card-mode');
@@ -649,6 +692,17 @@
         r.style.display = open ? 'none' : 'block';
         b.classList.toggle('on', !open);
         b.setAttribute('aria-expanded', open ? 'false' : 'true');   // 第33轮: 展开态读屏可感知
+        /* 第45轮: 把展开态记到面板状态上 — thinkPanel 每手都整块重建卡片流, 状态只存在 DOM 里就活不过下一手。
+           记 ply 列表而非单个 ply: 原实现允许多条同时展开, 不缩减既有行为。 */
+        var panelEl = b.closest ? b.closest('.think-panel') : null;
+        if (panelEl) {
+          var stP = thinkState[panelEl.id === 'think-red' ? 'red' : 'black'];
+          if (stP) {
+            stP.openPlys = stP.openPlys || [];
+            if (open) stP.openPlys = stP.openPlys.filter(function (p2) { return p2 !== ply; });
+            else if (stP.openPlys.indexOf(ply) < 0) stP.openPlys.push(ply);
+          }
+        }
       }
     });
   });
@@ -685,13 +739,37 @@
       el.innerHTML = (disp.length) ? '<b>' + T('tray_captured') + '</b>' + disp.join('') : '';   // 第27轮 i18n: 俘 字原硬编码
     }
   }
-  /* 最新着法大字徽章: html 传入, null 隐藏 (app 侧 4s 定时淡出) */
-  function lastMoveBadge(html) {
+  /* 最新着法大字徽章: html 传入, null 隐藏 (app 侧 4s 定时淡出)
+     第45轮: 徽章自第28轮起就带 cursor:pointer + pointer-events:auto (CSS 注释「显示时可点击回看该手」),
+     而全仓从未有过 click 绑定 — 一个承诺了动作却什么都不做的死按钮。现补上真实行为 (app 侧把 click 绑到
+     #last-move-badge: 打开回放层并定位到该手), 并把元素本身做成 <button> 以获得原生 Enter/Space 与可访问名。 */
+  function lastMoveBadge(html, ply) {
     var el = document.getElementById('last-move-badge');
     if (!el) return;
-    if (!html) { el.classList.remove('show'); return; }
+    if (!html) {
+      /* 隐藏时若焦点正在徽章上 (键盘用户 Tab 到它, 4s 定时器随后把它藏起来), visibility:hidden 会让焦点
+         静默掉回 body — 先交给盘面 (tabindex=-1 的程序化落点, 不进 Tab 序)。 */
+      if (el.contains(document.activeElement)) {
+        var board = document.getElementById('board');
+        if (board && board.focus) { try { board.focus({ preventScroll: true }); } catch (eLB) { board.focus(); } }
+      }
+      el.classList.remove('show');
+      return;
+    }
     el.innerHTML = html;
+    if (ply != null) {
+      el.dataset.ply = String(ply);
+      el.setAttribute('aria-label', TA('badge_replay', { n: ply }));   // 动作名 — 内容会被读成一串着法文本, 不表达「按下去会怎样」
+    }
     el.classList.add('show');
+  }
+  /* 第45轮: 徽章的可访问名带手数占位符, 不能用 data-i18n-aria 声明式刷新 (apply() 只写字典原值,
+     {n} 不会被填充) — 语言热切时必须显式重算, 否则切到中文后读屏仍播报英文, 直到下一手落子才自愈。
+     与第42轮「#rp-range 硬设 aria-label, 切语言后停在旧语言」同一条教训 (实机验收当场抓到)。 */
+  function relabelLastMoveBadge() {
+    var el = document.getElementById('last-move-badge');
+    if (!el || !el.dataset || !el.dataset.ply) return;
+    el.setAttribute('aria-label', TA('badge_replay', { n: el.dataset.ply }));
   }
   /* 评值走势 sparkline: arr = 本方视角评值序列, 中线=均势, 越高越优 */
   function evalSpark(side, arr) {
@@ -754,5 +832,5 @@
     if (el) el.textContent = clockText(engine, view, engine.ply());
   }
 
-  XQ.UI = { CS: CS, drawBoard: drawBoard, render: render, aiBanner: aiBanner, logMove: logMove, thinkPanel: thinkPanel, decisionCards: decisionCards, updateClock: updateClock, clockText: clockText, capturedTray: capturedTray, lastMoveBadge: lastMoveBadge, evalSpark: evalSpark, pieceGlyph: pieceGlyphOf };
+  XQ.UI = { CS: CS, drawBoard: drawBoard, render: render, aiBanner: aiBanner, logMove: logMove, thinkPanel: thinkPanel, decisionCards: decisionCards, updateClock: updateClock, clockText: clockText, capturedTray: capturedTray, lastMoveBadge: lastMoveBadge, evalSpark: evalSpark, pieceGlyph: pieceGlyphOf, dismissEndOverlay: dismissEndOverlay, relabelLastMoveBadge: relabelLastMoveBadge };
 })(typeof window !== 'undefined' ? window : globalThis);

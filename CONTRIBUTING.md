@@ -8,7 +8,7 @@ Thanks for your interest! LLM-chess is a **zero-dependency** Node.js project —
 git clone https://github.com/yydsdbc/LLM-Chess.git
 cd LLM-Chess
 npm start    # http://localhost:8788
-npm test     # 9 test suites, all must pass
+npm test     # 15 test suites, all must pass
 ```
 
 Zero-config trial: start the app, open settings (gear icon), set a side to **Random AI**. No API key needed.

@@ -10,7 +10,7 @@
     "check": "node tools/check.js",
     "match": "node test/match_headless.js",
     "test": "node test/run_all.js",
-    "test:serial": "node test/run_tests.js && node test/test_evaluation.js && node test/test_llm_convo.js && node test/replay_smoke.js && node test/_clean_reason_check.js && node test/cn_notation_check.js && node test/i18n_check.js && node test/link_check.js && node test/check_ui.js"
+    "test:serial": "node test/run_tests.js && node test/test_evaluation.js && node test/test_llm_convo.js && node test/replay_smoke.js && node test/_clean_reason_check.js && node test/cn_notation_check.js && node test/i18n_check.js && node test/link_check.js && node test/check_ui.js && node test/_replay_edge.js && node test/_logic_layer.js && node test/_prompt_level_smoke.js && node test/replay_risk_check.js && node test/_committee_agent.js && node test/_server_http.js"
   },
   "engines": {
     "node": ">=18"

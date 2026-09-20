@@ -151,6 +151,7 @@ function mkEl(tag) {
     setAttribute: function (k, v) { this._attrs[k] = v; if (k === 'id') { this.id = v; } },
     getAttribute: function (k) { return this._attrs[k]; },
     addEventListener: function () {}, removeEventListener: function () {},
+    contains: function (c) { return c === this || this.children.indexOf(c) >= 0; },
     querySelector: function () { return null; }, querySelectorAll: function () { return []; }
   };
   el.classList = {
@@ -425,6 +426,8 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
 }).then(function () {
   return l16Round44();        // 第44轮: sw.js 作用域相对 API 判定 + 写缓存挂事件生命周期
 }).then(function () {
+  l17Round45();               // 第45轮: 终局卡键盘出口 + 棋盘格/走法条目 ARIA 角色
+}).then(function () {
   console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
   process.exit(fails.length ? 1 : 0);
   }, function (e) {
@@ -619,6 +622,66 @@ function l15Round43() {
   ok(chk2.n === 1, 'L15 真实渲染一帧内 inCheck 只做 1 次全盘扫描 (实测 ' + chk2.n + '; 修前 2 — 逐格判定与状态条各一次)');
   ok(marked === 1, 'L15 被将方的将格渲染出 in-check 类 (memo 与渲染联动, 实测 ' + marked + ' 格)');
   sandbox.XQ.Rules.inCheck = realIn2;
+}
+
+/* ═══ L17 第45轮: 终局卡键盘出口 + 棋盘格/走法条目的 ARIA 角色 ═══
+   ① 终局卡只能靠点遮罩收起 (回到盘面看终局局面), 键盘用户没有等价路径 — Esc 出口必须成立, 且**收起要落旗标**:
+      renderOverlay 在 engine.isOver() 时无条件 add('show'), 只摘类名的话下一次 refresh 会立刻把卡弹回来。
+      本组用「收起 → 再渲染一次」把这条时点差异变成可观测量 (缺旗标即红)。
+   ② 棋盘每格都写了 aria-label, 而元素是无角色的 <div> — 隐式 generic 角色的 Name From 是 prohibited,
+      读屏按规范忽略该标签, 「可逐格探索盘面」等于从未生效。断言 role 与 aria-label 同时存在。
+   ③ 走法列表条目 tabindex=0 可聚焦却无角色 → 读屏念成一串无归属文本, 用户不知道 Enter 能跳局面。 */
+function l17Round45() {
+  ['eo-title', 'eo-sub'].forEach(function (id) { if (!DOC_MAP[id]) DOC_MAP[id] = mkEl('div'); });
+  var base = XQ.Engine.create();
+  var over = true;
+  var spy = {
+    snapshot: function () { return base.snapshot(); },
+    isOver: function () { return over; },
+    legalTargets: function (x, y) { return base.legalTargets(x, y); },
+    dangerTargets: function (x, y) { return base.dangerTargets(x, y); },
+    inCheck: function (c) { return base.inCheck(c); },
+    naturalClock: function () { return base.naturalClock(); },
+    result: function () { return { winner: 'red', result: 'checkmate' }; }
+  };
+  var view = { boardEl: mkEl('div'), selected: null, flip: false, pendingAnim: null, startTime: Date.now(), arrow: true };
+  view.boardEl.parentNode = mkEl('div');
+  var ov = DOC_MAP['end-overlay'];
+  sandbox.XQ.UI.render(spy, view);
+  ok(ov.classList.contains('show') === true, 'L17 终局时终局卡弹出');
+  ok(sandbox.XQ.UI.dismissEndOverlay() === true && ov.classList.contains('show') === false,
+    'L17 dismissEndOverlay 收起终局卡 (点遮罩的键盘等价路径)');
+  sandbox.XQ.UI.render(spy, view);
+  ok(ov.classList.contains('show') === false, 'L17 收起后再次渲染不复弹 (不落「已收起」旗标时会被下一次 refresh 重新 add(show))');
+  over = false; sandbox.XQ.UI.render(spy, view);
+  over = true; sandbox.XQ.UI.render(spy, view);
+  ok(ov.classList.contains('show') === true, 'L17 新一局终局卡恢复弹出 (旗标在对局不再结束时复位)');
+  over = false; sandbox.XQ.UI.render(spy, view);
+  ok(sandbox.XQ.UI.dismissEndOverlay() === false, 'L17 非终局态 dismissEndOverlay 为空操作 (不误置旗标)');
+  // ② 棋盘格: aria-label 必须配一个允许命名的角色
+  var cells = view.boardEl.children || [], labelled = 0;
+  for (var ci = 0; ci < cells.length; ci++) { if (cells[ci]._attrs && cells[ci]._attrs['aria-label']) labelled++; }
+  ok(cells.length === 90 && cells[0] && cells[0]._attrs.role === 'img',
+    'L17 棋盘格带 role=img (无角色 div 上的 aria-label 被读屏忽略, 标签等于没写)');
+  ok(labelled === 90, 'L17 90 格全部带坐标/棋子 aria-label (实测 ' + labelled + ')');
+  // ③ 走法列表条目: 可聚焦就必须有动作语义
+  var logEl = DOC_MAP['move-log'] || (DOC_MAP['move-log'] = mkEl('div'));
+  sandbox.XQ.UI.logMove(1, 'red', '炮', 'c2-c4', null, null, 3, '炮二平五');
+  var entry = (logEl.children || [])[logEl.children.length - 1];
+  ok(!!entry && entry._attrs.role === 'button' && entry.tabIndex === 0,
+    'L17 走法列表条目 role=button + tabIndex=0 (键盘可达且有动作语义)');
+  // ④ 语言热切: 徽章动作名带 {n} 占位符, 无法用 data-i18n-aria 声明式刷新 — 必须显式重算
+  //    (实机验收当场抓到: 切到中文后 aria-label 仍是英文, 要等下一手落子才自愈)
+  var badgeEl = DOC_MAP['last-move-badge'] || (DOC_MAP['last-move-badge'] = mkEl('button'));
+  sandbox.XQ.UI.lastMoveBadge('<b>#7</b>', 7);
+  sandbox.XQ.I18N.setLang('en', false);
+  sandbox.XQ.UI.relabelLastMoveBadge();
+  var badgeEn = badgeEl._attrs['aria-label'];
+  sandbox.XQ.I18N.setLang('zh', false);
+  sandbox.XQ.UI.relabelLastMoveBadge();
+  var badgeZh = badgeEl._attrs['aria-label'];
+  ok(!!badgeEn && !!badgeZh && badgeEn !== badgeZh && badgeZh.indexOf('7') >= 0,
+    'L17 徽章动作名随语言热切重算 (占位符无法声明式刷新: zh=' + badgeZh + ' / en=' + badgeEn + ')');
 }
 
 /* ═══ L16 第44轮: sw.js 两处「在线看着正常、只在特定部署/时序下坏掉」的行为 ═══

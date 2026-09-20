@@ -89,6 +89,7 @@
     sr_move: '第{n}手 {side} {cn}',
     sr_cursor_piece: '光标 {sq} {p}',   // 第41轮 a11y: 键盘走子光标播报 (原只有视觉描边, 读屏用户按方向键零反馈)
     sr_cursor_empty: '光标 {sq} 空格',
+    badge_replay: '回看第 {n} 手',   // 第45轮 a11y: 最新着法徽章的动作名 (徽章内容是一串着法文本, 读屏听不出「按下去会怎样」)
     status_ticker: '第{n}手 · {s}s{ph}{rt}',
     status_retry: ' · 重试{n}次',
     status_clock: '第{n}手 · {t}{ph}{lim}',
@@ -269,6 +270,7 @@
     sr_move: 'Move {n} {side} {cn}',
     sr_cursor_piece: 'Cursor {sq} {p}',
     sr_cursor_empty: 'Cursor {sq} empty',
+    badge_replay: 'Replay move {n}',
     status_ticker: 'Move {n} · {s}s{ph}{rt}',
     status_retry: ' · {n} retries',
     status_clock: 'Move {n} · {t}{ph}{lim}',

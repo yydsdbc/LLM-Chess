@@ -208,8 +208,8 @@ h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0
 #ai-banner.busy.side-red{background:rgba(10,6,5,.9);color:#ff5a4a;border:1px solid rgba(192,57,43,.5);border-bottom:3px solid #c0392b}
 #ai-banner.busy.side-black{background:rgba(10,14,22,.9);color:#5fa8e8;border:1px solid rgba(95,168,232,.4);border-bottom:3px solid #3498db}
 /* ═══ v1.7 HUD ═══ */
-#last-move-badge{position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:60;background:rgba(10,6,2,.88);border:1px solid #a08040;border-radius:16px;padding:4px 16px;font-size:14px;color:#ffd54a;letter-spacing:1px;opacity:0;transition:opacity .5s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.5)}
-#last-move-badge.show{opacity:1;pointer-events:auto;cursor:pointer}   /* 第28轮: 显示时可点击回看该手 */
+#last-move-badge{position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:60;background:rgba(10,6,2,.88);border:1px solid #a08040;border-radius:16px;padding:4px 16px;font-size:14px;color:#ffd54a;letter-spacing:1px;font-family:inherit;opacity:0;visibility:hidden;transition:opacity .5s,visibility .5s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.5)}   /* 第45轮: 徽章元素改成原生按钮 (第28轮就写了 cursor:pointer + 「可点击回看该手」, 却从未有 click 绑定) — 隐藏态补 visibility:hidden, 否则这颗不可见按钮仍留在 Tab 序内 (第42轮 #btn-row 同款教训); font-family:inherit 保住原观感 (原生按钮不继承正文字体) */
+#last-move-badge.show{opacity:1;visibility:visible;pointer-events:auto;cursor:pointer}   /* 第28轮: 显示时可点击回看该手 (第45轮补上真正的 click 绑定) */
 /* 第28轮: 决策卡推理区/回放遮罩 细滚动条 (第21轮只覆盖了 think-body/move-log) */
 .d-reason::-webkit-scrollbar,#replay-overlay::-webkit-scrollbar{width:6px}
 .d-reason::-webkit-scrollbar-thumb,#replay-overlay::-webkit-scrollbar-thumb{background:rgba(240,217,160,.22);border-radius:3px}
@@ -310,7 +310,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 .d-cands{border-top:1px dashed rgba(240,217,160,.10);padding-top:3px;margin-top:4px}
 .d-cand b{color:#ffd54a}
 /* H6 最新落子徽章: 渐变描边 + 下滑入场 (替代纯透明度) */
-#last-move-badge{background:linear-gradient(180deg,rgba(26,16,4,.94),rgba(12,8,2,.94));border-color:rgba(255,176,0,.5);box-shadow:0 6px 18px rgba(0,0,0,.55),0 0 12px rgba(255,176,0,.10);transform:translateX(-50%) translateY(-6px);transition:opacity .3s ease,transform .3s cubic-bezier(.2,.8,.3,1)}
+#last-move-badge{background:linear-gradient(180deg,rgba(26,16,4,.94),rgba(12,8,2,.94));border-color:rgba(255,176,0,.5);box-shadow:0 6px 18px rgba(0,0,0,.55),0 0 12px rgba(255,176,0,.10);transform:translateX(-50%) translateY(-6px);transition:opacity .3s ease,transform .3s cubic-bezier(.2,.8,.3,1),visibility .3s}   /* 第45轮: transition 列表补 visibility (否则隐藏瞬间生硬弹出, 与 opacity 淡出不同步) */
 #last-move-badge.show{opacity:1;transform:translateX(-50%) translateY(0)}
 /* H7 吃子托盘: 字距/阴影让子力字符更立体 */
 .think-captured{font-size:12px;letter-spacing:3px;color:#d8c393;text-shadow:0 1px 2px rgba(0,0,0,.65)}
@@ -476,7 +476,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
       </datalist>
       <button id="snd-toggle" data-i18n-title="footer_sound_title" data-i18n-aria="footer_sound_title" aria-label="音效开关" title="音效开关">🔊</button>
     <button id="gear-toggle" data-i18n-title="settings_title" data-i18n-aria="settings_title" aria-label="对局设置" aria-haspopup="dialog" aria-expanded="false" title="对局设置">⚙</button>   <!-- 第42轮 a11y: 开关式按钮补 aria-haspopup/aria-expanded (此前读屏只知是个按钮, 不知会弹出对话/当前是否已展开) -->
-    <div id="board" role="group" tabindex="-1" data-i18n-aria="board_label" aria-label="棋盘"><div id="last-move-badge"></div>   <!-- 第40轮 a11y: tabindex=-1 仅作程序化焦点落点 (终局卡收起后归位), 不进 Tab 序; role=group + 名称给读屏一个盘面地标 -->
+    <div id="board" role="group" tabindex="-1" data-i18n-aria="board_label" aria-label="棋盘"><button type="button" id="last-move-badge"></button>   <!-- 第40轮 a11y: tabindex=-1 仅作程序化焦点落点 (终局卡收起后归位), 不进 Tab 序; role=group + 名称给读屏一个盘面地标 · 第45轮: 徽章由 <div> 改为 <button> (第28轮承诺的「点击回看该手」此前无任何绑定; 原生 Enter/Space 激活 + 可访问名, 隐藏态 visibility:hidden 使其不进 Tab 序) -->
         <svg id="board-lines" viewBox="0 0 432 480" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
         <div id="col-labels" aria-hidden="true"><span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span><span>i</span></div>
         <div id="row-labels" aria-hidden="true"><span>10</span><span>9</span><span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span></div>

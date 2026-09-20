@@ -519,3 +519,63 @@ if (iconPurposes.indexOf('any') < 0 || iconPurposes.indexOf('maskable') < 0) wir
 console.log('第18节 a11y/i18n/热路径/PWA 守卫:', wire44.length ? wire44.join(' | ') : 'OK (工具条可访问名 + 下拉/跳转/翻页名 + aria-pressed + 试连 live region + 模态让位 + 焦点归还 + 表格语义 + 展示文本走字典 + 拖拽/分隔条/音量/进度条热路径 + sw 作用域相对与 waitUntil + manifest 底色/截图尺寸)');
 if (wire44.length) process.exit(1);
 
+// 19) 第45轮 源串/结构守卫 — 本轮三类缺陷的共同形态:
+//     (a) 「同一个事件被两层各自处理」— 分隔条的 ←/→ 与全局棋盘键盘分支都跑, 一次按键两个动作;
+//     (b) 「承诺了动作却没有绑定」/「有 ARIA 语义却没有能承载它的角色」— 徽章 cursor:pointer 零 click、格子 aria-label 挂在无角色 div 上;
+//     (c) 「整块重建吞掉焦点与状态」— 思考面板卡片流 / 回放头部与信息面板。
+const wire45 = [];
+// (a) 分隔条: 方向键必须放行「已被消费」, 且自身可交互判定要覆盖 role=separator
+if (!/if \(ev\.defaultPrevented\) return;/.test(appCode)) wire45.push('全局键盘分支未放行已消费的按键 (方向键缺这一条 → 分隔条上按 ←/→ 既调宽又移动棋盘光标)');
+var iDpArrow = appCode.indexOf('if (ev.defaultPrevented) return;');
+var iArrowBranch = appCode.indexOf("k === 'arrowup' || k === 'arrowdown'");
+if (iDpArrow < 0 || iArrowBranch < 0 || iDpArrow > iArrowBranch) {
+  wire45.push('方向键分支未排在 defaultPrevented 放行之后 (守卫锚点或实现顺序失效)');
+}
+if (!/var tRole = /.test(appCode) || !/separator/.test(appCode)) wire45.push('selfActing 未覆盖 role=separator (分隔条不消费 Enter/Space → 焦点在它上面按 Enter 会在棋盘上替用户走一手)');
+var spKeyBody = (appCode.match(/spEl\.addEventListener\('keydown', function \(e\) \{[\s\S]*?\n      \}\)/) || [''])[0];
+if (!spKeyBody) wire45.push('未定位到分隔条 keydown 处理器 (守卫锚点失效)');
+else if (!/e\.stopPropagation\(\)/.test(spKeyBody)) wire45.push('分隔条未 stopPropagation (方向键会继续冒泡到全局棋盘分支)');
+// (b1) 最新着法徽章: 元素必须是按钮 + 隐藏态不可聚焦 + 真的有 click 绑定
+if (!/<button type="button" id="last-move-badge">/.test(html)) wire45.push('#last-move-badge 不是按钮 (第28轮就承诺「可点击回看该手」)');
+if (/<div id="last-move-badge"/.test(html)) wire45.push('#last-move-badge 仍是 <div> (可访问名与原生 Enter/Space 都拿不到)');
+var lmbBase = (html.match(/#last-move-badge\{[^}]*\}/) || [''])[0];
+var lmbShow = (html.match(/#last-move-badge\.show\{[^}]*\}/) || [''])[0];
+if (!/visibility:hidden/.test(lmbBase)) wire45.push('徽章隐藏态缺 visibility:hidden (不可见按钮仍留在 Tab 序内, 第42轮 #btn-row 同款)');
+if (!/visibility:visible/.test(lmbShow)) wire45.push('徽章 .show 未恢复 visibility');
+if (!/lmBadgeEl\.onclick = function \(\) \{/.test(appCode)) wire45.push('徽章缺 click 绑定 (cursor:pointer 的死按钮)');
+if (!/el\.dataset\.ply = String\(ply\)/.test(renCode)) wire45.push('徽章未记录 ply (点击回看的目标手数无处可取)');
+if (!/TA\('badge_replay'/.test(renCode)) wire45.push('徽章缺动作型可访问名 (内容是一串着法文本, 不表达「按下去会怎样」)');
+// 徽章动作名含 {n} 占位符 → 无法用 data-i18n-aria 声明式刷新, 语言热切必须显式重算 (实机验收抓到切中文后仍播英文)
+if (!/function relabelLastMoveBadge\(\)/.test(renCode) || !/relabelLastMoveBadge: relabelLastMoveBadge/.test(renCode)) {
+  wire45.push('缺徽章动作名重算出口 relabelLastMoveBadge (或其未导出)');
+}
+if (!/XQ\.UI\.relabelLastMoveBadge\(\)/.test(appCode)) wire45.push('语言热切未重算徽章动作名 (切到中文后读屏仍播英文, 要等下一手才自愈)');
+// (b2) 棋盘格: 有 aria-label 就必须有允许命名的角色
+if (!/c\.setAttribute\('role', 'img'\)/.test(renCode)) wire45.push('棋盘格缺 role (无角色 div 的隐式 generic 角色 Name From: prohibited → aria-label 被读屏忽略)');
+// (b3) 走法列表条目: 可聚焦必须有动作语义
+if (!/e\.setAttribute\('role', 'button'\)/.test(renCode)) wire45.push('走法列表条目缺 role=button (读屏念成无归属文本, 不知道 Enter 能跳局面)');
+// (b4) 终局卡键盘出口: 唯一出口 + 「已收起」旗标必须被渲染层尊重与复位
+if (!/function dismissEndOverlay\(\)/.test(renCode) || !/dismissEndOverlay: dismissEndOverlay/.test(renCode)) wire45.push('缺终局卡收起单出口 dismissEndOverlay (或其未导出)');
+if (!/if \(engine\.isOver\(\) && !overlay\._dismissed\)/.test(renCode)) wire45.push('renderOverlay 未尊重「已收起」旗标 (收起后下一次 refresh 会把卡弹回来)');
+if (!/overlay\._dismissed = false;/.test(renCode)) wire45.push('「已收起」旗标未在对局不再结束时复位 (下一局终局卡不再弹出)');
+if (!/XQ\.UI\.dismissEndOverlay && XQ\.UI\.dismissEndOverlay\(\)/.test(appCode)) wire45.push('Esc 分支未接终局卡出口 (键盘用户只能靠「再来一局」离开终局卡)');
+// (b5) 通知横幅必须有 live 语义, 且先入 DOM 再写文本 (带内容一起插入时部分读屏不播报)
+if (!/msgSpan\.setAttribute\('role', 'status'\)/.test(appCode)) wire45.push('续局横幅文本无 live 语义 (异步插入的可操作提示读屏完全不知)');
+var iAppendBar = appCode.indexOf('document.body.appendChild(bar);');
+var iMsgText = appCode.indexOf("msgSpan.textContent = TA('resume_banner'");
+if (iAppendBar < 0 || iMsgText < 0 || iAppendBar > iMsgText) wire45.push('续局横幅未先入 DOM 再写文本 (区域带着内容一起插入时部分读屏不播报)');
+// (c1) 思考面板卡片流整块重建: 焦点与展开态都必须存活
+if (!/var keepToggle = /.test(renCode)) wire45.push('思考面板卡片重建前未记住焦点 (💭 按钮上的焦点掉回 body)');
+if (!/st\.openPlys/.test(renCode) || !/stP\.openPlys\.push\(ply\)/.test(renCode)) wire45.push('💭 展开态未记到面板状态上 (下一手重建时被静默折叠)');
+if (!/querySelector\('\.d-toggle\[data-ply="' \+ keepToggle \+ '"\]'\)[\s\S]{0,120}?\.focus\(/.test(renCode)) wire45.push('思考面板卡片重建后未归还焦点 (守卫锚点过弱: 只钉了变量存在)');
+// (c2) 回放头部/信息面板重建: 两个 a[href] 链接上的焦点必须归还
+if (!/function rpRepaintFocus\(container, html\)/.test(appCode)) wire45.push('缺 rpRepaintFocus 单出口 (#rp-head/#rp-info 重建吞掉链接焦点)');
+if (!/rpRepaintFocus\(rpEl\.head, headHtml\)/.test(appCode)) wire45.push('#rp-head 未走焦点保留重建 (最长思考链接上的焦点掉回 body)');
+if (!/rpRepaintFocus\(rpEl\.info, html\)/.test(appCode)) wire45.push('#rp-info 未走焦点保留重建 (备注编辑链接上的焦点掉回 body)');
+if (/rpEl\.head\.innerHTML =/.test(appCode)) wire45.push('#rp-head 仍直接整块重建 innerHTML (焦点不归还)');
+// (c3) 四处焦点陷阱的可聚焦集合必须含 a[href]
+var trapSel = (appCode.match(/'button, input, select, a\[href\], \[tabindex="0"\]'/g) || []).length;
+if (trapSel < 4) wire45.push('焦点陷阱的可聚焦集合未全部含 a[href] (实为 ' + trapSel + '/4 — 回放层两个锚点漏在集合外)');
+console.log('第19节 事件双跑/ARIA 角色/重建保焦点守卫:', wire45.length ? wire45.join(' | ') : 'OK (分隔条让位 + 徽章真按钮与绑定 + 格子与条目角色 + 终局卡收起旗标 + 横幅 live 语义 + 思考面板与回放重建保焦点 + 陷阱含 a[href])');
+if (wire45.length) process.exit(1);
+
