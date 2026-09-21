@@ -235,7 +235,7 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
   });
   const beat = setInterval(() => { try { res.write(': ping\n\n'); } catch (eB) {} }, 15000);   // v3.5: SSE 心跳防 streamIdle 误杀
   upReq.on('timeout', () => upReq.destroy(new Error('anthropic timeout(180s)')));
-  upReq.on('error', e3 => { clearInterval(beat); if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify({ error: 'relay upstream error: ' + e3.message })); });
+  upReq.on('error', e3 => { clearInterval(beat); if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) }); res.end(JSON.stringify({ error: 'relay upstream error: ' + e3.message })); });   // 第46轮: 补 ACAO — openai 路径的同类错误分支一直带 (file:// 调试/异源页要读到错误明细), 本分支漏了
   res.on('close', () => { clearInterval(beat); try { upReq.destroy(new Error('client closed')); } catch (e4) {} });
   upReq.write(body);
   upReq.end();
@@ -335,6 +335,14 @@ const server = http.createServer(async (req, res) => {
     try { payload = JSON.parse(body); } catch (e) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: 'bad json' }));
+    }
+    /* 第46轮: 非对象 JSON 体守卫 — JSON.parse('null') 合法返回 null, 而下一行读 payload.provider
+       在 async 处理器里抛 TypeError; 全仓无 unhandledRejection 兜底 → Node 18+ 直接终止进程。
+       即「一个 POST 就能远程打死中继」(实测 exitCode 1 + 后续请求 ECONNREFUSED)。数组/标量经
+       provider 判定本来就走 400, 只有 null 会崩, 故按「非对象」判定。需重启生效。 */
+    if (!payload || typeof payload !== 'object') {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({ error: '请求体必须是 JSON 对象' }));
     }
     const keys = loadKeys();
     const cfg = (keys.providers || {})[payload.provider];

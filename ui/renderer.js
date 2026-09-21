@@ -396,7 +396,9 @@
   }
   function renderOverlay(engine, view) {
     var overlay = document.getElementById('end-overlay');
-    if (engine.isOver() && !overlay._dismissed) {
+    /* 第46轮: isOver 只求值一次 — 显示分支与「已收起」旗标的复位必须基于同一事实 (见 else 分支注释)。 */
+    var overNow = engine.isOver();
+    if (overNow && !overlay._dismissed) {
       var r = engine.result();
       /* 第40轮 i18n: 原 5 条中文终局原因硬编码在本三元链 — EN 界面终局卡副标题整段中文漏挂。
          I10 守护只匹配同行字面量赋值, 跨行装进 reason 变量后赋值躲过了扫描, 属真实漏挂而非误报。 */
@@ -426,21 +428,32 @@
       }
       overlay._opener = null;
       overlay._wasShown = false;   // 复位: 下一局终局再次焦点入卡
-      overlay._dismissed = false;  // 第45轮: 对局不再结束 (重开/新局) → 清掉「已收起」, 否则下一局的终局卡不再弹出
+      /* 第46轮关键修复: 「已收起」旗标**只在「对局不再结束」时**复位。原实现无条件复位, 而本 else 分支
+         同时覆盖「对局仍结束但用户已收起」— 于是收起后的**第二次**渲染就把旗标清掉、第三次把卡弹回来。
+         实机复现: 点遮罩收起 → 渲染 1 次仍收 → 渲染 2 次旗标已 false → 渲染 3 次卡复弹; 而时钟补位 ticker
+         与键盘光标都会每秒调 refresh, 所以第45轮的 Esc 出口与本轮的遮罩出口在真实使用中都被这一条抵消。 */
+      if (!overNow) overlay._dismissed = false;
     }
   }
 
   function aiBanner(mode, msg, side) {
     var b = document.getElementById('ai-banner');
+    /* 第46轮 a11y: 收起横幅前先看焦点是否还在里面 — 警告 6s / 错误 15s 自动消失与点击关闭都会
+       把承载焦点的元素置为不可见 (className='' → display:none), 焦点静默掉回 body。与终局卡收起、
+       徽章隐藏同口径: 只在焦点确实在本横幅内时才交还盘面 (#board 是 tabindex=-1 的程序化落点)。 */
+    var wasFocused = !!(b.contains && document.activeElement && b.contains(document.activeElement));
+    var hiding = !msg || (mode !== 'warn' && mode !== 'err');
     b.className = mode || '';
     if (side) b.classList.add(side === 'red' ? 'side-red' : 'side-black');
     b.innerHTML = msg || '';   // v2 HUD: 分段配色 (ico/model/state/meta spans)
     /* 第40轮 a11y: 横幅是全站运行时错误/警告的唯一出口, 此前无任何 ARIA 语义且只绑 click 关闭 —
        读屏完全不知道 LLM 失败/导入失败/将军/重复局面, 键盘用户也关不掉它。
-       busy 模式每秒 tick 会重写全局计时, 整体挂 aria-live 会每秒刷屏, 因此只把警告文本投进 #sr-alert。 */
+       busy 模式每秒 tick 会重写全局计时, 整体挂 aria-live 会每秒刷屏, 因此只把警告文本投进 #sr-alert。
+       第46轮: err 态 (window.onerror 的脚本错误) 同样必须播报 — 原实现只投 warn, 于是「页面脚本崩了」
+       对读屏用户完全不可感知, 而这正是最需要播报的一类。 */
     var alertEl = document.getElementById('sr-alert');
     if (alertEl) {
-      if (mode === 'warn' && msg) {
+      if ((mode === 'warn' || mode === 'err') && msg) {
         var plain = String(msg).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
         if (plain !== alertEl.textContent) alertEl.textContent = plain;   // 幂等: 同文本不重复播报
       } else if (!msg) {
@@ -448,7 +461,12 @@
       }
     }
     // 第40轮: 仅警告态留键盘焦点落点 (可 Tab 到 + Enter/Space 关闭); 其余态摘除, 不留常驻 Tab 停点
-    b.tabIndex = (mode === 'warn' && msg) ? 0 : -1;
+    // 第46轮: err 态一并纳入 (脚本错误横幅此前 tabIndex=-1 且无任何关闭绑定 → 永久驻留且键盘不可达)
+    b.tabIndex = ((mode === 'warn' || mode === 'err') && msg) ? 0 : -1;
+    if (hiding && wasFocused) {
+      var bd = document.getElementById('board');
+      if (bd && bd.focus) { try { bd.focus({ preventScroll: true }); } catch (eB) { try { bd.focus(); } catch (eB2) {} } }
+    }
   }
 
   /* v1.0.daily 长对局 (100+ 手) DOM 防护: move-log 条目超上限只保留尾部, 头部一行折叠提示

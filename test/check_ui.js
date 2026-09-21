@@ -206,7 +206,11 @@ if (!/addEventListener\('pointercancel', dragAbort\)/.test(renSrc) || !/addEvent
 // (e) 渲染热路径
 if (!/sel \? legal\[x \+ ',' \+ y\] : null/.test(renSrc)) a11yIssues.push('逐格 legal 查表未按选中态短路 (未选中仍分配 90 次键串)');
 if (!/_sparkSig/.test(renSrc)) a11yIssues.push('评值走势 SVG 缺内容签名去重');
-if (!/tabIndex = \(mode === 'warn' && msg\) \? 0 : -1/.test(renSrc)) a11yIssues.push('横幅缺焦点落点管理 (仅警告态可聚焦)');
+/* 第46轮: 横幅焦点落点从「仅警告态」扩为「警告+错误态」— window.onerror 的脚本错误横幅 (mode='err')
+   此前 tabIndex=-1 且不入 #sr-alert, 读屏完全不可感知; 断言同步收紧到 err 也在集合内。 */
+if (!/tabIndex = \(\(mode === 'warn' \|\| mode === 'err'\) && msg\) \? 0 : -1/.test(renSrc)) a11yIssues.push('横幅缺焦点落点管理 (警告+错误态都应可聚焦)');
+if (!/\(mode === 'warn' \|\| mode === 'err'\) && msg\) \{\s*\n\s*var plain = String\(msg\)/.test(renSrc)) a11yIssues.push('err 态脚本错误未投 #sr-alert (读屏不知道页面脚本崩了)');
+if (!/if \(hiding && wasFocused\)/.test(renSrc)) a11yIssues.push('横幅自清/关闭未交还焦点 (焦点静默掉回 body)');
 // (f) 终局卡焦点归还
 if (!/overlay\._opener/.test(renSrc) || !/back\.isConnected/.test(renSrc)) a11yIssues.push('终局卡缺焦点归还 (关闭后焦点丢失到 body)');
 // (g)(h) app.js 侧
@@ -247,6 +251,9 @@ function codeOnly(src) {
 }
 const appCode = codeOnly(appSrc);
 const renCode = codeOnly(renSrc);
+/* 第46轮: server.js 源码 — 本轮有一处服务端断言 (anthropic 上游错误分支的 ACAO), 此前守卫只对 server.js
+   做语法检查, 拿不到其源码文本。 */
+const srvCode = codeOnly(fs.readFileSync(__dirname + '/../server.js', 'utf8'));
 // (k) 第41轮: 棋子显示偏好单出口 (HUD/回放层不得直取 CHARS)
 if (!/XQ\.UI\.pieceGlyph/.test(appCode) || !/function pieceGlyphOf\(color, type\)/.test(renCode)) a11yIssues.push('棋子显示字缺单出口 (HUD/回放层直取 CHARS → Letters 模式下与棋盘矛盾)');
 // (l) 第41轮: 兑底判定必须基于「模型是否给了 summary」这一原始事实, 不得比对字典产物 (EN 恒 false → 兑底透明化在英文界面整体失效)
@@ -556,7 +563,11 @@ if (!/c\.setAttribute\('role', 'img'\)/.test(renCode)) wire45.push('棋盘格缺
 if (!/e\.setAttribute\('role', 'button'\)/.test(renCode)) wire45.push('走法列表条目缺 role=button (读屏念成无归属文本, 不知道 Enter 能跳局面)');
 // (b4) 终局卡键盘出口: 唯一出口 + 「已收起」旗标必须被渲染层尊重与复位
 if (!/function dismissEndOverlay\(\)/.test(renCode) || !/dismissEndOverlay: dismissEndOverlay/.test(renCode)) wire45.push('缺终局卡收起单出口 dismissEndOverlay (或其未导出)');
-if (!/if \(engine\.isOver\(\) && !overlay\._dismissed\)/.test(renCode)) wire45.push('renderOverlay 未尊重「已收起」旗标 (收起后下一次 refresh 会把卡弹回来)');
+if (!/if \(engine\.isOver\(\) && !overlay\._dismissed\)/.test(renCode) && !/if \(overNow && !overlay\._dismissed\)/.test(renCode)) wire45.push('renderOverlay 未尊重「已收起」旗标 (收起后下一次 refresh 会把卡弹回来)');
+/* 第46轮: 旗标复位必须**有条件** — 无条件复位时, 收起后的第二次渲染就清旗标、第三次复弹
+   (else 分支同时覆盖「对局仍结束但已收起」); 时钟补位 ticker 每秒 refresh, 真实使用中必复弹。 */
+if (!/if \(!overNow\) overlay\._dismissed = false;/.test(renCode)) wire45.push('「已收起」旗标复位无条件 (收起后第二次渲染即清旗标 → 第三次复弹, 第45/46轮两条收起出口都被抵消)');
+if (!/var overNow = engine\.isOver\(\);\n    if \(overNow && !overlay\._dismissed\)/.test(renCode)) wire45.push('renderOverlay 未用同一 isOver 事实驱动显示与复位 (两次求值可能不同源)');
 if (!/overlay\._dismissed = false;/.test(renCode)) wire45.push('「已收起」旗标未在对局不再结束时复位 (下一局终局卡不再弹出)');
 if (!/XQ\.UI\.dismissEndOverlay && XQ\.UI\.dismissEndOverlay\(\)/.test(appCode)) wire45.push('Esc 分支未接终局卡出口 (键盘用户只能靠「再来一局」离开终局卡)');
 // (b5) 通知横幅必须有 live 语义, 且先入 DOM 再写文本 (带内容一起插入时部分读屏不播报)
@@ -578,4 +589,73 @@ var trapSel = (appCode.match(/'button, input, select, a\[href\], \[tabindex="0"\
 if (trapSel < 4) wire45.push('焦点陷阱的可聚焦集合未全部含 a[href] (实为 ' + trapSel + '/4 — 回放层两个锚点漏在集合外)');
 console.log('第19节 事件双跑/ARIA 角色/重建保焦点守卫:', wire45.length ? wire45.join(' | ') : 'OK (分隔条让位 + 徽章真按钮与绑定 + 格子与条目角色 + 终局卡收起旗标 + 横幅 live 语义 + 思考面板与回放重建保焦点 + 陷阱含 a[href])');
 if (wire45.length) process.exit(1);
+
+// 20) 第46轮 源串/结构守卫 — 本轮三类缺陷的共同形态:
+//     (a) 「同一动作有两条入口, 只有一条被修」— 终局卡收起 (Esc 有旗标 / 遮罩点击没有)、
+//         回放走法表 (主界面条目有 role=button / 回放层没有)、非流式与流式的上游错误分支;
+//     (b) 「默认焦点落在一个会吞掉 Esc 的控件上」— 回放层打开即 focus <select>, 而全局 keydown 对 SELECT 早退;
+//     (c) 「有 ARIA 语义却缺关闭绑定 / 缺焦点落点」— err 态横幅既不入 #sr-alert 也无任何关闭监听。
+const wire46 = [];
+// (a1) 终局卡: 两条收起入口必须共用同一出口 (旗标), 否则鼠标收起后下一次渲染卡片复弹
+var eoBind = (appCode.match(/eoOv\.addEventListener\('click', function \(ev\) \{[^}]*\}/) || [''])[0];
+if (!eoBind) wire46.push('未定位到终局卡遮罩点击绑定 (守卫锚点失效)');
+else if (!/XQ\.UI\.dismissEndOverlay\(\)/.test(eoBind)) wire46.push('终局卡遮罩点击未走 dismissEndOverlay (只摘类名 → 下一次 refresh 卡片复弹, 第45轮只修了 Esc 那条)');
+if (/eoOv\.classList\.remove\('show'\)/.test(appCode)) wire46.push('终局卡遮罩仍直接摘 show 类名 (绕过「已收起」旗标)');
+// (a2) 回放走法表条目: 与主界面条目同口径 (可聚焦 + Enter/Space 能跳 → 必须有动作语义与当前手标记)
+var mlItem = (appCode.match(/'<li' \+ cls \+ ' data-ply="' \+ \(i \+ 1\) \+ '" tabindex="0"[^']*'/) || [''])[0];
+if (!mlItem) wire46.push('未定位到回放走法表条目模板 (守卫锚点失效)');
+else {
+  if (!/role="button"/.test(mlItem)) wire46.push('回放走法表条目缺 role=button (读屏只念「列表项」, 不知 Enter 能跳局面)');
+  /* curAttr 拼在该字面量**之后**, 故必须在整份源码里找 — 只在 mlItem 内找会恒真误报 */
+  if (!/var curAttr = \(i \+ 1 === cur\) \? ' aria-current="true"'/.test(appCode)) wire46.push('回放走法表缺 aria-current (当前手只有视觉底色, 读屏不知自己在哪一手)');
+  if (!/\+ curAttr \+/.test(appCode)) wire46.push('回放走法表条目未把 aria-current 拼进模板 (变量存在但没接线)');
+}
+// (a3) 上游错误分支: 两条协议路径都必须带 ACAO (openai 一直带, anthropic 的上游连接失败分支漏了)
+var antErr502 = (srvCode.match(/upReq\.on\('error', e3 => \{[\s\S]{0,260}?\}\)/) || [''])[0];
+if (!antErr502) wire46.push('未定位到 anthropic 上游错误分支 (守卫锚点失效)');
+else if (!/req_origin_safe\(req\)/.test(antErr502)) wire46.push('anthropic 上游连接失败 502 缺 ACAO (异源页只看到不透明的 CORS 失败)');
+// (b) 回放层 Esc 必须穿过输入控件早退 (默认焦点是 #rp-pick <select>, 否则「打开回放后按 Esc」完全无反应)
+var inputGuard = (appCode.match(/if \(ev\.target && \/INPUT\|TEXTAREA\|SELECT\/\.test\(ev\.target\.tagName\)[^\n]*/) || [''])[0];
+if (!inputGuard) wire46.push('未定位到全局 keydown 的输入控件早退 (守卫锚点失效)');
+else if (!/ev\.key !== 'Escape'/.test(inputGuard)) wire46.push('Esc 仍被输入控件早退吞掉 (回放层默认焦点是 <select> → 帮助层自述的「Esc 退出回放」不成立)');
+if (!/rpEl\.pick\.focus\(/.test(appCode)) wire46.push('回放打开未把焦点移入层内 (守卫锚点失效: 无法判断默认焦点是否是 <select>)');
+// 设置层 Esc 必须声明「已消费」, 且主分支的 Esc 要放行它 (否则同一次 Esc 连锁收起终局卡)
+/* 锚点必须精确到「设置层监听器内部」— 用 closeAISettings() 起算 + 固定窗口会跨到 Tab 陷阱的
+   ev.preventDefault() (codeOnly 已剥注释, 距离很短), 那样删掉 Esc 的声明也照样绿。 */
+var iSo3 = appCode.indexOf("var so3 = document.getElementById('settings-overlay');");
+if (iSo3 < 0) wire46.push('未定位到设置层 keydown 监听 (守卫锚点失效)');
+else if (appCode.slice(iSo3, iSo3 + 700).indexOf('ev.preventDefault();') < 0) {
+  wire46.push('设置层 Esc 未声明已消费 (同一次 Esc 会继续在主分支里收起终局卡)');
+}
+if (!/if \(k === 'escape'\) \{[\s\S]{0,160}?if \(ev\.defaultPrevented\) return;/.test(appCode)) wire46.push('主分支 Esc 未放行已被消费的按键 (设置层关闭与终局卡收起会连环触发)');
+// (c) 横幅: err 态 (window.onerror) 必须播报 + 可聚焦 + 有关闭绑定 + 收起时交还焦点
+if (!/bindBannerDismiss\(\)/.test(appCode)) wire46.push('缺横幅关闭绑定单出口 bindBannerDismiss (脚本错误横幅此前零关闭监听, 出现即永久驻留)');
+if (!/XQ\.UI\.aiBanner\('err'[\s\S]{0,120}?bindBannerDismiss\(\)/.test(appCode)) wire46.push('window.onerror 路径未绑定横幅关闭 (err 态横幅无 click/keydown 监听)');
+if (!/function bindBannerDismiss\(\)/.test(appCode)) wire46.push('bindBannerDismiss 未定义为函数 (守卫锚点失效)');
+// (d) 首屏: 状态条静态文案必须可被 apply() 本地化 (首帧渲染排在两次网络往返之后)
+if (!/<span id="status-text" data-i18n="status_turn_red"/.test(html)) wire46.push('#status-text 静态文案未挂 data-i18n (EN 首屏空窗里一直显示中文)');
+/* 锚点必须紧贴 applyFlip() 之后 — 用 indexOf('refresh();', iBootRefresh) 会被下方
+   #ui-pieces 的 change 处理器里的 refresh() 抢先命中 (它也在 fetch 之前), 删掉首帧渲染照样绿。 */
+if (!/if \(flipOn\) applyFlip\(\);[\s\S]{0,200}?\n\s{4}refresh\(\);/.test(appCode)) {
+  wire46.push('首屏未在 fetch 之前同步渲染一次 (盘面 90 格与状态条要等两次网络往返才出现)');
+}
+// (e) 回放盘面与主盘面同口径: 格子 role=img + 坐标标签 + 行列标尺 aria-hidden
+if (!/c\.setAttribute\('role', 'img'\)/.test(appCode)) wire46.push('回放盘面格子缺 role=img (aria-label 挂在无角色 div 上会被读屏忽略)');
+if (!/XQ\.Move\.sqName\(\{ x: x, y: y \}\)/.test(appCode)) wire46.push('回放盘面格子缺坐标 aria-label (第45轮主盘面已有, 回放漏了)');
+if (!/id="rp-col-labels" aria-hidden="true"/.test(appCode) || !/id="rp-row-labels" aria-hidden="true"/.test(appCode)) wire46.push('回放层行列标尺未 aria-hidden (读屏会念一串孤立的 a b c… 10 9 8…)');
+// (f) #rp-jump-max 的可访问名不能是 @#N 这种符号串
+if (!/aria-label="' \+ esc2\(maxName\)/.test(appCode) || !/tArgs\('rp_jump_max'/.test(appCode)) wire46.push('#rp-jump-max 缺动作型可访问名 (读屏只念「@ 井号 59」, 不知是跳到最长思考那一手)');
+// (g) 续局横幅两个出口都必须走「交还焦点」的单出口 (异步插入 body, Tab 到的按钮被摘掉后焦点掉回 body)
+if (!/var dropBar = function \(\)/.test(appCode)) wire46.push('缺续局横幅移除单出口 dropBar (焦点无处交还)');
+else {
+  if (!/if \(hadFocus\) \{/.test(appCode) || !/bdR\.focus\(/.test(appCode)) wire46.push('续局横幅移除未交还焦点 (焦点静默掉回 body)');
+  /* 只钉 dropBar 存在不够 — 两个 onclick 必须真的走它, 否则等于没接线 (第45轮「死按钮」同款) */
+  if (!/b2\.onclick = function \(\) \{ dropBar\(\); \}/.test(appCode) || !/b1\.onclick = function \(\) \{ dropBar\(\); resumeGame\(rec\); \}/.test(appCode)) {
+    wire46.push('续局横幅按钮未走 dropBar (仍直接 bar.remove() → 焦点丢失)');
+  }
+}
+// (h) 横幅自清/关闭时必须交还焦点 (renderer 侧单出口)
+if (!/if \(hiding && wasFocused\)/.test(renCode)) wire46.push('横幅自清/关闭未交还焦点 (承载焦点的元素被隐藏, 焦点掉回 body)');
+console.log('第20节 双入口一致性/默认焦点/横幅语义守卫:', wire46.length ? wire46.join(' | ') : 'OK (终局卡两条收起入口共用旗标 + 回放走法表角色与当前手 + anthropic 502 ACAO + Esc 穿过输入早退与设置层消费声明 + err 横幅播报/关闭/焦点交还 + 首屏 data-i18n 与提前渲染 + 回放盘面格子角色与坐标 + 跳最长思考名 + 续局横幅焦点)');
+if (wire46.length) process.exit(1);
 

@@ -565,7 +565,10 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 </div><!-- /arena -->
 
 <div id="status-bar" class="status-red-turn">   <!-- v1.0.daily a11y: live 播报分离到 #sr-status — 思考中 #status-info 每秒 tick 若留在 aria-live 区会触发读屏每秒刷屏 -->
-    <span id="status-text">当前回合：红方</span>
+    <!-- 第46轮 i18n: 静态文案此前是裸中文且无 data-i18n — 首帧渲染排在两次网络往返之后, 这段空窗里 EN 界面
+         一直显示「当前回合：红方」(apply() 只管带 data-i18n 的节点)。挂 data-i18n 后随 DOMContentLoaded 即本地化;
+         动态渲染仍由 renderStatus 覆盖, 语言热切时 apply() 先写静态值、紧随的 xq:i18n 监听再 refresh() 校正。 -->
+    <span id="status-text" data-i18n="status_turn_red">当前回合：红方</span>
     <span id="status-info"></span>
 </div>
 <div id="sr-status" class="sr-only" aria-live="polite"></div>

@@ -122,7 +122,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     console.warn('[LLM-chess] script error:', ev.message, ev.filename + ':' + ev.lineno);
     if (_errShown) return;
     _errShown = true;
-    try { XQ.UI.aiBanner('err', '⚠ ' + String(ev.message || 'script error').slice(0, 60), null); } catch (eE) {}
+    try {
+      XQ.UI.aiBanner('err', '⚠ ' + String(ev.message || 'script error').slice(0, 60), null);
+      bindBannerDismiss();   // 第46轮: 脚本错误横幅此前无任何关闭绑定 (errBanner 才绑) → 出现即永久驻留
+    } catch (eE) {}
   });
 
   /* ── 交互 ── */
@@ -556,6 +559,24 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var wg = gameId;   // 第39轮: 世代 — 旧局定时器不得清掉新局横幅
     warnTimer = setTimeout(function () { if (wg !== gameId) return; XQ.UI.aiBanner('', ''); }, 6000);   // 警告 6s 后自动消失
   }
+  /* 第46轮: 横幅关闭绑定抽成单出口 — 原实现只在 errBanner (LLM 失败) 里就地绑定, 于是 window.onerror
+     的脚本错误横幅 (走 XQ.UI.aiBanner('err', …), 不经 errBanner) 全仓零关闭绑定: 它既没有自动消失定时器
+     (warnTimer 只在两个 banner 函数里设), 也没有 click/keydown 监听 → 一旦出现就永久驻留、键盘也关不掉。
+     现在两个入口共用同一份绑定 (含 Enter/Space 键盘出口)。 */
+  function bindBannerDismiss() {
+    var abEl = document.getElementById('ai-banner');
+    if (!abEl || abEl._dismissBound) return;
+    abEl._dismissBound = true;
+    var abClose = function () { clearTimeout(warnTimer); XQ.UI.aiBanner('', ''); };
+    abEl.addEventListener('click', abClose);   // v1.0.daily: 点击横幅立即关闭 (取消残留定时器)
+    /* 第40轮 a11y: renderer 仅在警告态给横幅 tabIndex=0 — 补 Enter/Space 关闭, 键盘用户不再只能干等 15s 自清 */
+    abEl.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      ev.preventDefault();
+      ev.stopPropagation();   // 不外溢到全局 Enter/Space 键盘走子分支
+      abClose();
+    });
+  }
   // v1.5.5: LLM 错误分类提示 (常驻 15s, 区分网络/鉴权/格式/上游限流) — 第26轮: 分类文案全部走字典
   function errBanner(model, errMsg, side) {
     var m = String(errMsg || '').slice(0, 80);
@@ -570,19 +591,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             : /fetch|network|abort|timeout/.test(m) ? TwE('err_network')
             : '❌ ' + m;
     XQ.UI.aiBanner('warn', tag, side);
-    var abEl = document.getElementById('ai-banner');
-    if (abEl && !abEl._dismissBound) {
-      abEl._dismissBound = true;
-      var abClose = function () { clearTimeout(warnTimer); XQ.UI.aiBanner('', ''); };
-      abEl.addEventListener('click', abClose);   // v1.0.daily: 点击横幅立即关闭 (取消残留定时器)
-      /* 第40轮 a11y: renderer 仅在警告态给横幅 tabIndex=0 — 补 Enter/Space 关闭, 键盘用户不再只能干等 15s 自清 */
-      abEl.addEventListener('keydown', function (ev) {
-        if (ev.key !== 'Enter' && ev.key !== ' ') return;
-        ev.preventDefault();
-        ev.stopPropagation();   // 不外溢到全局 Enter/Space 键盘走子分支
-        abClose();
-      });
-    }
+    bindBannerDismiss();
     clearTimeout(warnTimer);
     var wgE = gameId;   // 第39轮: 同上 — 世代守卫 (错误横幅 15s 后自清, 不跨局)
     warnTimer = setTimeout(function () { if (wgE !== gameId) return; XQ.UI.aiBanner('', ''); }, 15000);   // 错误提示延长 15s
@@ -1184,14 +1193,30 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       bar.appendChild(b1); bar.appendChild(b2);
       document.body.appendChild(bar);
       msgSpan.textContent = TA('resume_banner', { n: rec.moves.length });
-      b2.onclick = function () { bar.remove(); };
-      b1.onclick = function () { bar.remove(); resumeGame(rec); };
+      /* 第46轮 a11y: 横幅是异步插入 body 的 (用户 Tab 到两个按钮时焦点在横幅内), 两个出口都只 bar.remove() —
+         承载焦点的按钮被摘掉, 焦点静默掉回 body, 键盘用户当场迷路。与终局卡收起/横幅自清同口径:
+         只在焦点确实在横幅内时交还盘面 (#board 是 tabindex=-1 的程序化落点, 不打断已移到别处的焦点)。 */
+      var dropBar = function () {
+        var hadFocus = !!(bar.contains && document.activeElement && bar.contains(document.activeElement));
+        bar.remove();
+        if (hadFocus) {
+          var bdR = document.getElementById('board');
+          if (bdR && bdR.focus) { try { bdR.focus({ preventScroll: true }); } catch (eRB) { try { bdR.focus(); } catch (eRB2) {} } }
+        }
+      };
+      b2.onclick = function () { dropBar(); };
+      b1.onclick = function () { dropBar(); resumeGame(rec); };
     } catch (eR) {}
   }
   /* ── 初始化 ── */
   document.addEventListener('DOMContentLoaded', function () {
     XQ.UI.drawBoard(document.getElementById('board-lines'));
     if (flipOn) applyFlip();   // 第34轮: 恢复翻转视角 (labels/view/refresh)
+    /* 第46轮: 首屏先同步渲染一次。原实现的首帧渲染挂在 boot 链末尾 (api/health → api/providers 两个
+       网络往返之后才 refresh()), 于是这段时间状态条停在 index.html 的静态文案、盘面 90 格全空 —
+       中继慢或不可达时这个空窗肉眼可见, 且 EN 界面下静态文案是中文。render 只依赖 engine/view
+       (不碰 agents/currentRecord/relayAvailable), 因此可安全提前。 */
+    refresh();
     setTimeout(tryOfferResume, 1200);   // 第30轮: 初始化后探测未完对局
     // 第24轮 PWA 二期: service worker (网络优先离线壳, 见根级 sw.js) — file:// 等非安全上下文静默跳过
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
@@ -1321,7 +1346,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var eoOv = document.getElementById('end-overlay');
     if (eoOv && !eoOv._dismissBound) {
       eoOv._dismissBound = true;
-      eoOv.addEventListener('click', function (ev) { if (ev.target === eoOv) eoOv.classList.remove('show'); });   // v1.0.daily: 点遮罩关闭终局卡 → 可自由回看终局走子/复盘 (再来一局 按钮不受影响)
+      /* 第46轮: 遮罩点击必须走 dismissEndOverlay 单出口 — 原实现只摘 'show' 类名, 而 renderOverlay 在
+         engine.isOver() 时无条件 add('show'), 于是「鼠标点遮罩收起 → 按一下方向键」卡片当场弹回来
+         (第45轮只给 Esc 那条路径落了「已收起」旗标, 鼠标这条漏了)。 */
+      eoOv.addEventListener('click', function (ev) { if (ev.target === eoOv) XQ.UI.dismissEndOverlay(); });   // v1.0.daily: 点遮罩关闭终局卡 → 可自由回看终局走子/复盘 (再来一局 按钮不受影响)
     }
     var soEl = document.getElementById('settings-overlay');
     if (soEl && !soEl._backdropBound) {
@@ -1486,6 +1514,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (ev.key === 'Escape') {
         closeAISettings();
         if (kbCursor) { clearKbCursor(); refresh(); }
+        /* 第46轮: 声明「该键已被消费」— 本监听注册在主 keydown 之前, 主分支的 Esc 现已穿过输入框早退,
+           若不 preventDefault, 同一次 Esc 会继续在主分支里求值并顺带收起终局卡 (一次按键两个动作,
+           与第45轮分隔条/方向键同一类)。 */
+        ev.preventDefault();
         return;
       }
       // 第24轮 a11y: aria-modal=true 的配套 Tab 焦点陷阱 — 焦点在层内循环 (原 Tab 可逃出面板落到被遮住的棋盘)
@@ -1508,7 +1540,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
     // 快捷键: M 静音 / R 重开
     document.addEventListener('keydown', function (ev) {
-      if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) return;
+      /* 第46轮: Esc 必须穿过输入控件早退 — 回放层的默认焦点是 #rp-pick (<select>), 而「退出回放」的 Esc
+         分支在本行之下, 于是「打开回放后立刻按 Esc」被这条早退整条吃掉, 与回放帮助层自述的
+         「Esc 退出回放」不符 (把焦点挪到任意按钮后 Esc 才生效, 极难自查)。其余单键快捷键仍让位输入框。 */
+      if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName) && ev.key !== 'Escape') return;
       /* 第43轮 a11y: Elo 天梯与回放帮助层都是盖在回放层之上的 aria-modal 浮层 — 打开期间全局快捷键
          必须整体让位。原实现没有任何闸门: Esc 被下层回放层接走 (关掉**下层**回放层, 浮层留在主界面上),
          方向键/空格还会在遮罩后面步进棋局。帮助层自述「再次按下 ? 关闭」, 故把 ? 也交给它当开关。 */
@@ -1565,6 +1600,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       /* v1.0.daily a11y 键盘走子: 方向键光标 / Enter·Space 选子走子 / Esc 取消 */
       var k = (ev.key || '').toLowerCase();
       if (k === 'escape') {   // Esc 必须先于模态守卫求值 (关闭面板 + 清理棋盘光标是它的既有职责)
+        /* 第46轮: 已被更早的监听消费 (设置层 Esc 会 preventDefault) 就放行 — 否则同一次 Esc 会连锁收起终局卡。 */
+        if (ev.defaultPrevented) return;
         var so2 = document.getElementById('settings-overlay');
         if (so2 && so2.classList.contains('show')) { closeAISettings(); if (kbCursor) { clearKbCursor(); refresh(); } ev.preventDefault(); return; }   // v1.0.daily: Esc 关设置; 第23轮: 统一出口
         /* 第45轮 a11y: 终局卡的键盘出口 — 点遮罩可收起卡片回看终局局面, 键盘此前无等价路径
@@ -1661,8 +1698,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">'
       + '  <div style="position:relative;padding:10px 10px 22px 26px;background:linear-gradient(135deg,#6b4f1a,#a08040,#6b4f1a);border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.6)">'
       + '    <div id="rp-board" style="position:relative;display:grid;grid-template-columns:repeat(9,var(--cell));grid-template-rows:repeat(10,var(--cell));width:calc(var(--cell)*9);height:calc(var(--cell)*10);background:#dcc88a;border:2px solid #5a3a18;box-sizing:content-box"></div>'
-      + '    <div id="rp-col-labels" style="position:absolute;left:28px;bottom:3px;width:calc(var(--cell)*9);display:grid;grid-template-columns:repeat(9,var(--cell));pointer-events:none;z-index:4"></div>'
-      + '    <div id="rp-row-labels" style="position:absolute;left:3px;top:12px;height:calc(var(--cell)*10);width:20px;display:grid;grid-template-rows:repeat(10,var(--cell));pointer-events:none;z-index:4"></div>'
+      + '    <div id="rp-col-labels" aria-hidden="true" style="position:absolute;left:28px;bottom:3px;width:calc(var(--cell)*9);display:grid;grid-template-columns:repeat(9,var(--cell));pointer-events:none;z-index:4"></div>'
+      + '    <div id="rp-row-labels" aria-hidden="true" style="position:absolute;left:3px;top:12px;height:calc(var(--cell)*10);width:20px;display:grid;grid-template-rows:repeat(10,var(--cell));pointer-events:none;z-index:4"></div>'
       + '  </div>'
       + '  <div style="flex:1;min-width:300px;max-width:420px;display:flex;flex-direction:column;gap:10px">'
       + '    <div id="rp-head" style="color:#e8d5ae;font-size:12px;line-height:1.5"></div>'
@@ -2114,7 +2151,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var rec = rpSession.record, maxT = 0, maxN = 0;
     for (var i = 0; i < rec.moves.length; i++) { var t = rec.moves[i].timeMs || 0; if (t > maxT) { maxT = t; maxN = i + 1; } }
     if (maxT <= 0) return '';
-    return ' · ' + (XQ.I18N ? XQ.I18N.tArgs('rp_longest', { s: (maxT / 1000).toFixed(1) }) : '最长 ' + (maxT / 1000).toFixed(1) + 's') + ' <a href="javascript:void(0)" id="rp-jump-max" style="color:#e0a030;text-decoration:underline" data-ply="' + maxN + '">@#' + maxN + '</a>';
+    /* 第46轮 a11y: 该锚点是 href="javascript:void(0)" 的原生可聚焦元素 (第45轮起进了焦点陷阱的可聚焦集合),
+       但它的可见文本是 '@#59' — 可访问名取内容, 读屏只会念「@ 井号 59」, 完全不知道这是「跳到最长思考那一手」。
+       补动作型 aria-label (含手数, 故随 rpPaintHead 重建, 语言热切经 xq:i18n 监听重绘同步)。 */
+    var maxName = XQ.I18N ? XQ.I18N.tArgs('rp_jump_max', { n: maxN }) : '跳到最长思考那一手 (#' + maxN + ')';
+    return ' · ' + (XQ.I18N ? XQ.I18N.tArgs('rp_longest', { s: (maxT / 1000).toFixed(1) }) : '最长 ' + (maxT / 1000).toFixed(1) + 's') + ' <a href="javascript:void(0)" id="rp-jump-max" style="color:#e0a030;text-decoration:underline" data-ply="' + maxN + '" aria-label="' + esc2(maxName) + '" title="' + esc2(maxName) + '">@#' + maxN + '</a>';
   }
   function rpPaintTimeChart() {
     if (!rpEl || !rpEl.timechart) return;
@@ -2474,6 +2515,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         c.className = 'cell';
         if (flip) { c.style.gridRowStart = (9 - y) + 1; c.style.gridColumnStart = (8 - x) + 1; } else { c.style.gridRowStart = ''; c.style.gridColumnStart = ''; }   // 第36轮: 翻转摆位
         var p = st.cells[y][x];
+        /* 第46轮 a11y: 回放盘面沿用第45轮主盘面的口径 — 格子补 role=img 才让 aria-label 生效
+           (无角色 <div> 的隐式 generic 角色 Name From 为 prohibited, 标签会被读屏按规范忽略),
+           名字是「坐标 + 格上棋子」(坐标语言中立, 子字随 xq_pieces 偏好)。此前回放盘面 90 格
+           既无角色也无标签, 读屏完全无法探索回放局面。 */
+        c.setAttribute('role', 'img');
+        try { c.setAttribute('aria-label', XQ.Move.sqName({ x: x, y: y }) + (p ? ' ' + pg(p.color, p.type) : '')); } catch (eRA) {}
         if (p) {
           var pe = document.createElement('div');
           pe.className = 'piece ' + p.color;
@@ -2658,6 +2705,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var label = m.summary || m.name || (m.from + '→' + m.to);
       if (q && (label + ' ' + m.from + m.to + ' #' + m.n).toLowerCase().indexOf(q) < 0) continue;
       var cls = (i + 1 === cur) ? ' class="active"' : '';
+      /* 第46轮 a11y: 条目 tabindex=0 且 Enter/Space 真能跳局面 (第37轮接的), 但隐式角色是 listitem —
+         读屏只念「列表项」, 从不提示可激活; 第45轮给主界面走法条目补了 role=button, 这一处 (回放层走法表)
+         漏了。当前手另补 aria-current, 读屏步进时才知道自己在哪一手 (原实现只有 .active 的视觉底色)。 */
+      var curAttr = (i + 1 === cur) ? ' aria-current="true"' : '';
       var sideTag = m.side === 'red' ? '🔴' : '⚫';
       var bmHtml = rpBookmarks.indexOf(i + 1) >= 0 ? '<span title="' + esc2(T('rp_bm_title')) + '" style="color:#ffd54a">🔖</span> ' : '';   // v1.0.daily 书签标记
       var risky = (risks[i + 1] || 0) >= riskMark ? '<span title="' + esc2(TA('rp_title_risky', { s: (risks[i + 1]).toFixed(1) })) + '" style="color:#e67e22">⚠</span> ' : '';
@@ -2667,7 +2718,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var mkHtml = mk === '杀' ? '<span title="' + esc2(T('rp_title_mate')) + '" style="color:#ff5050;font-weight:bold">' + esc2(T('rp_mk_mate')) + '</span> '
         : mk === '困' ? '<span title="' + esc2(T('rp_title_stuck')) + '" style="color:#ff5050">' + esc2(T('rp_mk_stuck')) + '</span> '
         : mk === '将' ? '<span title="' + esc2(T('rp_title_check')) + '" style="color:#e0a030">' + esc2(T('rp_mk_check')) + '</span> ' : '';
-      html += '<li' + cls + ' data-ply="' + (i + 1) + '" tabindex="0"><span class="rp-ml-side">' + sideTag + '</span><b>' + m.n + '</b><span style="flex:1">' + bmHtml + mkHtml + risky + esc2(label) + '</span></li>';
+      html += '<li' + cls + ' data-ply="' + (i + 1) + '" tabindex="0" role="button"' + curAttr + '><span class="rp-ml-side">' + sideTag + '</span><b>' + m.n + '</b><span style="flex:1">' + bmHtml + mkHtml + risky + esc2(label) + '</span></li>';
       visible++;
     }
     if (html) rpEl.movelist.innerHTML = html;

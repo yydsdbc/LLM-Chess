@@ -15,7 +15,7 @@
 
 ## Checklist
 
-- [ ] `npm test` passes (7 suites) — run `npm test` locally
+- [ ] `npm test` passes (15 suites) — run `npm test` locally
 - [ ] `node --check` passes for every touched `.js` file
 - [ ] If you touched **ai/llm_agent.js systemPrompt**: system stays ≤ 2400 chars, no special symbols (①②③≥≤~→⚠️), and the cache contract holds (constant system + append-only history pairs + retry block last). Run `node test/dump_prompts.js --check`
 - [ ] No secrets: `config/keys.json`, `logs/`, `temp/` are not committed

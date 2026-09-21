@@ -428,6 +428,8 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
 }).then(function () {
   l17Round45();               // 第45轮: 终局卡键盘出口 + 棋盘格/走法条目 ARIA 角色
 }).then(function () {
+  l18Round46();               // 第46轮: 横幅 err 态播报/可聚焦 + 收起时交还焦点
+}).then(function () {
   console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
   process.exit(fails.length ? 1 : 0);
   }, function (e) {
@@ -653,6 +655,12 @@ function l17Round45() {
     'L17 dismissEndOverlay 收起终局卡 (点遮罩的键盘等价路径)');
   sandbox.XQ.UI.render(spy, view);
   ok(ov.classList.contains('show') === false, 'L17 收起后再次渲染不复弹 (不落「已收起」旗标时会被下一次 refresh 重新 add(show))');
+  /* 第46轮: 只钉「渲染一次」不够 — 原实现的旗标复位写在 else 分支里, 而该分支同时覆盖「对局仍结束但已收起」,
+     于是第二次渲染清旗标、第三次把卡弹回来。时钟补位 ticker 与键盘光标每秒都会 refresh, 真实使用中必复弹。 */
+  sandbox.XQ.UI.render(spy, view);
+  sandbox.XQ.UI.render(spy, view);
+  ok(ov.classList.contains('show') === false && ov._dismissed === true,
+    'L17 连续多次渲染仍不复弹 (旗标只在「对局不再结束」时复位; 原实现第二次渲染即清旗标 → 第三次复弹)');
   over = false; sandbox.XQ.UI.render(spy, view);
   over = true; sandbox.XQ.UI.render(spy, view);
   ok(ov.classList.contains('show') === true, 'L17 新一局终局卡恢复弹出 (旗标在对局不再结束时复位)');
@@ -682,6 +690,38 @@ function l17Round45() {
   var badgeZh = badgeEl._attrs['aria-label'];
   ok(!!badgeEn && !!badgeZh && badgeEn !== badgeZh && badgeZh.indexOf('7') >= 0,
     'L17 徽章动作名随语言热切重算 (占位符无法声明式刷新: zh=' + badgeZh + ' / en=' + badgeEn + ')');
+}
+
+/* ═══ L18 第46轮: 横幅的 err 态语义与「收起时交还焦点」 ═══
+   ① window.onerror 的脚本错误横幅走 aiBanner('err', …) (不经 errBanner) — 原实现只把 **warn** 文本投进
+      #sr-alert, 且 tabIndex 只在 warn 态给 0: 页面脚本崩了读屏完全不可感知, 键盘也关不掉 (而这条路径
+      连 click/keydown 绑定都没有 — 绑定只写在 errBanner 里)。断言 err 与 warn 同口径。
+   ② 横幅承载焦点时被隐藏 (警告 6s / 错误 15s 自动消失或点击关闭) → 焦点静默掉回 body。
+      与终局卡收起、徽章隐藏同口径: 只在焦点确实在横幅内时才交还盘面, 否则不打断用户已移到别处的焦点。 */
+function l18Round46() {
+  var banner = DOC_MAP['ai-banner'], alert = DOC_MAP['sr-alert'];
+  sandbox.XQ.UI.aiBanner('err', '⚠ boom', null);
+  ok(banner.tabIndex === 0, 'L18 err 态横幅可聚焦 (原实现只给 warn 态, 脚本错误横幅键盘关不掉)');
+  ok(alert.textContent.indexOf('boom') >= 0, 'L18 err 态文本进 #sr-alert (原只投 warn → 读屏不知道页面脚本崩了)');
+  sandbox.XQ.UI.aiBanner('', '');
+  ok(alert.textContent === '' && banner.tabIndex === -1, 'L18 横幅清空后 #sr-alert 归零且摘除焦点落点 (同一错误可再次播报)');
+  var board = DOC_MAP['board'] || (DOC_MAP['board'] = mkEl('div'));
+  var focused = 0;
+  board.focus = function () { focused++; };
+  sandbox.XQ.UI.aiBanner('warn', 'w1', null);
+  var child = mkEl('span');
+  banner.appendChild(child);
+  sandbox.document.activeElement = child;
+  sandbox.XQ.UI.aiBanner('', '');
+  ok(focused === 1, 'L18 横幅自清/关闭时把焦点交还盘面 (焦点在横幅内; 实测 ' + focused + ' 次)');
+  sandbox.XQ.UI.aiBanner('warn', 'w2', null);
+  sandbox.document.activeElement = DOC_MAP['status-text'];
+  sandbox.XQ.UI.aiBanner('', '');
+  ok(focused === 1, 'L18 焦点不在横幅内时不抢焦点 (实测仍 ' + focused + ' 次)');
+  sandbox.XQ.UI.aiBanner('busy', 'tick', null);
+  ok(banner.tabIndex === -1, 'L18 busy 态仍不进 Tab 序 (每秒 tick 不留常驻停点, 不因 err 扩容而放宽)');
+  sandbox.XQ.UI.aiBanner('', '');
+  sandbox.document.activeElement = null;
 }
 
 /* ═══ L16 第44轮: sw.js 两处「在线看着正常、只在特定部署/时序下坏掉」的行为 ═══

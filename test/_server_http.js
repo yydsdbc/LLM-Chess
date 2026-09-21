@@ -68,6 +68,13 @@ async function main() {
         uRes.writeHead(400, { 'Content-Type': 'application/json' });
         return uRes.end(JSON.stringify({ type: 'error', error: { message: 'boom-claude' } }));
       }
+      /* 第46轮: 上游非 200 透传 — 放在 stream 分支之前, 使同一条 stub 同时覆盖流式/非流式两条路径
+         (server.js 的 `res.writeHead(upRes.statusCode || 502, …)` 若被改成 200, llm_agent 会把错误体
+         当成功帧解析, 最终报「流式返回为空」或泛化中继错误, 用户看不到「HTTP 401」这句可操作提示)。 */
+      if (jb.model === 'stub-401') {
+        uRes.writeHead(401, { 'Content-Type': 'application/json' });
+        return uRes.end(JSON.stringify({ error: { message: 'bad key 401' } }));
+      }
       if (String(jb.model || '').indexOf('stub-a') === 0) {   // anthropic 协议 content shape
         uRes.writeHead(200, { 'Content-Type': 'application/json' });
         return uRes.end(JSON.stringify({ content: [{ type: 'text', text: '{"from":"h3","to":"e3","summary":"anthropic-ok","confidence":0.7}' }], usage: { input_tokens: 12, output_tokens: 6 } }));
@@ -96,7 +103,13 @@ async function main() {
   /* 第45轮: stubprov 的 baseUrl **故意带尾斜杠** — 去掉它, 「baseUrl 去尾斜杠」这条判据就无从区分
      (无尾斜杠时拼不拼都得到同一路径, 断言会静默变成恒真); stubglm 的 chatPath **故意不等于默认值** —
      否则「chatPath 生效」与「回落默认」得到同一路径, 同样恒真。 */
-  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1/', apiKey: 'test-key' }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', protocol: 'anthropic', apiKey: 'anthropic-test-key' }, stubnokey: { name: 'StubNoKey', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: '' }, stubheaders: { name: 'StubHdr', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key', headers: { 'X-Custom-Auth': 'hdr-ok' } }, stubglm: { name: 'StubGLM', baseUrl: 'http://127.0.0.1:' + upPort + '/tokenrhythm/v1', chatPath: '/v2/chat', apiKey: 'glm-key' }, stubdead: { name: 'StubDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', apiKey: 'dead-key' } } }));
+  /* 第46轮: stubprov 带 models 数组 — /api/providers 的 models 是前端模型下拉预填的唯一来源,
+     丢掉它模型框静默变空白 (用户必须手打模型名); stubnokey 不带 models 以钉住「缺省 → 空数组」。
+     stubantdead 指向必死端口, 用来覆盖 anthropic 路径的上游连接失败 502 (原仅 openai 路径有覆盖)。
+     stubanthropic 的 baseUrl **不含 /v1** — 与真实配置 (https://api.anthropic.com) 同形, 这样
+     「默认 chatPath /v1/messages 生效」才可断言 (baseUrl 自带 /v1 时会得到 /v1/v1/messages, 断言变成
+     钉住一个拼接产物而非真实口径)。 */
+  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1/', apiKey: 'test-key', models: ['m-a', 'm-b'] }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort, protocol: 'anthropic', apiKey: 'anthropic-test-key' }, stubantdead: { name: 'StubAntDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', protocol: 'anthropic', apiKey: 'dead-ant-key' }, stubnokey: { name: 'StubNoKey', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: '' }, stubheaders: { name: 'StubHdr', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key', headers: { 'X-Custom-Auth': 'hdr-ok' } }, stubglm: { name: 'StubGLM', baseUrl: 'http://127.0.0.1:' + upPort + '/tokenrhythm/v1', chatPath: '/v2/chat', apiKey: 'glm-key' }, stubdead: { name: 'StubDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', apiKey: 'dead-key' } } }));
 
   server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile }) });
   const up = await waitHealth(40);   // ~6s 上限
@@ -109,6 +122,9 @@ async function main() {
   ok(!!etag, '静态响应带 ETag');
   const cached = await req('GET', '/', null, { 'If-None-Match': etag });
   ok(cached.status === 304, 'If-None-Match 命中 → 304');
+  /* 第46轮: 静态 Cache-Control 值 — 只钉了 ETag/304, 指令值本身没断言。改成 max-age 后用户部署新代码
+     强刷仍拿到旧 JS (而 ETag 校验在强刷下被绕过), 且旧写法对本套件完全不可见。 */
+  ok(home.headers['cache-control'] === 'no-cache', '静态响应 Cache-Control: no-cache (改成 max-age 会让部署后强刷仍拿旧 JS, 实为 ' + home.headers['cache-control'] + ')');
 
   // 404 / 路径穿越 403 / 畸形编码 400
   const nf = await req('GET', '/no/such/file.js');
@@ -121,6 +137,10 @@ async function main() {
   // CORS 预检
   const opt = await req('OPTIONS', '/api/chat');
   ok(opt.status === 204 && !!opt.headers['access-control-allow-origin'], 'OPTIONS /api/chat → 204 + ACAO');
+  /* 第46轮: 预检的**头值**此前只断言了 ACAO 存在 — 方法/头清单一旦收窄, 异源浏览器会直接拦掉 /api/chat,
+     前端只看到一句「Failed to fetch」(无任何服务端线索)。 */
+  ok(opt.headers['access-control-allow-methods'] === 'POST, GET, OPTIONS' && opt.headers['access-control-allow-headers'] === 'Content-Type, Authorization',
+    'OPTIONS 预检头值完整 (方法/头清单收窄会让异源调用被浏览器拦成「Failed to fetch」)');
 
   // /api/chat 参数校验 (不触上游: 均在 relay 之前被 400 拦下)
   const badJson = await req('POST', '/api/chat', '{not json', { 'Content-Type': 'application/json' });
@@ -201,10 +221,20 @@ async function main() {
   ok(!!hdrUp && !('thinking' in hdrUp.b), '上游请求构造: 非 GLM 系上游不注入 thinking 字段 (严格校验的上游会 400)');
   ok(!!hdrUp && hdrUp.b.temperature === 0.3 && hdrUp.b.max_tokens === 2048 && hdrUp.b.stream === false && !('stream_options' in hdrUp.b),
     '上游请求构造: 缺省口径 temperature 0.3 / max_tokens 2048 / stream false / 无 stream_options');
-  const tRes = await postChat({ provider: 'stubprov', model: 'stub-model', messages: [{ role: 'user', content: 't' }], temperature: 0.9, max_tokens: 512 });
+  /* 第46轮: temperature 用 0 而非 0.9 — 0 是 falsy, 缺省表达式一旦漂移成 `payload.temperature || 0.3`,
+     显式 0 会被静默改成 0.3 (采样行为改变, 上游侧才看得见); 用 0.9 时该回归仍然全绿, 故换成 0 才真正钉住。
+     content 用中文: 同时钉住 Content-Length 必须是**字节**长度 (中文 prompt 下 body.length ≠ 字节数)。 */
+  const tRes = await postChat({ provider: 'stubprov', model: 'stub-model', messages: [{ role: 'user', content: '炮二平五' }], temperature: 0, max_tokens: 512 });
   let tUp = null;
   try { tUp = JSON.parse(lastUpReq.body); } catch (eT2) {}
-  ok(tRes.status === 200 && !!tUp && tUp.temperature === 0.9 && tUp.max_tokens === 512, '上游请求构造: 显式 temperature/max_tokens 原样透传 (不被缺省覆盖)');
+  ok(tRes.status === 200 && !!tUp && tUp.temperature === 0 && tUp.max_tokens === 512, '上游请求构造: 显式 temperature: 0 不被缺省覆盖 (falsy 陷阱; 原用 0.9 时 || 0.3 的回归仍会通过)');
+  /* Content-Length 必须按**字节**长度。注意不能写成「头值 == 已收 body 的字节数」— 那样在回归发生时
+     上游只收到被截断的 body, 两侧同时变小, 断言恒真 (第45轮「恒真断言」教训)。故比对服务端**应发**的
+     字节数: 中文 payload 下 body.length 少算 8 字节 (115 → 107) → 当场红。 */
+  const expectUpBody = JSON.stringify({ model: 'stub-model', messages: [{ role: 'user', content: '炮二平五' }], temperature: 0, max_tokens: 512, stream: false });
+  ok(!!lastUpReq && lastUpReq.headers['content-length'] === String(Buffer.byteLength(expectUpBody)),
+    '上游请求构造: Content-Length 按字节长度 (写成 body.length 会少算 → 上游收到截断 JSON; 实测 ' + (lastUpReq && lastUpReq.headers['content-length']) + ' 应为 ' + Buffer.byteLength(expectUpBody) + ')');
+  ok(!!tUp && tUp.messages[0].content === '炮二平五', '上游请求构造: 中文 prompt 完整到达上游 (字节口径错误时上游收到截断/乱码 payload)');
 
   // 第37轮: anthropic 协议中继穿越 — 最复杂的转换路径 (system 提取/同角色合并/鉴权头/SSE 合成/错误映射) 此前零自动化覆盖
   // 节奏: 前 4 个 chat POST 同秒内就绪 → 先睡一个完整秒窗, 让本块 + 后续 415 断言均匀落在新秒窗 (8/s 限流下同秒连发自己打自己)
@@ -213,6 +243,9 @@ async function main() {
   ok(antRes.status === 200 && /text\/event-stream/.test(antRes.headers['content-type'] || ''), 'anthropic 中继: POST /api/chat (stub anthropic 上游) → 200 + SSE 帧');
   ok(antRes.body.indexOf('anthropic-ok') >= 0 && antRes.body.indexOf('[DONE]') >= 0, 'anthropic 中继: 响应转换合成的 SSE 帧含内容 + 收尾 [DONE]');
   ok(antRes.body.indexOf('"total_tokens":18') >= 0, 'anthropic 中继: usage input+output → total_tokens 18 换算正确');
+  /* 第46轮: 上游 URL 构造 (anthropic 路径此前零覆盖 — 默认路径写错则上游 404, 前端只看到
+     「anthropic 响应解析失败」这种指不到根因的提示) */
+  ok(!!lastUpReq && lastUpReq.url === '/v1/messages', 'anthropic 中继: 上游 URL 为 /v1/messages (默认路径错则上游 404, 前端只见「响应解析失败」, 实为 ' + (lastUpReq && lastUpReq.url) + ')');
   let antUp = null;
   try { antUp = JSON.parse(lastUpReq.body); } catch (eA) {}
   ok(!!antUp && antUp.system === 'SYS-HI', 'anthropic 中继: system 消息提取为独立 system 字段 (不进 messages)');
@@ -223,6 +256,7 @@ async function main() {
   let antErrUp = null;
   try { antErrUp = JSON.parse(lastUpReq.body); } catch (eE2) {}
   ok(antErr.status === 400 && antErr.body.indexOf('boom-claude') >= 0, 'anthropic 中继: 上游 type:error → 客户端 4xx + JSON error 原文 (不合成虚假成功帧)');
+  ok(antErr.headers['access-control-allow-origin'] === '*', 'anthropic 中继: 错误响应带 ACAO (与 openai 路径同口径, file:// 调试才读得到错误明细)');
   ok(!!antErrUp && Array.isArray(antErrUp.messages) && antErrUp.messages.length === 2 && antErrUp.messages[0].role === 'user' && antErrUp.messages[0].content === '(开局)' && antErrUp.messages[1].role === 'assistant', 'anthropic 中继: 首条 assistant 前 unshift user (开局) — 交替约束补位不吞原消息');
 
   // 第39轮: 请求侧校验缺口 (未配 Key / 缺字段) + OpenAI 流式透传 + 目录与反斜杠边界 (server.js 零改动)
@@ -255,17 +289,53 @@ async function main() {
      (c) /api/providers 的 hasKey 是前端「已配置」指示的唯一依据, models 供模型下拉预填;
      (d) 上游连不上时的 502 映射 (server.js 的 upReq.on('error') 分支) 零覆盖 — 回归会变成挂起或错状态码。 */
   ok(relayUpPath === '/v1/chat/completions', '上游 URL 构造: baseUrl 尾斜杠去除 + 默认 chatPath /chat/completions (实为 ' + relayUpPath + ')');
-  const glmRes = await postChat({ provider: 'stubglm', model: 'stub-model', messages: [{ role: 'user', content: 'g' }], thinking: true });
+  /* 第46轮: thinking 用**对象**形态 (UI 实际发的就是 {type:'enabled', effort:'high'}) — 原测试只发布尔 true,
+     而 `!!payload.thinking` 这类回归会把对象压成 true: 布尔断言仍绿, effort 等级却静默丢失 (快答/深度思考
+     档位失效)。故改成断言对象逐字段透传, 严格强于原来的布尔断言。 */
+  const glmRes = await postChat({ provider: 'stubglm', model: 'stub-model', messages: [{ role: 'user', content: 'g' }], thinking: { type: 'enabled', effort: 'high' } });
   let glmUp = null;
   try { glmUp = { b: JSON.parse(lastUpReq.body), url: lastUpReq.url }; } catch (eG2) {}
-  ok(glmRes.status === 200 && !!glmUp && glmUp.b.thinking === true, '上游请求构造: GLM 系上游 (baseUrl 含 tokenrhythm) 正向注入 thinking (原只断言了非 GLM 不注入)');
+  ok(glmRes.status === 200 && !!glmUp && !!glmUp.b.thinking && glmUp.b.thinking.type === 'enabled' && glmUp.b.thinking.effort === 'high',
+    '上游请求构造: GLM 系 thinking 对象原样透传 (effort 等级; 用 !!payload.thinking 的回归会静默压成 true)');
   ok(!!glmUp && glmUp.url === '/tokenrhythm/v1/v2/chat', '上游 URL 构造: providerCfg.chatPath 覆盖默认路径 (实为 ' + (glmUp && glmUp.url) + ')');
   const deadRes = await postChat({ provider: 'stubdead', model: 'stub-model', messages: [{ role: 'user', content: 'd' }] });
   ok(deadRes.status === 502 && /relay upstream error/.test(deadRes.body), '上游连接失败 → 502 + relay upstream error (原为挂起/错误状态码)');
+  ok(deadRes.headers['access-control-allow-origin'] === '*', '上游连接失败 502 带 ACAO (openai 路径; 异源页才读得到错误明细)');
+  /* 第46轮: anthropic 路径的上游连接失败 502 — 原仅 openai 路径有覆盖, 而该分支的 ACAO 一直漏着
+     (同文件另一条同类错误分支都带), 异源页只能看到不透明的 CORS 失败。 */
+  const antDead = await postChat({ provider: 'stubantdead', model: 'x', messages: [{ role: 'user', content: 'x' }] });
+  ok(antDead.status === 502 && /relay upstream error/.test(antDead.body), 'anthropic 上游连接失败 → 502 + relay upstream error (原零覆盖)');
+  ok(antDead.headers['access-control-allow-origin'] === '*', 'anthropic 上游连接失败 502 带 ACAO (第46轮补齐, 与 openai 路径同口径)');
   const provStub = (provList || []).filter(function (p) { return p.id === 'stubprov' || p.id === 'stubnokey'; });
   const hasKeyOf = function (id) { var hit = provStub.filter(function (p) { return p.id === id; })[0]; return hit && hit.hasKey; };
   ok(hasKeyOf('stubprov') === true && hasKeyOf('stubnokey') === false, 'providers: hasKey 布尔正确反映是否配置 apiKey (前端「已配置」指示依赖)');
   ok(prov.headers['cache-control'] === 'no-store', 'providers: Cache-Control no-store (服务商列表不得被浏览器缓存)');
+  /* 第46轮: name/baseUrl/models 透传 — models 是前端模型下拉预填的唯一来源 (app.js 用它填 model-datalist),
+     丢失后模型框静默变空白, 用户必须手打模型名; 未声明 models 的服务商应得空数组而非 undefined。 */
+  const pStub = (provList || []).filter(function (p) { return p.id === 'stubprov'; })[0];
+  const pNoM = (provList || []).filter(function (p) { return p.id === 'stubnokey'; })[0];
+  ok(!!pStub && pStub.name === 'Stub' && /127\.0\.0\.1/.test(pStub.baseUrl || '') && Array.isArray(pStub.models) && pStub.models.join(',') === 'm-a,m-b',
+    'providers: name/baseUrl/models 透传 (models 丢失 → 前端模型下拉静默空白)');
+  ok(!!pNoM && Array.isArray(pNoM.models) && pNoM.models.length === 0, 'providers: 未声明 models 的服务商 → 空数组 (非 undefined, 前端不会崩)');
+
+  /* ── 第46轮: 上游非 200 状态透传 (流式 + 非流式) + 非对象请求体 ──
+     非 200 透传: 两条路径都是 `res.writeHead(upRes.statusCode || 502, …)`: 一旦被改成固定 200, llm_agent
+     会把上游的错误体当成功帧解析 (流式尤其致命 — 错误 JSON 不是 SSE, 最终只报「流式返回为空」),
+     而 401/429 这类可操作提示 (「HTTP 401 Invalid API key」) 全部消失。
+     非对象请求体: JSON.parse('null') 合法返回 null, 原实现下一行读 payload.provider 在 async 处理器里抛
+     TypeError, 全仓无 unhandledRejection 兜底 → Node 18+ 直接终止进程。这不是「错误状态码」而是
+     「一个 POST 远程打死中继」, 故除状态码外必须另断言进程仍存活 (否则断言自己也会因连接被拒而假绿)。
+     节奏: 先睡一个完整秒窗 — 本套件是单 IP 单进程, 秒窗上限 8, 这一组 4 个 POST 必须自成一段。 */
+  await new Promise(function (r) { setTimeout(r, 1050); });
+  const nullBody = await req('POST', '/api/chat', 'null', { 'Content-Type': 'application/json' });
+  ok(nullBody.status === 400, 'POST /api/chat body "null" → 400 (修复前此处抛 TypeError 并终止进程, 实为 ' + nullBody.status + ')');
+  const aliveAfterNull = await req('GET', '/api/health');
+  ok(aliveAfterNull.status === 200, '非对象请求体之后服务进程仍存活 (修复前一个 POST 即远程打死中继)');
+  const up401 = await postChat({ provider: 'stubprov', model: 'stub-401', messages: [{ role: 'user', content: 'k' }] });
+  ok(up401.status === 401 && up401.body.indexOf('bad key 401') >= 0, '上游非 200 透传 (非流式): 401 + 错误体原文 (压成 200/502 则用户看不到可操作提示)');
+  ok(up401.headers['access-control-allow-origin'] === '*', '上游非 200 透传 (非流式): 错误响应带 ACAO');
+  const up401s = await postChat({ provider: 'stubprov', model: 'stub-401', messages: [{ role: 'user', content: 'k' }], stream: true });
+  ok(up401s.status === 401, '上游非 200 透传 (流式): 状态码不被改写成 200 (否则错误体被当 SSE 解析 → 「流式返回为空」)');
 
   /* ── 第43轮: 静态内容缓存 (_staticCache, 第37轮引入的 mtime+size 判据) — 此前零自动化覆盖 ──
      风险面: 判据一旦失效 (例如永远复用首读字节), 用户改了 js/css 后强刷仍拿到旧代码, 带 query 的
@@ -310,10 +380,12 @@ async function main() {
   const nf404 = await req('GET', '/no-such-page-' + process.pid);
   ok(nf404.status === 404 && nf404.headers['cache-control'] === 'no-store', '404 → Cache-Control no-store (负面响应不入缓存)');
 
-  // 限流秒窗: 连发 12 个请求 (8/s 上限), 至少一个 429
+  // 限流秒窗: 连发 9 个请求 (8/s 上限), 至少一个 429
   // (前 8 个可能 400/429 交错, 只断言出现 429 — 限流先于业务校验执行)
+  // 第46轮: 12 → 9 — 本套件是单 IP 单进程, 分钟窗上限 30, 原 12 连发把预算占掉太多, 新增断言无位可放;
+  // 9 仍严格大于秒窗上限 8, 断言强度不变 (9 个并发请求必落在同一秒)。
   const burst = [];
-  for (let i = 0; i < 12; i++) burst.push(postChat({ provider: 'no-such-prov-' + i, model: 'x', messages: [] }));
+  for (let i = 0; i < 9; i++) burst.push(postChat({ provider: 'no-such-prov-' + i, model: 'x', messages: [] }));
   const burstRes = await Promise.all(burst);
   ok(burstRes.some(function (r) { return r.status === 429; }), '限流: 单秒 12 连发出现 429 (8/s 窗)');
   ok(burstRes.some(function (r) { return r.status === 429 && r.headers['retry-after'] === '60'; }), '限流 429 带 Retry-After: 60 (客户端退避依据)');
@@ -348,6 +420,14 @@ async function main() {
   const halfWritten = await req('GET', '/api/providers');
   ok(halfWritten.status === 200 && ids(halfWritten.body).indexOf('stubextra') >= 0,
     'keys.json 半写 (非法 JSON) → 保留上次有效配置, 不 500 不清空 (编辑期间对局不断)');
+  /* 第46轮: ENOENT 路径 — 只测过「非法 JSON」这一半。原子保存式编辑器会先 unlink 再 create,
+     中间必然出现 ENOENT; 若容错只认 SyntaxError, 这一瞬会回落到「生成模板」分支, /api/providers
+     当场翻成 16 个空模板服务商 (对局中途前端选择被清空)。 */
+  await new Promise(function (r) { setTimeout(r, 25); });
+  fS.rmSync(keysFile, { force: true });
+  const gone = await req('GET', '/api/providers');
+  ok(gone.status === 200 && ids(gone.body).indexOf('stubextra') >= 0,
+    'keys.json 被删 (ENOENT) → 保留上次有效配置 (原子保存先删后建, 不得回落模板)');
   await new Promise(function (r) { setTimeout(r, 25); });
   fS.writeFileSync(keysFile, origKeys);   // 还原: 后续中继穿越测试依赖 stubprov/stubanthropic
   const restored = await req('GET', '/api/providers');
