@@ -567,7 +567,10 @@ if (!/if \(engine\.isOver\(\) && !overlay\._dismissed\)/.test(renCode) && !/if \
 /* 第46轮: 旗标复位必须**有条件** — 无条件复位时, 收起后的第二次渲染就清旗标、第三次复弹
    (else 分支同时覆盖「对局仍结束但已收起」); 时钟补位 ticker 每秒 refresh, 真实使用中必复弹。 */
 if (!/if \(!overNow\) overlay\._dismissed = false;/.test(renCode)) wire45.push('「已收起」旗标复位无条件 (收起后第二次渲染即清旗标 → 第三次复弹, 第45/46轮两条收起出口都被抵消)');
-if (!/var overNow = engine\.isOver\(\);\n    if \(overNow && !overlay\._dismissed\)/.test(renCode)) wire45.push('renderOverlay 未用同一 isOver 事实驱动显示与复位 (两次求值可能不同源)');
+/* 第46轮: 换行一律写 \r?\n — CI 的 windows-latest runner 在 core.autocrlf=true 下检出为 CRLF,
+   而本仓无 .gitattributes, 只写 \n 的跨行锚点会在 Windows CI 上静默失配 (本轮实测: 本地 LF 全绿、
+   CRLF 检出下第19节当场红)。本地 LF 工作树掩盖了它, 与「恒真断言」同属「只在另一环境暴露」。 */
+if (!/var overNow = engine\.isOver\(\);\r?\n    if \(overNow && !overlay\._dismissed\)/.test(renCode)) wire45.push('renderOverlay 未用同一 isOver 事实驱动显示与复位 (两次求值可能不同源)');
 if (!/overlay\._dismissed = false;/.test(renCode)) wire45.push('「已收起」旗标未在对局不再结束时复位 (下一局终局卡不再弹出)');
 if (!/XQ\.UI\.dismissEndOverlay && XQ\.UI\.dismissEndOverlay\(\)/.test(appCode)) wire45.push('Esc 分支未接终局卡出口 (键盘用户只能靠「再来一局」离开终局卡)');
 // (b5) 通知横幅必须有 live 语义, 且先入 DOM 再写文本 (带内容一起插入时部分读屏不播报)
@@ -635,8 +638,9 @@ if (!/function bindBannerDismiss\(\)/.test(appCode)) wire46.push('bindBannerDism
 // (d) 首屏: 状态条静态文案必须可被 apply() 本地化 (首帧渲染排在两次网络往返之后)
 if (!/<span id="status-text" data-i18n="status_turn_red"/.test(html)) wire46.push('#status-text 静态文案未挂 data-i18n (EN 首屏空窗里一直显示中文)');
 /* 锚点必须紧贴 applyFlip() 之后 — 用 indexOf('refresh();', iBootRefresh) 会被下方
-   #ui-pieces 的 change 处理器里的 refresh() 抢先命中 (它也在 fetch 之前), 删掉首帧渲染照样绿。 */
-if (!/if \(flipOn\) applyFlip\(\);[\s\S]{0,200}?\n\s{4}refresh\(\);/.test(appCode)) {
+   #ui-pieces 的 change 处理器里的 refresh() 抢先命中 (它也在 fetch 之前), 删掉首帧渲染照样绿。
+   换行写 \r?\n: CI windows runner 检出为 CRLF (见第19节同款注释)。 */
+if (!/if \(flipOn\) applyFlip\(\);[\s\S]{0,200}?\r?\n\s{4}refresh\(\);/.test(appCode)) {
   wire46.push('首屏未在 fetch 之前同步渲染一次 (盘面 90 格与状态条要等两次网络往返才出现)');
 }
 // (e) 回放盘面与主盘面同口径: 格子 role=img + 坐标标签 + 行列标尺 aria-hidden
