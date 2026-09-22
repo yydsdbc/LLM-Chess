@@ -134,6 +134,27 @@ async function main() {
   const bad = await req('GET', '/%zz');
   ok(bad.status === 400, '畸形百分号编码 (/%zz) → 400 (不崩连接)');
 
+  /* ── 第47轮: 静态托管敏感路径黑名单 + 空字节守卫 ──
+     (a) 原实现只有「穿越」防护 (路径须落在 ROOT 内), 而 /config/keys.json 是 ROOT 内的**正常路径** —
+         实测逐字返回含真实 apiKey 的密钥文件 (200), /.git/config 同样可取, 与 README「密钥永不离开服务器」
+         直接矛盾; (b) decodeURIComponent('/%00') 得到含 \u0000 的路径, 它能通过前缀校验而 fs.stat 对含
+         空字节路径**同步抛出** ERR_INVALID_ARG_VALUE → 逃出 serveStatic → async 处理器 promise 拒绝 →
+         Node 18+ 终止进程 (实测 GET /%00 后 /api/health ECONNREFUSED)。后者必须另断言进程仍存活。 */
+  const keysReq = await req('GET', '/config/keys.json');
+  ok(keysReq.status === 403 && keysReq.body.indexOf('apiKey') < 0, 'GET /config/keys.json → 403 且不含 apiKey (修复前 200 逐字返回真实密钥文件)');
+  const keysEx = await req('GET', '/config/keys.example.json');
+  ok(keysEx.status === 403, 'GET /config/keys.example.json → 403 (整个 config/ 目录不对外, 非逐个文件列举)');
+  const gitCfg = await req('GET', '/.git/config');
+  ok(gitCfg.status === 403, 'GET /.git/config → 403 (点开头目录一律拒绝; 该文件可能含远端凭据)');
+  const logsReq = await req('GET', '/logs/anything.txt');
+  ok(logsReq.status === 403, 'GET /logs/* → 403 (运行时产物不对外)');
+  const nullByte = await req('GET', '/%00');
+  ok(nullByte.status === 400, 'GET /%00 (空字节路径) → 400 (修复前 fs.stat 同步抛出 → 进程终止, 实为 ' + nullByte.status + ')');
+  const aliveAfterNullByte = await req('GET', '/api/health');
+  ok(aliveAfterNullByte.status === 200, '空字节路径之后服务进程仍存活 (修复前一个 GET 即远程打死中继)');
+  const stillHome = await req('GET', '/');
+  ok(stillHome.status === 200, '黑名单不误伤正常静态资源 (GET / 仍 200)');
+
   // CORS 预检
   const opt = await req('OPTIONS', '/api/chat');
   ok(opt.status === 204 && !!opt.headers['access-control-allow-origin'], 'OPTIONS /api/chat → 204 + ACAO');
@@ -147,6 +168,7 @@ async function main() {
   ok(badJson.status === 400, 'POST /api/chat 非法 JSON → 400');
   const noProv = await postChat({ model: 'x', messages: [] });
   ok(noProv.status === 400, '未知服务商 → 400');
+  ok(noProv.headers['access-control-allow-origin'] === '*', '早期拒绝 (400 未知服务商) 带 ACAO (异源页才看得到错误明细)');
 
   // 第24轮 二期: providers 形状+无密钥泄漏 / HEAD / 静态 MIME (manifest+icon) / GET 方法守卫
   const prov = await req('GET', '/api/providers');
@@ -175,6 +197,11 @@ async function main() {
   let healthShape = false;
   try { const hj = JSON.parse(health.body) || {}; healthShape = hj.ok === true && hj.relay === true && !!hj.version; } catch (eH) {}
   ok(health.status === 200 && healthShape, 'GET /api/health → 形状 {ok,relay,version} (前端 relayAvailable 探测依赖)');
+  /* 第47轮: 早期拒绝分支与两条探测端点的 ACAO — 本仓设计支持异源/file:// 调试 (中继各分支与 OPTIONS 都带),
+     而 health/providers 与 429/415/400 系列一直漏着: 异源页只拿到不透明的「Failed to fetch」, 看不到
+     「未配置 apiKey」「rate limited」这类可操作提示。 */
+  ok(health.headers['access-control-allow-origin'] === '*', 'health 带 ACAO (异源页的 relayAvailable 探测才读得到)');
+  ok(prov.headers['access-control-allow-origin'] === '*', 'providers 带 ACAO (异源页才读得到服务商列表)');
   const huge = await req('POST', '/api/chat', Buffer.alloc(2 * 1024 * 1024 + 1024, 97).toString('utf8'), { 'Content-Type': 'application/json' });
   ok(huge.status === 0, 'POST /api/chat 请求体 >2MB → 连接中断 (readBody 上限防 OOM)');
 
@@ -377,6 +404,7 @@ async function main() {
   // 第28轮五期: Content-Type 门禁 + 404 no-store
   const ctBad = await req('POST', '/api/chat', '{"provider":"x"}', { 'Content-Type': 'text/plain' });
   ok(ctBad.status === 415, 'POST /api/chat text/plain → 415 (Content-Type 门禁, 无声明仍宽松放行)');
+  ok(ctBad.headers['access-control-allow-origin'] === '*', '早期拒绝 (415) 带 ACAO (第47轮补齐, 与中继各分支同口径)');
   const nf404 = await req('GET', '/no-such-page-' + process.pid);
   ok(nf404.status === 404 && nf404.headers['cache-control'] === 'no-store', '404 → Cache-Control no-store (负面响应不入缓存)');
 
@@ -387,8 +415,10 @@ async function main() {
   const burst = [];
   for (let i = 0; i < 9; i++) burst.push(postChat({ provider: 'no-such-prov-' + i, model: 'x', messages: [] }));
   const burstRes = await Promise.all(burst);
-  ok(burstRes.some(function (r) { return r.status === 429; }), '限流: 单秒 12 连发出现 429 (8/s 窗)');
+  ok(burstRes.some(function (r) { return r.status === 429; }), '限流: 单秒 9 连发出现 429 (8/s 窗)');
   ok(burstRes.some(function (r) { return r.status === 429 && r.headers['retry-after'] === '60'; }), '限流 429 带 Retry-After: 60 (客户端退避依据)');
+  ok(burstRes.some(function (r) { return r.status === 429 && r.headers['access-control-allow-origin'] === '*'; }),
+    '限流 429 带 ACAO (第47轮补齐 — 异源页才看得到「rate limited」而非不透明 CORS 失败)');
 
   /* ── 第41轮: 静态托管 query 形态 (SW 的 ignoreSearch 离线兜底与用户手动 cache-bust 都依赖它) ──
      serveStatic 内 urlPath.split('?')[0] 后按扩展名取 MIME / 算 ETag; 若该切分被破坏, 带 query 的资源

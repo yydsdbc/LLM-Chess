@@ -486,8 +486,11 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
         <div class="set-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">   <!-- 第23轮 a11y: 对话语义 — 读屏以「对战设置」宣告进入弹层 -->
             <h3 id="settings-title" data-i18n="settings_title">🤖 对战设置 (v1.0)</h3>
             <div class="set-cols">
-                <div class="set-col set-col-red">
-                    <div class="col-title" data-i18n="side_red">🔴 红方</div>
+                <!-- 第47轮 a11y: 红/黑两栏此前是无语义 div, 两侧控件可访问名完全相同 (「对手类型」「服务商…」
+                     「模型名称」各出现两次), 读屏用户无从分辨在配哪一方 — WCAG 1.3.1 要求分组可由程序判定。
+                     改为 role=group + aria-labelledby 指向各栏标题 (标题走 data-i18n, 名称随语言自动更新)。 -->
+                <div class="set-col set-col-red" role="group" aria-labelledby="set-col-red-title">
+                    <div class="col-title" id="set-col-red-title" data-i18n="side_red">🔴 红方</div>
                     <label class="set-check"><input type="checkbox" id="ai-red-enabled"> <span data-i18n="enabled">启用非人类棋手</span></label>
                     <div class="set-row"><label for="ai-red-type" data-i18n="type">对手类型</label>
                         <select id="ai-red-type"><option value="human" data-i18n="type_human">人类</option><option value="random" data-i18n="type_random">随机AI</option><option value="llm" data-i18n="type_llm">LLM</option></select>
@@ -504,8 +507,8 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                     <div class="set-row llm-only"><label for="ai-red-style" data-i18n="prompt_level">提示词等级 (风格注入量)</label>                        <select id="ai-red-style"><option value="none" data-i18n="pl_none">无 (不注入)</option><option value="low" data-i18n="pl_low">低 (一句话)</option><option value="mid" selected data-i18n="pl_mid">中 (标准)</option><option value="high" data-i18n="pl_high">高 (标准+战术)</option></select>                    </div>
                     <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-red-quick"> <span data-i18n="quick_mode">快答模式 (关闭深度思考, 直出决策+原因)</span></label></div>
                 </div>
-                <div class="set-col set-col-black">
-                    <div class="col-title" data-i18n="side_black">⚫ 黑方</div>
+                <div class="set-col set-col-black" role="group" aria-labelledby="set-col-black-title">
+                    <div class="col-title" id="set-col-black-title" data-i18n="side_black">⚫ 黑方</div>
                     <label class="set-check"><input type="checkbox" id="ai-black-enabled"> <span data-i18n="enabled">启用非人类棋手</span></label>
                     <div class="set-row"><label for="ai-black-type" data-i18n="type">对手类型</label>
                         <select id="ai-black-type"><option value="human" data-i18n="type_human">人类</option><option value="random" data-i18n="type_random">随机AI</option><option value="llm" data-i18n="type_llm">LLM</option></select>
@@ -523,7 +526,10 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                     <div class="set-row llm-only"><label class="set-check"><input type="checkbox" id="ai-black-quick"> <span data-i18n="quick_mode">快答模式 (关闭深度思考, 直出决策+原因)</span></label></div>
                 </div>
             </div>
-            <div id="server-warn" style="display:none;margin:2px 0 12px;padding:8px 10px;border-radius:6px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.35);font-size:11px;color:#f0b8b0;"></div>
+            <!-- 第47轮 a11y: 服务不可用/无密钥提示是打开设置时异步注入的状态文本, 原为无角色无 live 的 div —
+                 读屏用户进入对话后直接落到第一个控件, 永远不知道 LLM 模式不可用 (同文件下方的试连结果
+                 一直是 role=status, 此处漏了)。 -->
+            <div id="server-warn" role="status" aria-live="polite" style="display:none;margin:2px 0 12px;padding:8px 10px;border-radius:6px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.35);font-size:11px;color:#f0b8b0;"></div>
             <div class="set-note" data-i18n="keys_note">密钥仅保存在服务端 config/keys.json，前端永不接触。双方可各配不同类型/服务商。</div>
             <div class="set-foot">
                 <div class="set-row" style="margin-bottom:8px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">

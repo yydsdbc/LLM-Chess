@@ -41,8 +41,9 @@
     var _tgtCache = null;   // 第37轮: legalTargets memo (任意盘面变更即由 apply/undo 重置)
     var _dgrCache = null;   // 第39轮: dangerTargets memo (选中格每帧重算静态交换 → 记忆化)
     var _chkCache = null;   // 第43轮: inCheck memo (渲染一帧内 render 逐格判定 + renderStatus 各调一次 → 全盘攻击图扫描减半)
+    var _snapCache = null;  // 第47轮: snapshot memo — 每帧 90 个 {color,type,id} 对象分配是渲染路径最大单笔分配 (键同 _stateVer)
     var _stateVer = 0;      // 第39轮: 盘面变更版本 — memo 键用它 (原用 history.length: undo 后换着法重演回同一手数会过期命中)
-    function bumpVer() { _stateVer++; _tgtCache = null; _dgrCache = null; _chkCache = null; }
+    function bumpVer() { _stateVer++; _tgtCache = null; _dgrCache = null; _chkCache = null; _snapCache = null; }
     var over = false, result = 'normal', winner = null;
     var listeners = [];
     var posCounts = {};      // v1.7.7 重复局面计数: key=盘面文本|执子方 — 三次重复判和/长将检测基础
@@ -94,8 +95,12 @@
       pieceAt: function (x, y) { return board.get(x, y) || null; },
       kingPos: function (color) { return board.kingPos(color); },
 
-      /** UI 渲染快照: cells[y][x] = {color,type,id}|null */
+      /** UI 渲染快照: cells[y][x] = {color,type,id}|null
+       *  第47轮: 按 _stateVer 记忆化 — 快照的全部字段 (cells/turn/over/result/winner/ply/naturalClock/
+       *  repetitionCount) 都只随盘面或执子方变化, 而 apply/undo/newGame 三条写路径均 bumpVer; 渲染每帧
+       *  调一次 (renderer.render) 时同版本内结果恒定, 故同版本直接复用同一对象 (调用方一律只读)。 */
       snapshot: function () {
+        if (_snapCache && _snapCache.ver === _stateVer) return _snapCache.val;
         var cells = [];
         for (var y = 0; y < board.H; y++) {
           var row = [];
@@ -105,8 +110,10 @@
           }
           cells.push(row);
         }
-        return { cells: cells, turn: turn, over: over, result: result, winner: winner, lastMove: this.lastMove(),
+        var val = { cells: cells, turn: turn, over: over, result: result, winner: winner, lastMove: api.lastMove(),
                  ply: history.length, naturalClock: naturalClock, repetitionCount: posCounts[posKey()] || 0 };   // A2 v3.9 增量: 计数进出快照 (replay 重建/观测层依赖; 旧消费者只读原有字段, 纯增量安全)
+        _snapCache = { ver: _stateVer, val: val };
+        return val;
       },
 
       /** ── 走法 ── */

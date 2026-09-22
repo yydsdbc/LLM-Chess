@@ -1,0 +1,13 @@
+# 第47轮: 统一以 LF 存储与检出。
+# 起因: 第46轮 CI 的 windows-latest job 红, 而本地(LF 工作树)全绿 — 根因是两条跨行守卫锚点写了裸 \n,
+# 而 actions/checkout 在 Windows runner 上按 core.autocrlf=true 检出为 CRLF(本仓无 .gitattributes)。
+# 第46轮把两条正则改成 \r?\n 只是就地打补丁; 本文件从根上消除这一类「断言只在某个检出环境失配」的问题:
+# 无论贡献者在哪个平台克隆, 检出都是 LF, 与仓库中实际存储的字节一致。
+* text=auto eol=lf
+# 二进制资源不得做行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

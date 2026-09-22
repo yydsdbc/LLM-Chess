@@ -69,10 +69,23 @@ const MIME = {
   '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8'
 };
 var _staticCache = new Map();   // 第37轮: 静态内容缓存 (mtime 校验, 命中不回读磁盘; 上限 64 文件)
+/* 第47轮: 静态托管敏感目录黑名单 — 只挡「穿越」不足以挡「点名取密钥」(见 serveStatic 内注释) */
+const DENY_DIRS = new Set(['config', 'logs', 'node_modules']);
 function serveStatic(req, res, urlPath) {
   let p;
   try { p = decodeURIComponent(urlPath.split('?')[0]); } catch (eU) { res.writeHead(400); return res.end('bad request'); }   // v1.0.daily: 畸形百分号编码 (/% etc) 抛 URIError → 回 400 而非连接崩溃
+  /* 第47轮: 空字节守卫 — decodeURIComponent('/%00') 得到含 \u0000 的路径, 它能通过下方前缀校验,
+     而 fs.stat 对含空字节的路径**同步抛出** ERR_INVALID_ARG_VALUE → 逃出 serveStatic → async 处理器的
+     promise 拒绝 → Node 18+ 直接终止进程 (与第46轮 JSON.parse('null') 同类: 一个 GET 远程打死中继)。
+     实测: GET /%00 → 连接重置 + 后续 /api/health ECONNREFUSED。 */
+  if (p.indexOf('\u0000') >= 0) { res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('bad request'); }
   if (p === '/' || p === '') p = '/index.html';
+  /* 第47轮: 敏感路径黑名单 — 原实现只有「穿越」防护 (路径必须落在 ROOT 内), 而 GET /config/keys.json
+     是 ROOT 内的正常路径 → **逐字返回含真实 apiKey 的密钥文件** (实测 200), /.git/config 同样可取
+     (可能含远端凭据), logs/ 暴露运行时产物 — 与 README「密钥永不离开服务器」直接矛盾。
+     按首段判定并顺带拒绝一切点开头目录 (.git/.github 等, 静态面本无此需求)。 */
+  const seg0 = p.split('/').filter(Boolean)[0] || '';
+  if (seg0.charAt(0) === '.' || DENY_DIRS.has(seg0.toLowerCase())) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('forbidden'); }
   const full = path.normalize(path.join(ROOT, p));
   // 第27轮: 前缀穿越加固 — 裸 startsWith(ROOT) 会放行同名前缀兄弟目录 (…/LLM-chess-backup/…), 必须按路径段比对
   if (full !== ROOT && !full.startsWith(ROOT + path.sep)) { res.writeHead(403, { 'Cache-Control': 'no-store' }); return res.end('forbidden'); }   // 第28轮: no-store
@@ -298,8 +311,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   /* ── API ── */
+  /* 第47轮: health/providers 与全部早期拒绝分支补 ACAO — 本仓设计上支持异源/file:// 调试
+     (req_origin_safe 与中继各分支都带 ACAO), 而这两条探测端点与 429/415/400 系列一直漏着,
+     异源页拿到的只有一句不透明的「Failed to fetch」, 看不到「未配置 apiKey」「rate limited」这类可操作提示。 */
   if (u === '/api/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': req_origin_safe(req) });
     return res.end(JSON.stringify({ ok: true, relay: true, version: VERSION }));
   }
 
@@ -310,30 +326,30 @@ const server = http.createServer(async (req, res) => {
       hasKey: !!keys.providers[id].apiKey,
       models: keys.providers[id].models || []
     }));
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': req_origin_safe(req) });
     return res.end(JSON.stringify({ providers: list }));
   }
 
   if (u === '/api/chat' && req.method === 'POST') {
     // v1.0.3: 轻量限流 (每 IP 每分钟 30 次, 防失控/恶意刷请求烧 key; 内存滑动窗, 零依赖)
     if (!chatRateLimit(req)) {
-      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60' });
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60', 'Access-Control-Allow-Origin': req_origin_safe(req) });
       return res.end(JSON.stringify({ error: 'rate limited: max 30 requests/min per IP' }));
     }
     // 第28轮: Content-Type 门禁 (显式声明非 JSON 直接 415; 无声明宽松放行兼容旧行为)
     const ct = (req.headers['content-type'] || '').toLowerCase();
     if (ct && ct.indexOf('application/json') < 0) {
-      res.writeHead(415, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.writeHead(415, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': req_origin_safe(req) });
       return res.end(JSON.stringify({ error: 'unsupported media type: use application/json' }));
     }
     const body = await readBody(req);
     if (!body) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': req_origin_safe(req) });
       return res.end(JSON.stringify({ error: '请求体为空或超过 2MB 上限' }));
     }
     let payload;
     try { payload = JSON.parse(body); } catch (e) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': req_origin_safe(req) });
       return res.end(JSON.stringify({ error: 'bad json' }));
     }
     /* 第46轮: 非对象 JSON 体守卫 — JSON.parse('null') 合法返回 null, 而下一行读 payload.provider
@@ -341,21 +357,21 @@ const server = http.createServer(async (req, res) => {
        即「一个 POST 就能远程打死中继」(实测 exitCode 1 + 后续请求 ECONNREFUSED)。数组/标量经
        provider 判定本来就走 400, 只有 null 会崩, 故按「非对象」判定。需重启生效。 */
     if (!payload || typeof payload !== 'object') {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
       return res.end(JSON.stringify({ error: '请求体必须是 JSON 对象' }));
     }
     const keys = loadKeys();
     const cfg = (keys.providers || {})[payload.provider];
     if (!cfg) {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
       return res.end(JSON.stringify({ error: '未知服务商: ' + payload.provider }));
     }
     if (!cfg.apiKey) {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
       return res.end(JSON.stringify({ error: '服务商 ' + payload.provider + ' 未配置 apiKey — 请编辑 config/keys.json 后重启' }));
     }
     if (!payload.model || !payload.messages) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': req_origin_safe(req) });
       return res.end(JSON.stringify({ error: '缺少 model/messages' }));
     }
     if ((cfg.protocol || '') === 'anthropic') return relayAnthropic(cfg, payload, res, req);   // v3.5: Claude 走协议转换

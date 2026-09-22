@@ -663,3 +663,66 @@ if (!/if \(hiding && wasFocused\)/.test(renCode)) wire46.push('横幅自清/关�
 console.log('第20节 双入口一致性/默认焦点/横幅语义守卫:', wire46.length ? wire46.join(' | ') : 'OK (终局卡两条收起入口共用旗标 + 回放走法表角色与当前手 + anthropic 502 ACAO + Esc 穿过输入早退与设置层消费声明 + err 横幅播报/关闭/焦点交还 + 首屏 data-i18n 与提前渲染 + 回放盘面格子角色与坐标 + 跳最长思考名 + 续局横幅焦点)');
 if (wire46.length) process.exit(1);
 
+// 21) 第47轮 源串/结构守卫 — 本轮三类形态:
+//     (a) 「守住了穿越却守不住点名取密钥 / 一个 GET 打死进程」— serveStatic 只有路径前缀校验, 于是
+//         /config/keys.json 逐字返回真实 apiKey, 而 %00 让 fs.stat 同步抛出终止进程;
+//     (b) 「声明为模态却仍在操作背景」— 回放层 aria-modal=true 但未处理的按键落到主界面分支;
+//     (c) 「可聚焦控件被摘掉/被禁用/被重建后焦点丢失」与「写了 ARIA 却不随态/随语言更新」。
+const wire47 = [];
+const engCode = codeOnly(fs.readFileSync(__dirname + '/../core/engine.js', 'utf8'));
+// (a1) 静态托管敏感路径黑名单: 必须存在且按首段判定 (config 密钥目录 / 点开头目录)
+if (!/const DENY_DIRS = new Set\(\[/.test(srvCode)) wire47.push('缺静态敏感目录黑名单 DENY_DIRS (GET /config/keys.json 会逐字返回含 apiKey 的密钥文件)');
+else if (!/DENY_DIRS\.has\(seg0\.toLowerCase\(\)\)/.test(srvCode)) wire47.push('黑名单未按首段生效 (守卫锚点失效)');
+if (!/seg0\.charAt\(0\) === '\.'/.test(srvCode)) wire47.push('未拒绝点开头目录 (/.git/config 可取, 可能含远端凭据)');
+if (!/if \(p\.indexOf\('\\u0000'\) >= 0\)/.test(srvCode)) wire47.push('缺空字节路径守卫 (decodeURIComponent(\'/%00\') 使 fs.stat 同步抛出 → 进程终止)');
+// (a2) 早期拒绝分支与两条探测端点必须带 ACAO (与本文件其余分支同口径)
+if (!/if \(u === '\/api\/health'\) \{[\s\S]{0,140}?req_origin_safe\(req\)/.test(srvCode)) wire47.push('health 未带 ACAO (异源页的 relayAvailable 探测读到不透明 CORS 失败)');
+if (!/if \(u === '\/api\/providers'[\s\S]{0,600}?req_origin_safe\(req\)/.test(srvCode)) wire47.push('providers 未带 ACAO (异源页读不到服务商列表)');
+if (!/'Retry-After': '60', 'Access-Control-Allow-Origin': req_origin_safe\(req\)/.test(srvCode)) wire47.push('429 未带 ACAO');
+if (!/res\.writeHead\(415, \{[^}]*req_origin_safe\(req\)/.test(srvCode)) wire47.push('415 未带 ACAO');
+var n400 = (srvCode.match(/res\.writeHead\(400, \{[^}]*req_origin_safe\(req\)/g) || []).length;
+if (n400 < 6) wire47.push('400 系列带 ACAO 的分支数不足 (实测 ' + n400 + '/6 — 早期拒绝错误明细对异源页不可见)');
+// (a3) sw.js: 写缓存判据必须是 status === 200 (res.ok 对 206 也为真 → 部分字节被当完整资源缓存)
+if (!/res\.status === 200 && res\.type === 'basic'/.test(swCode)) wire47.push('sw.js 写缓存判据未收紧为 status===200 (206 部分响应会被缓存)');
+if (/res\.ok && res\.type === 'basic'/.test(swCode)) wire47.push('sw.js 仍用 res.ok 判定可缓存 (206 通过)');
+// (b) 回放层开启时必须收口未处理按键 (否则 ArrowUp/Down 移动被遮住的棋盘光标, m/u/r 操作背景对局)
+if (!/rpShowHelp\(\); ev\.preventDefault\(\); return; \}\r?\n\s*return;/.test(appCode)) {
+  wire47.push('回放层未拦截未处理按键 (背景棋局仍被操作: ArrowUp/Down 移动隐藏光标, m/u/r 改直播对局)');
+}
+// (c1) 设置面板红/黑两栏必须有可程序判定的分组语义 (否则两侧控件同名)
+if (!/role="group" aria-labelledby="set-col-red-title"/.test(html) || !/role="group" aria-labelledby="set-col-black-title"/.test(html)) {
+  wire47.push('设置面板红/黑栏缺 group 语义 (两侧控件可访问名完全相同, 读屏无从分辨配哪一方)');
+}
+if (!/id="set-col-red-title"/.test(html) || !/id="set-col-black-title"/.test(html)) wire47.push('设置面板栏标题缺 id (aria-labelledby 指向不存在)');
+// (c2) 走法日志: 摘节点/清空前的焦点守护必须存在且两处入口都接上
+if (!/function logFocusGuard\(\)/.test(appCode)) wire47.push('缺走法日志焦点守护 logFocusGuard (悔棋/重开摘掉被聚焦条目 → 焦点静默掉回 body)');
+else {
+  if (!/var restoreLogFocus = logFocusGuard\(\);[^\n]*\r?\n\s*engine\.newGame\(\);/.test(appCode)) wire47.push('restartGame 未在清空日志前取焦点守护');
+  if (!/var restoreLogFocus = logFocusGuard\(\);[^\n]*\r?\n\s*var T = XQ\.I18N/.test(appCode)) wire47.push('undoLastMove 未接焦点守护');
+  if ((appCode.match(/restoreLogFocus\(\);/g) || []).length < 2) wire47.push('焦点守护未在两条入口都调用 (undo/restart)');
+}
+// (c3) 回放传输按钮被禁用时焦点必须交还 (禁用聚焦中的控件会让焦点掉回 body)
+if (!/\^\(rp-start\|rp-prev\|rp-next\|rp-end\|rp-toggle\)\$/.test(appCode)) wire47.push('rpPaintButtons 未识别被禁用的传输按钮 (键盘用户 Tab 到 ◀ 后退到起点即丢焦点)');
+// (c4) 主界面走法条目当前手必须写 aria-current (与回放层走法表同口径)
+if (!/if \(isCur\) e\.setAttribute\('aria-current', 'true'\); else e\.removeAttribute\('aria-current'\)/.test(appCode)) {
+  wire47.push('主界面走法条目缺 aria-current (当前手只有视觉底色, 读屏不知自己在哪一手)');
+}
+// (c5) 回放全屏按钮名称随态 + 语言热切重算 (单出口)
+if (!/function rpPaintFullBtn\(\)/.test(appCode)) wire47.push('缺 rpPaintFullBtn 单出口 (全屏按钮名称只有 fullscreenchange 一条路径写)');
+else {
+  if (!/rpEl\.paintFullBtn = rpPaintFullBtn;/.test(appCode)) wire47.push('rpPaintFullBtn 未挂到 rpEl (语言热切处取不到)');
+  if (!/if \(rpEl && rpEl\.paintFullBtn\) rpEl\.paintFullBtn\(\)/.test(appCode)) wire47.push('语言热切未重算全屏按钮名称 (全屏中切语言后名称与动作相反)');
+}
+// (c6) #server-warn 必须可被读屏感知 (异步注入的状态文本)
+if (!/id="server-warn" role="status" aria-live="polite"/.test(html)) wire47.push('#server-warn 缺 live 语义 (读屏用户不知道 LLM 模式不可用)');
+// (c7) 热路径: snapshot 记忆化 + 每手 O(n) 计数 + 死计算
+if (!/var _snapCache = null;/.test(engCode)) wire47.push('snapshot 缺 memo (_snapCache) — 每帧 90 个对象分配');
+/* 失效机制是「memo 键 === _stateVer」这条判定本身 (bumpVer 里的 _snapCache = null 只是顺带释放旧对象,
+   删掉它不构成行为回归 — 故只钉键判定, 不钉那行清理; L19 另有行为断言双向钉住)。 */
+else if (!/if \(_snapCache && _snapCache\.ver === _stateVer\) return _snapCache\.val;/.test(engCode)) wire47.push('snapshot memo 未按 _stateVer 判定 (走子后仍读到旧盘面)');
+if (!/log\.childElementCount - \(hasMore \? 1 : 0\) > LOG_CAP/.test(renCode)) wire47.push('logMove 仍用 querySelectorAll 取条目数 (每手 O(n) 选择器匹配只为计数)');
+if (/var logText = logTextFor\(side\);/.test(appCode)) wire47.push('afterMove 仍在每手拼一份从未被消费的纯文本决策日志 (logText)');
+if (!/text: XQ\.UI\.decisionCards \? undefined : logTextFor\(side\)/.test(appCode)) wire47.push('决策面板纯文本兜底未改为按需拼接 (守卫锚点失效)');
+console.log('第21节 敏感路径/模态收口/焦点与状态同步守卫:', wire47.length ? wire47.join(' | ') : 'OK (静态敏感目录黑名单与空字节守卫 + 早期拒绝与探测端点 ACAO + sw 仅缓存 200 + 回放层按键收口 + 设置栏 group 语义 + 走法日志焦点守护 + 传输按钮禁用保焦点 + 主界面 aria-current + 全屏名随态/随语言 + server-warn live + snapshot memo 与死计算清理)');
+if (wire47.length) process.exit(1);
+

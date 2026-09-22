@@ -430,6 +430,8 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
 }).then(function () {
   l18Round46();               // 第46轮: 横幅 err 态播报/可聚焦 + 收起时交还焦点
 }).then(function () {
+  l19Round47();               // 第47轮: snapshot memo 的行为 (同版本复用 / 走子换代 / undo 不吃旧盘面)
+}).then(function () {
   console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
   process.exit(fails.length ? 1 : 0);
   }, function (e) {
@@ -741,7 +743,7 @@ function l16Round44() {
   sb.clients = { claim: function () { return Promise.resolve(); } };
   sb.Response = { error: function () { return { ok: false, _browserErrorPage: true }; } };
   var putRelease = null, putCalls = 0;
-  sb.fetch = function () { return Promise.resolve({ ok: true, type: 'basic', clone: function () { return { _copy: true }; } }); };
+  sb.fetch = function () { return Promise.resolve({ ok: true, status: 200, type: 'basic', clone: function () { return { _copy: true }; } }); };
   sb.caches = {
     open: function () {
       return Promise.resolve({
@@ -791,5 +793,63 @@ function l16Round44() {
     return d.resp.then(function () { return d.wait; }).then(function () {
       ok(true, 'L16 网络异常路径同样 settle waitUntil (事件不悬挂)');
     });
+  }).then(function () {
+    /* ⑥ 第47轮: 206 Partial Content 同样 res.ok === true — 判据收紧为 status === 200 后, 带 Range 的 GET
+       不得写缓存 (否则离线兜底把残缺字节当完整资源交付, 解析失败/静默截断)。 */
+    sb.fetch = function () { return Promise.resolve({ ok: true, status: 206, type: 'basic', clone: function () { return { _copy: true }; } }); };
+    var before206 = putCalls;
+    var e206 = fire('http://localhost:8788/LLM-Chess/ui/app.js');
+    return e206.resp.then(function () { return Promise.resolve(); }).then(function () {
+      /* 若发生回归 (206 被写缓存), put 会挂起等手动放行 — 必须放行让链条走完, 否则 promise 永不 settle、
+         事件循环排空后进程静默 exit 0, 断言根本没机会执行 (变异探针会假绿)。 */
+      if (putRelease) { var rel = putRelease; putRelease = null; rel(); }
+      return e206.wait;
+    }).then(function () {
+      ok(putCalls === before206, 'L16 206 部分响应不写缓存 (res.ok 对 206 也为真; 收紧为 status===200 后 put 次数 ' + before206 + '→' + putCalls + ')');
+    });
   });
+}
+
+/* ═══ L19 第47轮: engine.snapshot 按 _stateVer 记忆化 ═══
+   缺陷形态: snapshot() 每帧分配 10×9 个 {color,type,id} 对象 (渲染路径最大单笔分配), 而它的全部字段
+   (cells/turn/over/result/winner/ply/naturalClock/repetitionCount) 都只随盘面或执子方变化 —
+   apply/undo/newGame 三条写路径均 bumpVer, 故同版本内结果恒定, 可安全复用同一对象 (调用方一律只读)。
+   本组既钉「同版本复用」也钉「换代失效」: 只测前者会让「永不失效」的错误实现全绿, 只测后者会让
+   「每次新建」的未优化实现全绿 — 必须双向。 */
+function l19Round47() {
+  function cellsKey(s) { return JSON.stringify(s.cells); }
+  var eS = XQ.Engine.create();
+  var s1 = eS.snapshot(), s2 = eS.snapshot();
+  ok(s1 === s2, 'L19 同一局面连续两次 snapshot 复用同一对象 (memo 生效; 每次新建会让每帧 90 个对象分配回归)');
+  ok(s1.cells.length === 10 && s1.cells[0].length === 9, 'L19 快照形状仍是 10×9 (memo 不改变契约)');
+  var before = cellsKey(s1);
+  var mvS = eS.generateLegalMoves('red')[0];
+  eS.applyPlayerMove(mvS.from.x, mvS.from.y, mvS.to.x, mvS.to.y);
+  var s3 = eS.snapshot();
+  ok(s3 !== s1, 'L19 走子后 snapshot 换代 (bumpVer 使 memo 失效 — 否则渲染停在旧盘面)');
+  ok(s3.ply === 1 && s3.turn === 'black' && cellsKey(s3) !== before, 'L19 换代后的快照字段与盘面均为新值 (ply/turn/cells 一并刷新)');
+  ok(eS.snapshot() === s3, 'L19 换代后的同版本读数再次复用 (memo 键跟随 _stateVer)');
+  eS.undoPly();
+  var s4 = eS.snapshot();
+  ok(cellsKey(s4) === before && s4.ply === 0 && s4.turn === 'red',
+    'L19 undo 后读回被恢复的盘面 (memo 未失效会读到已被撤销的 B 局面 — 与 posKey 同类陷阱)');
+  // 独立引擎互不串 memo (memo 是闭包内状态, 不是模块级)
+  var eT = XQ.Engine.create();
+  ok(eT.snapshot() !== s4, 'L19 两个引擎的快照互不共享 (memo 为实例闭包状态)');
+  // 渲染路径仍正常 (memo 对象对 renderer 只读兼容: 复用同一对象不得影响绘制)
+  var viewS = { boardEl: mkEl('div'), selected: null, flip: false, pendingAnim: null, startTime: Date.now(), arrow: true };
+  viewS.boardEl.parentNode = mkEl('div');
+  var base = XQ.Engine.create();
+  var spyS = {
+    snapshot: function () { return base.snapshot(); },
+    isOver: function () { return base.isOver(); },
+    legalTargets: function (x, y) { return base.legalTargets(x, y); },
+    dangerTargets: function (x, y) { return base.dangerTargets(x, y); },
+    inCheck: function (c) { return base.inCheck(c); },
+    naturalClock: function () { return base.naturalClock(); },
+    result: function () { return base.result(); }
+  };
+  sandbox.XQ.UI.render(spyS, viewS);
+  sandbox.XQ.UI.render(spyS, viewS);
+  ok((viewS.boardEl.children || []).length === 90, 'L19 复用 memo 快照后渲染仍绘满 90 格 (只读契约成立)');
 }

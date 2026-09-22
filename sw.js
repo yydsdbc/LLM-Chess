@@ -24,6 +24,10 @@
  *   ⑦ 写缓存未挂事件生命周期 — caches.open().put() 既不 return 也不 waitUntil, respondWith 一 resolve
  *      浏览器即可终止 SW, 写入被丢弃 (在线加载过的子资源离线兜底反而 miss)。现用 deferred 把写入完成
  *      交给 e.waitUntil (必须在派发期间同步调用), 且四条路径都 settle 防事件悬挂。
+ *
+ * 第47轮修复 (缓存判据过宽):
+ *   ⑧ 只缓存 status === 200 — res.ok 对 206 Partial Content 也为真, 带 Range 的 GET 会把部分字节
+ *      按完整 URL 写入缓存, 离线兜底命中后把残缺响应当完整资源交付。
  */
 'use strict';
 var CACHE = 'xq-shell-v3';            // 第41轮: 升版 → activate 清掉 v2 (其壳清单缺全部脚本, 用户下次访问自然重建)
@@ -104,7 +108,10 @@ self.addEventListener('fetch', function (e) {
   e.waitUntil(putDone);
   e.respondWith(
     fetch(req).then(function (res) {
-      if (res && res.ok && res.type === 'basic') {      // 仅缓存同源 2xx 成功响应
+      /* 第47轮: 判据由 res.ok 收紧为 status === 200 — res.ok 对 **206 Partial Content** 同样为真,
+         带 Range 的 GET 会把「部分字节」按完整 URL 存进缓存, 离线兜底再命中时把残缺响应当完整资源
+         交付 (解析失败/静默截断)。仅 200 才代表完整资源。 */
+      if (res && res.status === 200 && res.type === 'basic') {      // 仅缓存同源 200 完整响应
         var copy = res.clone();
         // 第41轮: 补 catch — 配额耗尽/隐私模式 (QuotaExceededError) 不变成未处理的 rejection;
         // 写缓存是纯优化, 失败只应降级为「本次不缓存」, 不能污染在线路径

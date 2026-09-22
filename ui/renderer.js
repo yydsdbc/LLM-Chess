@@ -492,18 +492,20 @@
       + (cn ? '<span class="log-cn">' + cn + '</span>' : '')   // 第33轮: 行内中文记谱 (原只在悬停 title)
       + (secs ? '<span class="log-secs"> ⏱' + secs + 's</span>' : '');
     log.appendChild(e);
-    var entries = log.querySelectorAll('.log-entry');
-    if (entries.length > LOG_CAP) {
+    /* 第47轮 热路径: 原用 log.querySelectorAll('.log-entry').length 只为取一个计数 (每手 O(n≤150) 选择器匹配);
+       条目数 = childElementCount − 折叠提示行 (childElementCount 是 O(1), querySelector('.log-more') 命中即返回)。 */
+    var hasMore = !!log.querySelector('.log-more');
+    if (log.childElementCount - (hasMore ? 1 : 0) > LOG_CAP) {
       logTrimmed++;
-      entries[0].parentNode.removeChild(entries[0]);
-      var more = log.querySelector('.log-more');
-      if (!more) {
-        more = document.createElement('div');
+      var firstEntry = log.querySelector('.log-entry');
+      if (firstEntry) firstEntry.parentNode.removeChild(firstEntry);
+      if (!hasMore) {
+        var more = document.createElement('div');
         more.className = 'log-more';
         log.insertBefore(more, log.firstChild);
       }
       var T = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return ('… ' + a.n + ' earlier moves folded'); };
-      more.textContent = T('log_trimmed', { n: logTrimmed });
+      log.querySelector('.log-more').textContent = T('log_trimmed', { n: logTrimmed });
     }
     var nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;   // 第36轮: 用户上滚阅读时不拽回底部
     if (nearBottom) log.scrollTop = log.scrollHeight;

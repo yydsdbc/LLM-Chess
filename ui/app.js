@@ -317,10 +317,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (!entry.fallback && !entry.summary) entry.summary = (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)');   // 纯展示兜底: 有 summary 缺失但置信度在 → 保留原「无摘要」占位
     decisionLog[side].push(entry);
     if (decisionLog[side].length > 60) decisionLog[side].shift();
-    var logText = logTextFor(side);
     XQ.UI.thinkPanel(side, {
       cards: XQ.UI.decisionCards ? XQ.UI.decisionCards(decisionLog[side].slice(-4), decisionLog[side].length) : null,
-      text: XQ.UI.decisionCards ? undefined : logText,
+      /* 第47轮 热路径: 纯文本兜底改为**按需**拼接 — XQ.UI.decisionCards 恒存在 (renderer 提供), 原实现却每手都
+         调 logTextFor(side) 把整份决策日志 (上限 60 条) 拼成多行串, 随即因 text 为 undefined 被丢弃 (纯垃圾分配)。 */
+      text: XQ.UI.decisionCards ? undefined : logTextFor(side),
       active: false,
       info: infoHTML(side, holder, entry.evaluation)
     });
@@ -618,7 +619,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     // 高亮选中 (长对局时滚入视区)
     var log = document.getElementById('move-log');
     if (log) Array.from(log.children).forEach(function (e) {
-      e.classList.toggle('active', parseInt(e.dataset.ply, 10) === ply);
+      var isCur = parseInt(e.dataset.ply, 10) === ply;
+      e.classList.toggle('active', isCur);
+      /* 第47轮 a11y: 条目是 role=button (第45轮补), 而「当前手」此前只有 .active 视觉底色 — 读屏用户跳转后
+         不知道自己在哪一手 (第46轮给回放层走法表补了 aria-current, 主界面这处漏了)。 */
+      if (isCur) e.setAttribute('aria-current', 'true'); else e.removeAttribute('aria-current');
     });
     var act = log && log.querySelector('.log-entry.active');
     if (act) { try { act.scrollIntoView({ block: 'nearest' }); } catch (eSV) {} }
@@ -1032,6 +1037,24 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (rpEl && rpEl.ov.style.display === 'block' && rpSession) { try { rpPaintBoard(rpSession.state(), false); } catch (eFB) {} }
   }
 
+  /* 第47轮 a11y: 走法条目是 role=button + tabindex=0 的可聚焦控件, 而悔棋/重开/保存设置都会直接摘掉
+     或清空整个 #move-log → 焦点静默掉回 body (下一次 Tab 从页首重来, 读屏用户直接迷路)。与第44/45/46轮
+     对回放走法表/思考面板/续局横幅同款处理: 摘节点**前**记「焦点是否在日志内」, 之后归还焦点
+     (有剩余条目则落在最后一条, 否则回盘面 #board)。返回一个幂等的收尾函数。 */
+  function logFocusGuard() {
+    var log = document.getElementById('move-log');
+    var act = document.activeElement;
+    var had = !!(log && act && act !== log && log.contains(act));
+    return function () {
+      if (!had) return;
+      var log2 = document.getElementById('move-log');
+      var last = log2 && log2.querySelector('.log-entry:last-child');
+      var target = last || document.getElementById('board');
+      if (!target) return;
+      try { target.focus({ preventScroll: true }); } catch (eLF) { try { target.focus(); } catch (eLF2) {} }
+    };
+  }
+
   /* 第30轮 悔棋: 人机局撤「人类+AI」一对; AI-vs-AI 撤 1 手并让对局继续。
      同步回滚: 走法列表/决策日志/吃子托盘/评值走势; LLM 会话 reset (历史已不匹配, 重建) */
   function undoLastMove() {
@@ -1039,6 +1062,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (aiBusy) { warnBanner((XQ.I18N ? XQ.I18N.t('undo_ai_busy') : 'AI 思考中 — 请等本手落子后再悔棋'), null); return; }
     if (engine.ply() === 0) return;
     if (replayStack.length) { warnBanner((XQ.I18N ? XQ.I18N.t('undo_need_restore') : '复盘查看中 — 请先 ⟲ 还原再悔棋'), null); return; }
+    var restoreLogFocus = logFocusGuard();   // 第47轮: 下面会摘掉被聚焦的条目, 收尾时归还焦点
     var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
     var steps = 1;
     var lastSide = engine.lastMove() && engine.lastMove().piece.color;
@@ -1081,6 +1105,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
     bannerClear(); thinkWarned = false; repWarnedN = 0; chWarnedN = 0;
     syncArchive(); refresh(); paintReplayBar();
+    restoreLogFocus();   // 第47轮 a11y: 条目已摘, 焦点若原在日志内则归还 (最后一条 / 盘面)
     warnBanner(T('undo_ok'), null);
     if (!engine.isOver()) setTimeout(scheduleAgent, 100);
   }
@@ -1093,6 +1118,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     restartGame();
   }
   function restartGame() {
+    var restoreLogFocus = logFocusGuard();   // 第47轮 a11y: 下面清空 #move-log (焦点若在条目上会掉回 body)
     engine.newGame();
     startRecord();
     selected = null; startTime = Date.now(); aiBusy = false;
@@ -1110,6 +1136,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     repWarnedN = 0;   // v1.7.7 重复局面告警重置
     chWarnedN = 0;    // v1.7.8 长将告警重置
     refresh();
+    restoreLogFocus();   // 第47轮 a11y: 日志已清空 → 焦点归还盘面 (而非静默掉回 body)
     setTimeout(scheduleAgent, 100);
   }
   /* v2.3 主界面全屏观战: 按钮或 F 键 (回放模式内 F 由回放分支接管, 不冲突); Esc 由浏览器原生退全屏 */
@@ -1293,6 +1320,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         rpPaintMoveList();
         rpOnPlayState(rpCtrl && rpCtrl.playing ? rpCtrl.playing() : false);
       }
+      /* 第47轮 a11y: 全屏按钮名称随态 (全屏中为「退出全屏」), 而 apply() 刚把它重写成静态键 → 此处按当前
+         全屏态重算 (单出口, 与 fullscreenchange 共用), 否则全屏中切语言后名称与动作相反。 */
+      if (rpEl && rpEl.paintFullBtn) rpEl.paintFullBtn();
     });
     // v1.7 思考面板折叠 (点 head 切换)
     ['think-red', 'think-black'].forEach(function (id) {
@@ -1596,6 +1626,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         if (ev.key === 'n' || ev.key === 'N') { rpGotoBookmark(1); ev.preventDefault(); return; }   // v1.0.daily: 下一书签
         if (ev.key === 'p' || ev.key === 'P') { rpGotoBookmark(-1); ev.preventDefault(); return; }   // v1.0.daily: 上一书签
         if (ev.key === '?' || ev.key === '/') { rpShowHelp(); ev.preventDefault(); return; }
+        /* 第47轮 a11y: 回放层是 aria-modal="true" 对话 (背景对读屏声明为惰性), 且帮助层自述「回放打开时
+           快捷键归回放」。但本分支此前只 return「已处理的键」, 未处理的键会一路落到下方主界面分支:
+           ArrowUp/ArrowDown 会移动**被遮住的**棋盘键盘光标并向 live region (#sr-cursor) 播报, m/u/r 仍会
+           静音/悔棋(改掉正在直播的对局)/弹重开确认 — 与第41轮给设置层加的闸门同类, 这里漏了。
+           故回放开启期间一律在此收口 (Tab 与已处理键已在上面各自 return, 未 preventDefault 的浏览器
+           组合键如 Ctrl+R 不受影响)。 */
+        return;
       }
       /* v1.0.daily a11y 键盘走子: 方向键光标 / Enter·Space 选子走子 / Esc 取消 */
       var k = (ev.key || '').toLowerCase();
@@ -1833,15 +1870,21 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       } catch (eF) {}
     }
     rpEl.btnFull.onclick = rpToggleFull;
-    document.addEventListener('fullscreenchange', function () {
+    /* 第47轮 a11y: 名称按全屏态重算抽成单出口 — 原实现只在 fullscreenchange 里按态写名, 而 I18N.apply()
+       会按 data-i18n-title/-aria 无条件把名字重写回静态键 (rp_full_title): 全屏中切换语言后, 读屏听到的
+       又变回「全屏模式 (F)」(与当前动作相反)。故语言热切 (xq:i18n) 也必须重跑本出口。 */
+    function rpPaintFullBtn() {
+      if (!rpEl || !rpEl.btnFull) return;
       var on = !!document.fullscreenElement;
-      if (rpEl && rpEl.btnFull) {
-        var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
-        rpEl.btnFull.textContent = on ? '⤡' : '⛶';
-        rpEl.btnFull.title = on ? T('rp_exit_full_title') : T('rp_full_title');
-        rpEl.btnFull.setAttribute('aria-label', on ? T('rp_exit_full_title') : T('rp_full_title'));   // 第44轮: 名称随态 (全屏中读屏听到「退出全屏」而非「全屏模式」)
-      }
-      paintFullscreenPressed(on);   // 第44轮: 主界面全屏按钮同样随 fullscreenchange 同步 (Esc 退出也走这里)
+      var Tf = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+      rpEl.btnFull.textContent = on ? '⤡' : '⛶';
+      rpEl.btnFull.title = on ? Tf('rp_exit_full_title') : Tf('rp_full_title');
+      rpEl.btnFull.setAttribute('aria-label', on ? Tf('rp_exit_full_title') : Tf('rp_full_title'));   // 第44轮: 名称随态 (全屏中读屏听到「退出全屏」而非「全屏模式」)
+    }
+    rpEl.paintFullBtn = rpPaintFullBtn;
+    document.addEventListener('fullscreenchange', function () {
+      rpPaintFullBtn();
+      paintFullscreenPressed(!!document.fullscreenElement);   // 第44轮: 主界面全屏按钮同样随 fullscreenchange 同步 (Esc 退出也走这里)
     });
     rpEl.autoplay.checked = rpGetSetting('autoplay');
     rpEl.autoplay.onchange = function () { try { localStorage.setItem(RP_AUTOPLAY_KEY, this.checked ? '1' : '0'); } catch (e) {} };
@@ -2735,12 +2778,28 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   /* v1.6.1 边界禁用: 在起点 ⏮◀ 灰, 在终点 ⏭▶| 灰 (循环开启时 ▶ 在终点可继续) */
   function rpPaintButtons(st) {
     if (!rpEl) return;
+    /* 第47轮 a11y: 必须在改 disabled **之前**取焦点宿主 — 浏览器在 `el.disabled = true` 赋值那一刻就把
+       聚焦中的元素移出焦点序 (实测赋值后 activeElement 已是 body), 之后再读就找不到「谁被禁用了」。 */
+    var act0 = document.activeElement;
     var atStart = st.idx === 0, atEnd = st.idx === st.total;
     rpEl.btnStart.disabled = atStart;
     rpEl.btnPrev.disabled = atStart;
     rpEl.btnNext.disabled = atEnd;
     rpEl.btnEnd.disabled = atEnd;
     rpEl.toggle.disabled = atEnd && !(rpCtrl && rpCtrl.isLooping());
+    /* 第47轮 a11y: 禁用「正在聚焦」的控件会让焦点静默掉回 body (下一次 Tab 从层首重来)。键盘用户 Tab 到 ◀
+       后一路退到起点, 或 Tab 到 ▶| 后按 End 就会命中。若焦点落在刚被禁用的传输按钮上, 交还给同组第一个仍可用的
+       按钮 (都没有则落到进度条, 它始终可用)。 */
+    if (act0 && /^(rp-start|rp-prev|rp-next|rp-end|rp-toggle)$/.test(act0.id || '') && act0.disabled) {
+      var cands = [rpEl.btnPrev, rpEl.btnNext, rpEl.toggle, rpEl.btnStart, rpEl.btnEnd];
+      for (var i = 0; i < cands.length; i++) {
+        if (cands[i] && !cands[i].disabled) {
+          try { cands[i].focus({ preventScroll: true }); } catch (eBF) { try { cands[i].focus(); } catch (eBF2) {} }
+          return;
+        }
+      }
+      if (rpEl.range && typeof rpEl.range.focus === 'function') { try { rpEl.range.focus({ preventScroll: true }); } catch (eBF3) { rpEl.range.focus(); } }
+    }
   }
   /* v1.6.1 续看进度: 每个棋谱保留最近 ply, 重新打开自动跳转 */
   var rpSaveLock = 0;
