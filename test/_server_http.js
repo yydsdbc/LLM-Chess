@@ -20,6 +20,7 @@ const BASE = 'http://127.0.0.1:' + PORT;
 const ROOT = path.join(__dirname, '..');
 
 let server = null;
+let server2 = null;   // 第48轮: 第二实例 (独立限流表, 见文末第48轮块)
 const results = [];
 let failed = 0;
 function ok(cond, name) {
@@ -27,9 +28,9 @@ function ok(cond, name) {
   if (!cond) failed++;
 }
 
-function req(method, urlPath, body, headers) {
+function reqTo(base, method, urlPath, body, headers) {
   return new Promise(function (resolve) {
-    const r = http.request(BASE + urlPath, { method: method, headers: headers || {} }, function (res) {
+    const r = http.request(base + urlPath, { method: method, headers: headers || {} }, function (res) {
       const chunks = [];
       res.on('data', function (c) { chunks.push(c); });
       res.on('end', function () { resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }); });
@@ -40,6 +41,7 @@ function req(method, urlPath, body, headers) {
     r.end();
   });
 }
+function req(method, urlPath, body, headers) { return reqTo(BASE, method, urlPath, body, headers); }
 
 function waitHealth(tries) {
   if (!tries) return Promise.resolve(false);
@@ -75,6 +77,26 @@ async function main() {
         uRes.writeHead(401, { 'Content-Type': 'application/json' });
         return uRes.end(JSON.stringify({ error: { message: 'bad key 401' } }));
       }
+      /* 第48轮: 上游「连上之后中途断连」— 写完头 + 半截体再拆 socket。修复前非流式两条路径
+         (relay 的 !wantStream 分支与 relayAnthropic) 既不 emit 'end' 也没有 'error' 监听,
+         于是中继永不响应: 实测客户端挂到超时 (12s 无任何字节), 而不是像「连不上」那样 502。 */
+      if (jb.model === 'stub-reset') {
+        uRes.writeHead(200, { 'Content-Type': 'application/json' });
+        uRes.write('{"partial":');
+        setTimeout(function () { try { uRes.socket.destroy(); } catch (eRD) {} }, 20);
+        return;
+      }
+      /* 第48轮: 上游回超大响应体 — 修复前非流式路径无任何上限, 一路 Buffer.concat 撑爆中继内存。 */
+      if (jb.model === 'stub-huge') {
+        uRes.writeHead(200, { 'Content-Type': 'application/json' });
+        const chunk1m = Buffer.alloc(1024 * 1024, 97);
+        let sentMb = 0;
+        const iv = setInterval(function () {
+          if (sentMb >= 17) { clearInterval(iv); return uRes.end(); }   // 17MB > 16MB 上限
+          sentMb++; uRes.write(chunk1m);
+        }, 1);
+        return;
+      }
       if (String(jb.model || '').indexOf('stub-a') === 0) {   // anthropic 协议 content shape
         uRes.writeHead(200, { 'Content-Type': 'application/json' });
         return uRes.end(JSON.stringify({ content: [{ type: 'text', text: '{"from":"h3","to":"e3","summary":"anthropic-ok","confidence":0.7}' }], usage: { input_tokens: 12, output_tokens: 6 } }));
@@ -109,7 +131,7 @@ async function main() {
      stubanthropic 的 baseUrl **不含 /v1** — 与真实配置 (https://api.anthropic.com) 同形, 这样
      「默认 chatPath /v1/messages 生效」才可断言 (baseUrl 自带 /v1 时会得到 /v1/v1/messages, 断言变成
      钉住一个拼接产物而非真实口径)。 */
-  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1/', apiKey: 'test-key', models: ['m-a', 'm-b'] }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort, protocol: 'anthropic', apiKey: 'anthropic-test-key' }, stubantdead: { name: 'StubAntDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', protocol: 'anthropic', apiKey: 'dead-ant-key' }, stubnokey: { name: 'StubNoKey', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: '' }, stubheaders: { name: 'StubHdr', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key', headers: { 'X-Custom-Auth': 'hdr-ok' } }, stubglm: { name: 'StubGLM', baseUrl: 'http://127.0.0.1:' + upPort + '/tokenrhythm/v1', chatPath: '/v2/chat', apiKey: 'glm-key' }, stubdead: { name: 'StubDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', apiKey: 'dead-key' } } }));
+  fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1/', apiKey: 'test-key', models: ['m-a', 'm-b'] }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort, protocol: 'anthropic', apiKey: 'anthropic-test-key' }, stubantdead: { name: 'StubAntDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', protocol: 'anthropic', apiKey: 'dead-ant-key' }, stubnokey: { name: 'StubNoKey', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: '' }, stubheaders: { name: 'StubHdr', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key', headers: { 'X-Custom-Auth': 'hdr-ok' } }, stubglm: { name: 'StubGLM', baseUrl: 'http://127.0.0.1:' + upPort + '/tokenrhythm/v1', chatPath: '/v2/chat', apiKey: 'glm-key' }, stubdead: { name: 'StubDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', apiKey: 'dead-key' }, stubreset: { name: 'StubReset', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'reset-key' }, stubresetant: { name: 'StubResetA', baseUrl: 'http://127.0.0.1:' + upPort, protocol: 'anthropic', apiKey: 'reset-ant-key' }, stubhuge: { name: 'StubHuge', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'huge-key' } } }));   // 第48轮: 后三个供「中途断连 / 超大响应体」断言 (另起实例跑, 见文末第48轮块)
 
   server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile }) });
   const up = await waitHealth(40);   // ~6s 上限
@@ -464,11 +486,59 @@ async function main() {
   ok(ids(restored.body).indexOf('stubprov') >= 0 && ids(restored.body).indexOf('stubextra') < 0,
     'keys.json 还原后列表随之收敛 (热加载双向生效, 非单向追加)');
 
+  /* ══ 第48轮: 静态黑名单绕过 / 路由 pathname 化 / 非流式中继的两处健壮性 ══
+     为什么另起一个实例: 本套件是单 IP 单进程, 而 /api/chat 的分钟窗上限是 30 — 上面已经**用满**
+     (16 个单发 + 5 个 req('POST') + 9 连发 = 30), 再加任何一个 POST 都会让末尾那条断言收到 429。
+     新进程的限流表是空的, 因此本块既不受预算约束, 也不干扰既有断言。 */
+  const PORT2 = 18000 + Math.floor(Math.random() * 20000);
+  const BASE2 = 'http://127.0.0.1:' + PORT2;
+  server2 = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT2)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile }) });
+  let up2 = false;
+  for (let i = 0; i < 40 && !up2; i++) { up2 = (await reqTo(BASE2, 'GET', '/api/health')).status === 200; if (!up2) await new Promise(function (r) { setTimeout(r, 150); }); }
+  ok(up2, '第48轮: 第二实例启动 (独立限流表, 供本轮新增断言使用)');
+
+  // (a) 敏感路径黑名单必须按「规范化后」的路径逐段判定 — 修复前只按 raw 首段, `..%5c` 可整条绕过
+  const bypWin = await reqTo(BASE2, 'GET', '/x/..%5cconfig/keys.json');
+  ok(bypWin.status === 403 && bypWin.body.indexOf('apiKey') < 0,
+    'GET /x/..%5cconfig/keys.json → 403 (raw 首段是 x, 但 %5c 解码为反斜杠后 path.normalize 折叠回 ROOT/config/ → 第47轮黑名单曾被绕过, 实测 200 逐字返回含 apiKey 的密钥文件)');
+  const bypDot = await reqTo(BASE2, 'GET', '/x/../config/keys.json');
+  ok(bypDot.status === 403, 'GET /x/../config/keys.json → 403 (黑名单改在规范化后判定)');
+  const bypGit = await reqTo(BASE2, 'GET', '/x/..%5c.git/config');
+  ok(bypGit.status === 403, 'GET /x/..%5c.git/config → 403 (.git 同样不可借道取回)');
+
+  // (b) 路由只认 pathname — 修复前带 query 的请求一律落静态分支 404
+  const qHealth = await reqTo(BASE2, 'GET', '/api/health?t=1');
+  ok(qHealth.status === 200, 'GET /api/health?t=1 → 200 (带 query 的探测不再被当成静态路径 404)');
+  const qChat = await reqTo(BASE2, 'POST', '/api/chat?t=1', JSON.stringify({ provider: 'stubprov', model: 'stub-model', messages: [{ role: 'user', content: 'q' }] }), { 'Content-Type': 'application/json' });
+  ok(qChat.status === 200 && /upstream-ok/.test(qChat.body),
+    'POST /api/chat?t=1 → 真实中继 (修复前 404: 前端只看到「404 Not Found」而非真实中继结果/错误)');
+
+  // (c) 上游中途断连 — 非流式两条路径都必须快速 502 (修复前永久挂起)
+  const tAbort = Date.now();
+  const resetRes = await reqTo(BASE2, 'POST', '/api/chat', JSON.stringify({ provider: 'stubreset', model: 'stub-reset', messages: [{ role: 'user', content: 'x' }] }), { 'Content-Type': 'application/json' });
+  const abortMs = Date.now() - tAbort;
+  ok(resetRes.status === 502 && abortMs < 3000,
+    '上游中途断连 (openai 非流式) → 502 且快速返回 (修复前客户端永久挂起: 实测 12s 无任何字节; 本次 ' + abortMs + 'ms)');
+  const resetAnt = await reqTo(BASE2, 'POST', '/api/chat', JSON.stringify({ provider: 'stubresetant', model: 'stub-reset', messages: [{ role: 'user', content: 'x' }] }), { 'Content-Type': 'application/json' });
+  ok(resetAnt.status === 502, '上游中途断连 (anthropic 非流式) → 502 同款 (该分支此前也没有收尾路径)');
+  const aliveAfterAbort = await reqTo(BASE2, 'GET', '/api/health');
+  ok(aliveAfterAbort.status === 200, '中途断连后服务仍存活 (无监听时 Node 只在有 ' + "'error'" + ' 监听才 emit, 表现是挂起而非崩溃 — 两种都要堵)');
+
+  // (d) 非流式上游响应体上限 16MB
+  const hugeUp = await reqTo(BASE2, 'POST', '/api/chat', JSON.stringify({ provider: 'stubhuge', model: 'stub-huge', messages: [{ role: 'user', content: 'x' }] }), { 'Content-Type': 'application/json' });
+  ok(hugeUp.status === 502 && /exceeds/.test(hugeUp.body),
+    '上游响应体 >16MB → 502 (修复前无上限: 超大响应在 Buffer.concat 前就撑爆中继内存)');
+  const aliveAfterHuge = await reqTo(BASE2, 'GET', '/api/health');
+  ok(aliveAfterHuge.status === 200, '超大响应被截断后服务仍存活 (只丢弃该次响应, 不影响后续请求)');
+
+  try { server2.kill(); } catch (eK2b) {}
+
   finish();
 }
 
 function finish() {
   try { if (server) server.kill(); } catch (e) {}
+  try { if (server2) server2.kill(); } catch (eS2) {}
   try { upstream.close(); } catch (eU) {}
   try { fs.rmSync(keysFile, { force: true }); } catch (eK) {}
   try { fs.rmSync(path.join(ROOT, 'temp', 'guard-static-' + process.pid + '.txt'), { force: true }); } catch (eK2) {}   // 第43轮: 静态缓存测试的临时文件兜底清理

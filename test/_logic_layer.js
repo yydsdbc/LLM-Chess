@@ -150,6 +150,7 @@ function mkEl(tag) {
     removeChild: function (c) { var i = this.children.indexOf(c); if (i >= 0) this.children.splice(i, 1); return c; },
     setAttribute: function (k, v) { this._attrs[k] = v; if (k === 'id') { this.id = v; } },
     getAttribute: function (k) { return this._attrs[k]; },
+    removeAttribute: function (k) { delete this._attrs[k]; },   // 第48轮: 横幅角色随态增删需要它 (桩此前只实现了 setAttribute)
     addEventListener: function () {}, removeEventListener: function () {},
     contains: function (c) { return c === this || this.children.indexOf(c) >= 0; },
     querySelector: function () { return null; }, querySelectorAll: function () { return []; }
@@ -431,6 +432,8 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
   l18Round46();               // 第46轮: 横幅 err 态播报/可聚焦 + 收起时交还焦点
 }).then(function () {
   l19Round47();               // 第47轮: snapshot memo 的行为 (同版本复用 / 走子换代 / undo 不吃旧盘面)
+}).then(function () {
+  return l20Round48();        // 第48轮: 引擎统计两路径一致 + 悔棋精确还原 + sw activate 只清自身前缀
 }).then(function () {
   console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
   process.exit(fails.length ? 1 : 0);
@@ -852,4 +855,98 @@ function l19Round47() {
   sandbox.XQ.UI.render(spyS, viewS);
   sandbox.XQ.UI.render(spyS, viewS);
   ok((viewS.boardEl.children || []).length === 90, 'L19 复用 memo 快照后渲染仍绘满 90 格 (只读契约成立)');
+}
+
+/* ═══ L20 第48轮: 引擎统计两条实现必须一致 + 悔棋精确还原 + sw activate 只清自身缓存前缀 ═══
+   ① 「同一规则两份实现」: applyPlayerMove 增量维护长将计数/自然限着时钟, 而 replayStats 从起始局面重放 —
+      两者口径必须逐手相同。修复前用 `st.result === 'check'` 判将军, 而 Judge.status 对**将杀**返回
+      'checkmate', 于是将杀那一手被当成普通着法 (长将计数清零 / 时钟+1, 与文档「每手都将军则累加」及
+      replayStats 直接矛盾)。实测 60 局 16951 手有 21 手不一致, 全在将杀手; 由于 undoPly 一直走重放,
+      这一分歧平时只影响盘上读数与入谱 note, 却在「把重算换成弹栈」时变成语义差异, 故必须先对齐再优化。
+   ② 悔棋改弹统计快照栈 (O(1)) 后必须与「从 genesis 重放」逐键相同 — 首版实现用了弹出的那一项
+      (= 被撤销那一手之后的状态, 差一位), 本组当场报 318/320 步不一致。
+   ③ sw.js 的 activate 原判据是「名字不等于当前 CACHE 就删」→ 同源上其他应用的缓存被一并清掉
+      (GitHub Pages 项目页共享 <user>.github.io 这一个源, 真实场景); 现按自身前缀判定。 */
+function l20Round48() {
+  // 确定性伪随机 (固定种子), 免测试结果随运行变化
+  var seed = 20260924;
+  function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+  function playOne(target) {
+    var eng = XQ.Engine.create({ naturalCap: 400, ruleEnforce: false });
+    var guard = 0;
+    while (!eng.isOver() && eng.ply() < target && guard++ < 3000) {
+      var legal = eng.generateLegalMoves(eng.turn());
+      if (!legal.length) break;
+      var m = legal[Math.floor(rnd() * legal.length)];
+      if (!eng.applyPlayerMove(m.from.x, m.from.y, m.to.x, m.to.y).ok) break;
+    }
+    return eng;
+  }
+  var start = XQ.Board.create();
+  /* 逐手比对 (不是只比终局): 分歧只出现在**将杀**那一手, 而只比终局状态时, 若非终局手也能分歧就永远看不到;
+     更关键的是必须**保证采样里真的出现将杀** — 首版只跑 12 局 / 上限 120 手, 12 局全部撞上限结束 (0 局将杀),
+     于是「把 gaveCheck 改回 st.result === 'check'」这条变异探针根本不变红 (实测 tally {normal:12})。
+     现改为「跑到采到 3 局将杀为止, 手数上限 400」, 并显式断言覆盖率 — 守护自己也要能被证伪。 */
+  var games = 0, plies = 0, diverge = 0, mates = 0;
+  for (var g = 0; g < 80 && mates < 3; g++) {
+    var eng = playOne(400);
+    var hist = eng.history();
+    games++; plies += hist.length;
+    var rs = XQ.Engine.replayStats(start, hist);
+    if (eng.checkStreak('red') !== rs.streaks.red || eng.checkStreak('black') !== rs.streaks.black || eng.naturalClock() !== rs.naturalClock) diverge++;
+    if (eng.result().result === 'checkmate') mates++;
+  }
+  ok(mates >= 1, 'L20 采样覆盖将杀手 (' + mates + ' 局将杀 / ' + games + ' 局 — 0 局时本组断言对 gaveCheck 的回归不敏感, 是守卫自身失效)');
+  ok(diverge === 0, 'L20 增量统计与重放统计逐局一致 (' + games + ' 局 / ' + plies + ' 手 / ' + mates + ' 局将杀; 将杀手曾使两条实现分歧 21/16951 手)');
+
+  // 悔棋: 每一步的增量状态都必须等于「从 genesis 重放前 k 手」
+  var e2 = playOne(150);
+  var h2 = e2.history(), n2 = h2.length, badSteps = 0;
+  while (e2.ply() > 0) {
+    e2.undoPly();
+    var k = e2.ply();
+    var r2 = XQ.Engine.replayStats(start, h2.slice(0, k));
+    if (e2.checkStreak('red') !== r2.streaks.red || e2.checkStreak('black') !== r2.streaks.black || e2.naturalClock() !== r2.naturalClock) badSteps++;
+  }
+  ok(badSteps === 0, 'L20 悔棋 ' + n2 + ' 步全部与重放结果一致 (统计快照栈逐手精确还原; 差一位的实现会有 ' + n2 + ' 步不一致)');
+  ok(e2.ply() === 0 && e2.checkStreak('red') === 0 && e2.checkStreak('black') === 0 && e2.naturalClock() === 0,
+    'L20 悔到起始局面后统计归零 (栈空即 create() 初值)');
+  // 悔到底后重新走子: 统计必须重新累加 (栈被清空后不能残留)
+  var legal2 = e2.generateLegalMoves(e2.turn());
+  if (legal2.length) {
+    var m2 = legal2[0];
+    e2.applyPlayerMove(m2.from.x, m2.from.y, m2.to.x, m2.to.y);
+    var r3 = XQ.Engine.replayStats(start, e2.history());
+    ok(e2.checkStreak('red') === r3.streaks.red && e2.checkStreak('black') === r3.streaks.black && e2.naturalClock() === r3.naturalClock,
+      'L20 悔到底后重走一手统计重新起算 (快照栈与 history 同长不变式成立)');
+  }
+  // 新局复位
+  e2.newGame();
+  ok(e2.checkStreak('red') === 0 && e2.naturalClock() === 0 && e2.ply() === 0, 'L20 newGame 同时清空统计与快照栈');
+
+  // ③ sw activate: 只清自身前缀
+  var evsA = {}, deleted = [];
+  var sbA = { console: console, URL: URL, location: { origin: 'http://localhost:8788', pathname: '/' } };
+  sbA.globalThis = sbA; sbA.self = sbA;
+  sbA.registration = { scope: 'http://localhost:8788/' };
+  sbA.addEventListener = function (t, fn) { evsA[t] = fn; };
+  sbA.skipWaiting = function () { return Promise.resolve(); };
+  sbA.clients = { claim: function () { return Promise.resolve(); } };
+  sbA.caches = {
+    open: function () { return Promise.resolve({ add: function () { return Promise.resolve(); }, put: function () { return Promise.resolve(); } }); },
+    // 同源上混入其他应用的缓存 (GitHub Pages 项目页共享源) 与自家历史版本
+    keys: function () { return Promise.resolve(['xq-shell-v1', 'xq-shell-v2', 'xq-shell-v3', 'other-app-cache', 'workbox-precache-v2']); },
+    delete: function (k) { deleted.push(k); return Promise.resolve(true); },
+    match: function () { return Promise.resolve(undefined); }
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'), sbA, { filename: 'sw.js' });
+  var actWait = null;
+  evsA.activate({ waitUntil: function (p) { actWait = p; } });
+  return Promise.resolve(actWait).then(function () {
+    ok(deleted.indexOf('xq-shell-v1') >= 0 && deleted.indexOf('xq-shell-v2') >= 0,
+      'L20 sw activate 仍清自家历史版本 (xq-shell-v1/v2 已删: ' + deleted.join(',') + ')');
+    ok(deleted.indexOf('xq-shell-v3') < 0, 'L20 sw activate 不删当前版本缓存');
+    ok(deleted.indexOf('other-app-cache') < 0 && deleted.indexOf('workbox-precache-v2') < 0,
+      'L20 sw activate 不动同源其他应用的缓存 (旧判据「名字不等于当前 CACHE 就删」会把它们一并清掉)');
+  });
 }

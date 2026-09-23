@@ -31,6 +31,12 @@
  */
 'use strict';
 var CACHE = 'xq-shell-v3';            // 第41轮: 升版 → activate 清掉 v2 (其壳清单缺全部脚本, 用户下次访问自然重建)
+/* 第48轮: 旧版清理只认**本项目自己的**缓存前缀 — 原判据是「名字不等于当前 CACHE 就删」, 于是同源上
+   其他应用的缓存会被一并清掉。这不是假想场景: 本仓文档的 GitHub Pages 部署是项目页 (/LLM-Chess/),
+   其源为 <user>.github.io — 该用户名下所有项目页共享同一个源, 用户装了本项目 PWA 后再打开自己另一个
+   项目页, 那个应用的离线壳就被本项目删了 (对方的 SW 不会重建已缓存过的子资源, 直到它再次联网访问)。
+   历史名 ('xq-shell-v1'/'v2'/'v3') 同前缀, 故「旧版自清」能力不变。 */
+var CACHE_PREFIX = 'xq-shell-';
 var SHELL = [                         // 相对路径: 子路径部署同样成立 (与 manifest start_url './' / scope './' 对齐)
   './', './index.html',
   './manifest.json', './ui/icon.svg',
@@ -57,7 +63,7 @@ self.addEventListener('install', function (e) {
 self.addEventListener('activate', function (e) {
   e.waitUntil(
     caches.keys().then(function (keys) {
-      return Promise.all(keys.filter(function (k) { return k !== CACHE; })
+      return Promise.all(keys.filter(function (k) { return k.indexOf(CACHE_PREFIX) === 0 && k !== CACHE; })
         .map(function (k) { return caches.delete(k); }));
     }).then(function () { return self.clients.claim(); })
   );

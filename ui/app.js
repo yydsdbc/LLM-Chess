@@ -410,34 +410,46 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           var eFmt = function (v) { return (v > 0 ? '+' : '') + v; };
           eloHtml = '<br>' + TAe('eo_elo', { r: XQ.Elo.ratingOf(eR), dr: eFmt(eD.dra), b: XQ.Elo.ratingOf(eB), db: eFmt(eD.drb) });
         }
-        // v1.7 终局结算数据
-        var eo = document.getElementById('eo-stats');
-        if (eo) {
-          var rAvg = thinkStat.red.moves ? (thinkStat.red.total / thinkStat.red.moves).toFixed(1) : '-';
-          var bAvg = thinkStat.black.moves ? (thinkStat.black.total / thinkStat.black.moves).toFixed(1) : '-';
-          var fmtT = function (x) { return x ? (x > 999 ? (x / 1000).toFixed(1) + 'k' : x) : '-'; };
-          var tk = currentRecord.tokens || {};
-          var cachePct = function (t2) { return t2 && t2.cacheHit && t2.prompt ? Math.round(100 * t2.cacheHit / t2.prompt) + '%' : Te('eo_cache_na'); };   // v3.4 终局卡缓存命中; 第26轮 i18n
-          var blkCnt = function (t2) { return t2 && t2.blocked ? t2.blocked : 0; };   // v3.4 系统拦截计数
-          var eoLine = function (dot, sd) {   // 第26轮: 红黑统计行共用一键 eo_stats_side (原两行硬编码中文)
-            return dot + ' ' + Te(sd === 'red' ? 'status_side_red' : 'status_side_black') + ' '
-              + TAe('eo_stats_side', { a: sd === 'red' ? rAvg : bAvg, t: fmtT(tk[sd] && tk[sd].total), c: capturedBy[sd].length, p: cachePct(tk[sd]), b: blkCnt(tk[sd]) });
-          };
-          eo.innerHTML = TAe('eo_stats_total', { n: engine.ply(), s: Math.round((Date.now() - startTime) / 1000) })
-            + '<br>' + eoLine('🔴', 'red')
-            + '<br>' + eoLine('⚫', 'black') + eloHtml;
-          // v2.4 终局一键回放本局 (对局→录像闭环, 免去回放选择器翻找; Record 已在上方落 localStorage)
-          eo.insertAdjacentHTML('beforeend', '<div style="margin-top:8px"><button class="btn" id="eo-replay">' + Te('eo_replay_btn') + '</button></div>');   // 第26轮 i18n
-          var eob = eo.querySelector('#eo-replay');
-          if (eob) eob.onclick = function () { rpWatchRecord(); };
-          /* 第42轮: 终局「💾 导出本局」的宿主是终局卡 (.eo-card), 与 #eo-stats 是兄弟节点; 原实现从 eo (=#eo-stats)
-             子树里 querySelector('#eo-export') 恒为 null → 该按钮自第33轮加入起从未生效 (点了没有任何反应)。 */
-          var eox = document.getElementById('eo-export');
-          if (eox) eox.onclick = function () { if (currentRecord) XQ.Record.downloadFile(currentRecord); };   // 第33轮: 终局一键导出
-        }
+        // v1.7 终局结算数据 (第48轮: 渲染抽成 paintEndStats 单出口 — 文案含占位符, 语言热切需重绘)
+        endEloHtml = eloHtml;
+        endElapsedSec = Math.round((Date.now() - startTime) / 1000);
+        paintEndStats();
       }
     }
     if (!engine.isOver()) scheduleAgent();
+  }
+
+  /* 第48轮 i18n 漏挂: 终局结算块 (#eo-stats) 与卡内「🎬 回放本局」按钮都是终局那一刻**一次性**写入的
+     (文案含 {n}/{a} 占位符, 无法挂 data-i18n 声明式刷新), 而语言选择器就在设置面板里随时可切 →
+     整块结算数据会停在旧语言。抽成单出口供终局与 xq:i18n 共用。
+     注意 Elo 记账 (XQ.Elo.applyResult) 有副作用 (会真的改天梯分), 只在终局做一次, 这里只复用算好的文本;
+     用时也必须在终局那一刻定格 (否则每次重绘都会把「用时」重算成更大的值)。 */
+  var endEloHtml = '', endElapsedSec = 0;
+  function paintEndStats() {
+    var eo = document.getElementById('eo-stats');
+    if (!eo || !currentRecord) return;
+    var Te = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TAe = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
+    var rAvg = thinkStat.red.moves ? (thinkStat.red.total / thinkStat.red.moves).toFixed(1) : '-';
+    var bAvg = thinkStat.black.moves ? (thinkStat.black.total / thinkStat.black.moves).toFixed(1) : '-';
+    var fmtT = function (x) { return x ? (x > 999 ? (x / 1000).toFixed(1) + 'k' : x) : '-'; };
+    var tk = currentRecord.tokens || {};
+    var cachePct = function (t2) { return t2 && t2.cacheHit && t2.prompt ? Math.round(100 * t2.cacheHit / t2.prompt) + '%' : Te('eo_cache_na'); };   // v3.4 终局卡缓存命中; 第26轮 i18n
+    var blkCnt = function (t2) { return t2 && t2.blocked ? t2.blocked : 0; };   // v3.4 系统拦截计数
+    var eoLine = function (dot, sd) {   // 第26轮: 红黑统计行共用一键 eo_stats_side (原两行硬编码中文)
+      return dot + ' ' + Te(sd === 'red' ? 'status_side_red' : 'status_side_black') + ' '
+        + TAe('eo_stats_side', { a: sd === 'red' ? rAvg : bAvg, t: fmtT(tk[sd] && tk[sd].total), c: capturedBy[sd].length, p: cachePct(tk[sd]), b: blkCnt(tk[sd]) });
+    };
+    eo.innerHTML = TAe('eo_stats_total', { n: engine.ply(), s: endElapsedSec })
+      + '<br>' + eoLine('🔴', 'red')
+      + '<br>' + eoLine('⚫', 'black') + endEloHtml;
+    // v2.4 终局一键回放本局 (对局→录像闭环, 免去回放选择器翻找; Record 已在上方落 localStorage)
+    eo.insertAdjacentHTML('beforeend', '<div style="margin-top:8px"><button class="btn" id="eo-replay">' + Te('eo_replay_btn') + '</button></div>');   // 第26轮 i18n
+    var eob = eo.querySelector('#eo-replay');
+    if (eob) eob.onclick = function () { rpWatchRecord(); };
+    /* 第42轮: 终局「💾 导出本局」的宿主是终局卡 (.eo-card), 与 #eo-stats 是兄弟节点; 原实现从 eo (=#eo-stats)
+       子树里 querySelector('#eo-export') 恒为 null → 该按钮自第33轮加入起从未生效 (点了没有任何反应)。 */
+    var eox = document.getElementById('eo-export');
+    if (eox) eox.onclick = function () { if (currentRecord) XQ.Record.downloadFile(currentRecord); };   // 第33轮: 终局一键导出
   }
 
   function refresh() {
@@ -638,6 +650,14 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (!r30.ok) break;
     }
     replayStack = [];
+    /* 第48轮 a11y: 还原后主界面走法条目的「当前手」标记必须清掉 — replayTo 会给跳转到的第 N 手写
+       .active + aria-current, 而还原把引擎送回最新手, 那条标记却留在原地: 视觉上是错的底色,
+       语义上读屏会宣称用户仍在第 N 手 (第46/47轮给回放层走法表补了 aria-current, 却没人在还原时回收它)。 */
+    var log48 = document.getElementById('move-log');
+    if (log48) Array.from(log48.children).forEach(function (e48) {
+      e48.classList.remove('active');
+      e48.removeAttribute('aria-current');
+    });
     refresh();
     paintReplayBar();
     warnBanner((XQ.I18N ? XQ.I18N.t('rp_restored') : '✅ 已还原到最新局面'), null);   // v1.0.daily i18n
@@ -652,7 +672,14 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       document.body.appendChild(bar);
       bar.querySelector('#replay-restore').onclick = replayRestore;
     }
+    /* 第48轮 a11y: 还原按钮自己就住在这条 bar 里 — 键盘用户 Tab 到它按 Enter 后 replayStack 清空, 本条
+       随即 display:none, 焦点静默掉回 body (与第45轮徽章隐藏、第47轮传输按钮禁用同款)。隐藏前先记宿主。 */
+    var barHadFocus = bar.contains(document.activeElement);
     bar.style.display = replayStack.length ? 'flex' : 'none';
+    if (barHadFocus && !replayStack.length) {
+      var bdBar = document.getElementById('board');
+      if (bdBar && bdBar.focus) { try { bdBar.focus({ preventScroll: true }); } catch (eBB) { try { bdBar.focus(); } catch (eBB2) {} } }
+    }
   }
   document.addEventListener('xq:replay', function (ev) { replayTo(ev.detail.ply); });
 
@@ -932,6 +959,20 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     try { g.focus({ preventScroll: true }); } catch (eF) { g.focus(); }
   }
 
+  /* 第48轮 i18n 漏挂: 中继状态提示抽成单出口 — 文案是命令式写入的 (含 <b>host</b>, 无法挂 data-i18n),
+     而语言选择器**就在同一个设置面板里**: 用户开着面板切语言, apply() 刷新了所有 data-i18n 节点,
+     这一条却停在旧语言; 它还是 role=status, 于是会当着用户的面**再播报一遍旧语言**的提示。
+     xq:i18n 里在面板打开时重调本函数。 */
+  function paintServerWarn() {
+    var swEl = document.getElementById('server-warn');
+    if (!swEl) return;
+    var noKey = relayAvailable && typeof _noKeysConfigured !== 'undefined' && _noKeysConfigured;   // 第28轮: 中继活但零 Key → 给可操作提示 (原先只在走子失败时暴露)
+    swEl.style.display = (!relayAvailable || noKey) ? 'block' : 'none';
+    swEl.innerHTML = noKey
+      ? (XQ.I18N ? XQ.I18N.t('server_no_key') : '')
+      : (XQ.I18N ? XQ.I18N.t('server_warn') : '') + '<b>http://' + location.host + '</b>';
+  }
+
   function openAISettings() {
     var saved;
     try { saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); } catch (e) { saved = {}; }
@@ -940,14 +981,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     llmOpts.forEach(function (el) {
       el.style.display = relayAvailable ? '' : 'none';
     });
-    var swEl = document.getElementById('server-warn');
-    if (swEl) {
-      var noKey = relayAvailable && typeof _noKeysConfigured !== 'undefined' && _noKeysConfigured;   // 第28轮: 中继活但零 Key → 给可操作提示 (原先只在走子失败时暴露)
-      swEl.style.display = (!relayAvailable || noKey) ? 'block' : 'none';
-      swEl.innerHTML = noKey
-        ? (XQ.I18N ? XQ.I18N.t('server_no_key') : '')
-        : (XQ.I18N ? XQ.I18N.t('server_warn') : '') + '<b>http://' + location.host + '</b>';
-    }
+    paintServerWarn();
     document.getElementById('settings-overlay').classList.add('show');
     var gb = document.getElementById('gear-toggle');   // 第42轮 a11y: 展开态与 aria-haspopup="dialog" 配套
     if (gb) gb.setAttribute('aria-expanded', 'true');
@@ -996,10 +1030,20 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   }
   /* v1.0.daily 存档按钮可用性 (无棋谱/空谱禁用, 防误点导出空文件) */
   function syncArchive() {
+    /* 第48轮 a11y: 必须在改 disabled **之前**取焦点宿主 — 第47轮传输按钮的教训: 浏览器在
+       `el.disabled = true` 赋值那一刻就把聚焦元素移出焦点序, 之后再读 activeElement 已经是 body。
+       场景: 有手可悔时 Tab 到「💾 存棋谱」或「↩ 悔棋」, 按 R 重开 (或一路悔到 0 手) → 本函数把两颗
+       按钮同时禁用, 焦点静默掉回 body。禁用后若宿主确实已不可用, 交还盘面 (与 #btn-row 隐藏同口径)。 */
+    var actSA = document.activeElement;
+    var hasMoves = !!(currentRecord && currentRecord.moves && currentRecord.moves.length);
     var b = document.getElementById('btn-save');
-    if (b) b.disabled = !(currentRecord && currentRecord.moves && currentRecord.moves.length);
+    if (b) b.disabled = !hasMoves;
     var bu = document.getElementById('btn-undo');   // 第33轮: 悔棋按钮无手可悔时禁用
-    if (bu) bu.disabled = !(currentRecord && currentRecord.moves && currentRecord.moves.length);
+    if (bu) bu.disabled = !hasMoves;
+    if (actSA && (actSA.id === 'btn-save' || actSA.id === 'btn-undo') && actSA.disabled) {
+      var bdSA = document.getElementById('board');
+      if (bdSA && bdSA.focus) { try { bdSA.focus({ preventScroll: true }); } catch (eSA) { try { bdSA.focus(); } catch (eSA2) {} } }
+    }
   }
   /* v1.0.daily 终局提示音: 红胜上行分解和弦 / 黑胜下行 / 和棋单中音 (遵循静音开关) */
   function playEnd(winner) {
@@ -1298,6 +1342,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         if (thH && thH.kind === 'random') view.aiThinking = XQ.I18N ? XQ.I18N.t('agent_random_name') : view.aiThinking;
       }
       refresh();
+      /* 第48轮 i18n 漏挂: 设置面板开着时切语言 — 面板内的中继状态提示是命令式写入的 (无 data-i18n),
+         必须显式重绘 (面板关闭时不动, 免得白写 innerHTML)。 */
+      var soOv = document.getElementById('settings-overlay');
+      if (soOv && soOv.classList.contains('show')) paintServerWarn();
+      /* 第48轮 i18n 漏挂: 终局卡开着时切语言 — #eo-stats 与卡内「🎬 回放本局」按钮都是终局那一刻
+         一次性写入的 (含 {n} 占位符, 无法声明式刷新), 否则整块结算数据停在旧语言。 */
+      if (engine.isOver()) paintEndStats();
       /* 第45轮: 徽章的可访问名含手数占位符 (无法声明式刷新) — 语言热切时显式重算, 否则切到中文后
          读屏仍播报英文, 要等下一手落子才自愈。实机验收当场抓到 (badgeZh === badgeEn)。 */
       if (XQ.UI.relabelLastMoveBadge) XQ.UI.relabelLastMoveBadge();
@@ -1358,7 +1409,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var tbtn = document.getElementById('ai-' + sd + '-testconn');
       if (!tbtn) return;
       tbtn.onclick = function () {
-        var T2 = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+        /* 第48轮 i18n 修复: 别名原为 XQ.I18N.t (只吃 key 一个参数), 而下面却按 T2('test_ok', { ms: ms }) 调用 —
+           t() 直接忽略第二个参数, 于是「试连」成功时永远显示字面量 '✓ 连通 {ms}ms' / '✓ OK {ms}ms' (两种语言都是),
+           实测延迟从不出现。tArgs(k) 在不传第二参时等价于 t(k), 故三处调用共用同一别名即可。 */
+        var T2 = XQ.I18N ? XQ.I18N.tArgs : function (k) { return k; };
         var res = document.getElementById('ai-' + sd + '-testres');
         if (!window.XQApp.isRelay()) { if (res) res.innerHTML = '<span style="color:#ff8a7a">' + T2('test_no_relay') + '</span>'; return; }
         if (res) res.innerHTML = '<span style="opacity:.7">' + T2('test_run') + '</span>';
@@ -2142,6 +2196,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (rpGetSetting('autoplay') === '1') setTimeout(function () { rpCtrl && rpCtrl.play(); }, 300);
   }
   var _rpHeavyTick = 0;   // 第30轮 (第28轮该编辑曾随脚本中断丢失, 本轮落地)
+  var _rpActiveLi = null;   // 第48轮: 高倍速轻路径跟踪的「当前手」条目引用 (O(1) 迁移高亮, 见 rpOnState)
   function rpOnState(st) {
     var animate = (st.idx === rpLastIdx + 1);
     rpPaintBoard(st, animate);
@@ -2157,10 +2212,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       rpPaintHead();
       rpPaintMoveList();
     } else {
+      /* 第48轮: 高倍速轻路径此前只切 .active 视觉类, 而 aria-current 只在整块重建 (rpPaintMoveList) 里写 →
+         10x/20x 连播时「当前手」每步前移, 读屏的 aria-current 却最多滞后 4 手 (视觉与语义脱钩, 与
+         第46/47轮「视觉有、语义没有」同类); 且原实现每步 querySelectorAll 扫全表 (400 手局每步 400 次
+         解析+比对) 只为切一个类。改为跟踪上一个活动项引用: O(1) 且两种表示同步。 */
       var curPly30 = st.idx;
-      Array.prototype.forEach.call(rpEl.movelist.querySelectorAll('li[data-ply]'), function (li) {
-        li.classList.toggle('active', parseInt(li.dataset.ply, 10) === curPly30);
-      });
+      if (_rpActiveLi && _rpActiveLi.parentNode !== rpEl.movelist) _rpActiveLi = null;   // 整块重建过 → 旧引用已脱离文档
+      if (_rpActiveLi) { _rpActiveLi.classList.remove('active'); _rpActiveLi.removeAttribute('aria-current'); }
+      _rpActiveLi = rpEl.movelist.querySelector('li[data-ply="' + curPly30 + '"]');
+      if (_rpActiveLi) { _rpActiveLi.classList.add('active'); _rpActiveLi.setAttribute('aria-current', 'true'); }
     }
     rpSavePos(st);
     rpLastIdx = st.idx;
@@ -2768,6 +2828,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     else if (!rec.moves || !rec.moves.length) rpEl.movelist.innerHTML = '<li style="color:#7a5a2a;justify-content:center">' + TA('rp_moves_unit', { n: 0 }) + '</li>';   // v1.0.daily: 空谱≠过滤无匹配 (0手 提示)
     else rpEl.movelist.innerHTML = '<li style="color:#7a5a2a;justify-content:center">' + T('rp_no_match') + '</li>';
     if (rpEl.movesFilter) rpEl.movesFilter.title = visible + ' / ' + rec.moves.length;   // 第36轮: 过滤匹配计数
+    /* 第48轮: 整块重建后刷新轻路径跟踪的活动项引用 (旧节点已随 innerHTML 被丢弃) */
+    _rpActiveLi = rpEl.movelist.querySelector('li.active');
     if (visible > 0) { var act = rpEl.movelist.querySelector('li.active'); if (act) act.scrollIntoView({ block: 'nearest' }); }
     /* 第44轮: 焦点归还 — 只在重建前焦点确实在本列表内时才接管, 否则会抢走过滤框/跳转框里的光标 */
     if (keepPly != null) {
@@ -2852,7 +2914,17 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (rpCtrl) rpCtrl.dispose();
     rpEl.ov.style.display = 'none';
     rpLockScroll(false);
-    if (rpOpener) { try { rpOpener.focus({ preventScroll: true }); } catch (eF7) { try { rpOpener.focus(); } catch (eF8) {} } }   // 第27轮 a11y: 焦点归还打开者
+    if (rpOpener) {
+      try { rpOpener.focus({ preventScroll: true }); } catch (eF7) { try { rpOpener.focus(); } catch (eF8) {} }   // 第27轮 a11y: 焦点归还打开者
+      /* 第48轮 a11y: 打开者可能在回放期间变得不可聚焦 — 典型是「最新着法徽章」(4s 后自己的定时器把它
+         visibility:hidden, 第45轮刚把它做成按钮) 或已被摘掉的走法条目。对不可聚焦元素 focus() 是
+         **静默 no-op**, 而层已经 display:none, 于是焦点掉回 body。按「焦点是否真的落上」兜底,
+         比逐个判断可见性更稳 (visibility 在过渡期间计算值仍可能是 visible)。 */
+      if (document.activeElement !== rpOpener) {
+        var bdRC = document.getElementById('board');
+        if (bdRC && bdRC.focus) { try { bdRC.focus({ preventScroll: true }); } catch (eF9) { try { bdRC.focus(); } catch (eF10) {} } }
+      }
+    }
     rpOpener = null;
     try { history.replaceState(null, '', location.pathname + location.search); } catch (eH3) {}   // v3.8: 退出回放清除深链
     refresh();

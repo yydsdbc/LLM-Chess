@@ -375,7 +375,19 @@
       document.getElementById('status-info').textContent = clockText(engine, view, snap.ply);   // 第41轮: 与 updateClock 共用单出口 (原逐字内联一份重复实现)
     }
     document.getElementById('status-bar').className = cls;
-    document.getElementById('btn-row').classList.toggle('visible', snap.over);
+    var brEl = document.getElementById('btn-row');
+    if (brEl) {
+      var brWasVisible = brEl.classList.contains('visible');
+      brEl.classList.toggle('visible', snap.over);
+      /* 第48轮 a11y: 工具条非终局态是 visibility:hidden (第42轮补的, 免不可见按钮留在 Tab 序里), 但「隐藏」
+         本身同样会吞掉焦点 — 键盘用户在终局 Tab 到「🔄 重新开始」并激活, restartGame 走完 refresh 后
+         该行立刻隐藏, 焦点静默掉回 body (下一次 Tab 从页首重来)。与第45轮徽章隐藏、第47轮传输按钮禁用
+         同款: 凡是隐藏/禁用**正在聚焦**的控件, 都必须先把焦点交还给盘面 (tabindex=-1 的程序化落点)。 */
+      if (brWasVisible && !snap.over && brEl.contains(document.activeElement)) {
+        var bdEl = document.getElementById('board');
+        if (bdEl && bdEl.focus) { try { bdEl.focus({ preventScroll: true }); } catch (eBR) { try { bdEl.focus(); } catch (eBR2) {} } }
+      }
+    }
   }
 
   var RES_KEYS = { stalemate: 1, checkmate: 1, perpetual: 1, repetition: 1, natural: 1 };   // 第40轮: 终局原因字典键白名单 (兼容 r.result 其他取值 → 空副标题)
@@ -462,7 +474,13 @@
     }
     // 第40轮: 仅警告态留键盘焦点落点 (可 Tab 到 + Enter/Space 关闭); 其余态摘除, 不留常驻 Tab 停点
     // 第46轮: err 态一并纳入 (脚本错误横幅此前 tabIndex=-1 且无任何关闭绑定 → 永久驻留且键盘不可达)
-    b.tabIndex = ((mode === 'warn' || mode === 'err') && msg) ? 0 : -1;
+    var dismissable = (mode === 'warn' || mode === 'err') && !!msg;
+    b.tabIndex = dismissable ? 0 : -1;
+    /* 第48轮 a11y: 可聚焦的横幅此前**没有任何角色** — 隐式 generic 角色的元素被读屏念成一段普通文本,
+       用户不知道 Tab 进来后 Enter/Space 能把它关掉 (app 侧 bindBannerDismiss 早就绑了键盘关闭)。
+       角色必须与 tabIndex 同步 (busy 态每秒 tick 重写横幅, 那时它不可聚焦, 挂 button 会说谎),
+       故与 tabIndex 同一处赋值。可访问名取内容 (即警告正文), 不另设 aria-label 以免盖掉正文。 */
+    if (dismissable) b.setAttribute('role', 'button'); else b.removeAttribute('role');
     if (hiding && wasFocused) {
       var bd = document.getElementById('board');
       if (bd && bd.focus) { try { bd.focus({ preventScroll: true }); } catch (eB) { try { bd.focus(); } catch (eB2) {} } }

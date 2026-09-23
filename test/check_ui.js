@@ -207,8 +207,12 @@ if (!/addEventListener\('pointercancel', dragAbort\)/.test(renSrc) || !/addEvent
 if (!/sel \? legal\[x \+ ',' \+ y\] : null/.test(renSrc)) a11yIssues.push('逐格 legal 查表未按选中态短路 (未选中仍分配 90 次键串)');
 if (!/_sparkSig/.test(renSrc)) a11yIssues.push('评值走势 SVG 缺内容签名去重');
 /* 第46轮: 横幅焦点落点从「仅警告态」扩为「警告+错误态」— window.onerror 的脚本错误横幅 (mode='err')
-   此前 tabIndex=-1 且不入 #sr-alert, 读屏完全不可感知; 断言同步收紧到 err 也在集合内。 */
-if (!/tabIndex = \(\(mode === 'warn' \|\| mode === 'err'\) && msg\) \? 0 : -1/.test(renSrc)) a11yIssues.push('横幅缺焦点落点管理 (警告+错误态都应可聚焦)');
+   此前 tabIndex=-1 且不入 #sr-alert, 读屏完全不可感知; 断言同步收紧到 err 也在集合内。
+   第48轮: 该判据抽成 dismissable 单出口 (tabIndex 与 role 必须同源) — 只钉 tabIndex 的话
+   「可聚焦却无角色」会再次漏过 (可聚焦元素没有角色时, 读屏不会宣告 Enter/Space 能关掉它)。 */
+if (!/var dismissable = \(mode === 'warn' \|\| mode === 'err'\) && !!msg;/.test(renSrc)) a11yIssues.push('横幅缺焦点落点管理 (警告+错误态都应可聚焦)');
+if (!/b\.tabIndex = dismissable \? 0 : -1;/.test(renSrc)) a11yIssues.push('横幅 tabIndex 未走 dismissable 单出口 (须与角色判定同源)');
+if (!/if \(dismissable\) b\.setAttribute\('role', 'button'\); else b\.removeAttribute\('role'\);/.test(renSrc)) a11yIssues.push('可聚焦横幅缺角色 (读屏不宣告可按 Enter/Space 关闭)');
 if (!/\(mode === 'warn' \|\| mode === 'err'\) && msg\) \{\s*\n\s*var plain = String\(msg\)/.test(renSrc)) a11yIssues.push('err 态脚本错误未投 #sr-alert (读屏不知道页面脚本崩了)');
 if (!/if \(hiding && wasFocused\)/.test(renSrc)) a11yIssues.push('横幅自清/关闭未交还焦点 (焦点静默掉回 body)');
 // (f) 终局卡焦点归还
@@ -670,10 +674,15 @@ if (wire46.length) process.exit(1);
 //     (c) 「可聚焦控件被摘掉/被禁用/被重建后焦点丢失」与「写了 ARIA 却不随态/随语言更新」。
 const wire47 = [];
 const engCode = codeOnly(fs.readFileSync(__dirname + '/../core/engine.js', 'utf8'));
-// (a1) 静态托管敏感路径黑名单: 必须存在且按首段判定 (config 密钥目录 / 点开头目录)
+// (a1) 静态托管敏感路径黑名单: 必须存在, 且按**规范化后**的路径逐段判定 (config 密钥目录 / 点开头目录)
 if (!/const DENY_DIRS = new Set\(\[/.test(srvCode)) wire47.push('缺静态敏感目录黑名单 DENY_DIRS (GET /config/keys.json 会逐字返回含 apiKey 的密钥文件)');
-else if (!/DENY_DIRS\.has\(seg0\.toLowerCase\(\)\)/.test(srvCode)) wire47.push('黑名单未按首段生效 (守卫锚点失效)');
-if (!/seg0\.charAt\(0\) === '\.'/.test(srvCode)) wire47.push('未拒绝点开头目录 (/.git/config 可取, 可能含远端凭据)');
+/* 第48轮: 判据从「raw 首段」改钉「规范化后的相对路径逐段」— 只按 raw 首段判定时, `/x/..%5cconfig/keys.json`
+   (%5c 解码为反斜杠, 浏览器不把它当分隔符故原样送达) 的 raw 首段是 'x', 而 path.normalize 随后把它折叠回
+   ROOT/config/keys.json (落在 ROOT 内, 前缀校验也通过) → 实测 200 返回密钥文件。故必须钉「先 normalize,
+   再对 path.relative 的每一段判定」这条实现顺序。 */
+else if (!/const relSegs = path\.relative\(ROOT, full\)\.split\(path\.sep\)\.filter\(Boolean\);/.test(srvCode)) wire47.push('黑名单未在规范化后逐段判定 (..%5c 类绕过会重新打开: 实测 200 返回含 apiKey 的密钥文件)');
+if (!/DENY_DIRS\.has\(seg\.toLowerCase\(\)\)/.test(srvCode)) wire47.push('黑名单未对每一段生效 (守卫锚点失效)');
+if (!/seg\.charAt\(0\) === '\.'/.test(srvCode)) wire47.push('未拒绝点开头目录 (/.git/config 可取, 可能含远端凭据)');
 if (!/if \(p\.indexOf\('\\u0000'\) >= 0\)/.test(srvCode)) wire47.push('缺空字节路径守卫 (decodeURIComponent(\'/%00\') 使 fs.stat 同步抛出 → 进程终止)');
 // (a2) 早期拒绝分支与两条探测端点必须带 ACAO (与本文件其余分支同口径)
 if (!/if \(u === '\/api\/health'\) \{[\s\S]{0,140}?req_origin_safe\(req\)/.test(srvCode)) wire47.push('health 未带 ACAO (异源页的 relayAvailable 探测读到不透明 CORS 失败)');
@@ -726,3 +735,56 @@ if (!/text: XQ\.UI\.decisionCards \? undefined : logTextFor\(side\)/.test(appCod
 console.log('第21节 敏感路径/模态收口/焦点与状态同步守卫:', wire47.length ? wire47.join(' | ') : 'OK (静态敏感目录黑名单与空字节守卫 + 早期拒绝与探测端点 ACAO + sw 仅缓存 200 + 回放层按键收口 + 设置栏 group 语义 + 走法日志焦点守护 + 传输按钮禁用保焦点 + 主界面 aria-current + 全屏名随态/随语言 + server-warn live + snapshot memo 与死计算清理)');
 if (wire47.length) process.exit(1);
 
+
+/* ═══ 第22节 第48轮: 规范化后判黑名单 / 路由 pathname / 中继收尾单出口 / 隐藏与禁用保焦点 / 语言热切重绘 ═══
+   本轮主线是三类「修了一条入口 / 判据用错了量」的缺陷:
+   (a) 静态黑名单按 raw 首段判定 (规范化后才折叠 `..` → `..%5c` 可绕过取回密钥文件);
+   (b) 非流式中继缺收尾路径 (上游中途断连 → 客户端永久挂起) 与响应体无上限;
+   (c) 「隐藏/禁用正在聚焦的控件」与「语言热切后命令式写入的文案」两类此前只修了部分容器。 */
+const wire48 = [];
+// (a) 服务端: 黑名单在规范化后逐段 + 路由只看 pathname + 非流式两条收尾路径
+if (!/const u = \(req\.url \|\| '\/'\)\.split\('\?'\)\[0\];/.test(srvCode)) wire48.push('路由未按 pathname 匹配 (带 query 的 /api/chat 落静态分支 404, 前端只见「404 Not Found」)');
+if (!/const MAX_UPSTREAM_BYTES = 16 \* 1024 \* 1024;/.test(srvCode)) wire48.push('缺非流式上游响应体上限 (超大响应在 Buffer.concat 前撑爆中继内存)');
+/* 收尾必须收敛到单出口: 关键是 settle/failUp 的幂等单出口 + 至少一条提前收尾订阅。
+   注意两条订阅 (error / close) 互为兜底 — 实测 Node 只在**存在** 'error' 监听时才 emit 'error'
+   (同一场景无监听只有 'aborted'+'close'), 故 'close' 是环境无关的那条; 删任一条单独都不改变可观察行为
+   (变异探针各自不变红, 属冗余而非回归), 因此判据只要求「两条非流式路径各有提前 close 收尾」,
+   删掉整条才会真的挂起 (按「同时移除」构造的探针当场红)。 */
+if (!/const settle = \(buf, bad\) => \{/.test(srvCode)) wire48.push('openai 非流式路径缺收尾单出口 settle (上游中途断连 → 客户端永久挂起, 实测 12s 无响应)');
+if (!/const failUp = msg => \{/.test(srvCode)) wire48.push('anthropic 路径缺收尾单出口 failUp (该分支同样会永久挂起)');
+else {
+  const closeHooks = (srvCode.match(/upRes\.on\('close'/g) || []).length;
+  if (closeHooks < 2) wire48.push('非流式路径缺提前 close 收尾 (上游中途断连永久挂起), 现有 ' + closeHooks + ' 处 (应为 openai + anthropic 各一)');
+}
+// (b) sw.js activate 只清自身前缀
+if (!/var CACHE_PREFIX = 'xq-shell-';/.test(swCode)) wire48.push('sw.js 缺 CACHE_PREFIX (activate 会删掉同源其他应用的缓存 — GitHub Pages 项目页共享源)');
+else if (!/k\.indexOf\(CACHE_PREFIX\) === 0 && k !== CACHE/.test(swCode)) wire48.push('sw.js activate 未按自身前缀过滤 (旧判据「名字不等于当前 CACHE 就删」会清掉他人缓存)');
+// (c) 引擎: 将军判定必须覆盖将杀 + 统计快照栈
+if (!/var gaveCheck = \(st\.result === 'check' \|\| st\.result === 'checkmate'\);/.test(engCode)) wire48.push('引擎将军判定未覆盖将杀 (增量统计与 replayStats 分歧 21/16951 手, 全在将杀手)');
+if (!/var statStack = \[\];/.test(engCode)) wire48.push('缺统计快照栈 (悔棋仍每次从 genesis 重放整条历史 → 复盘跳转 O(n²))');
+else if (!/if \(statStack\.length > history\.length\) \{/.test(engCode)) wire48.push('悔棋未走统计快照栈 (守卫锚点失效)');
+if (!/statStack\.push\(\{ red: checkStreaks\.red, black: checkStreaks\.black, naturalClock: naturalClock \}\);/.test(engCode)) wire48.push('走子未压入统计快照 (栈与 history 同长不变式被破坏)');
+// (d) renderer: #btn-row 隐藏时保焦点
+if (!/if \(brWasVisible && !snap\.over && brEl\.contains\(document\.activeElement\)\)/.test(renCode)) wire48.push('#btn-row 隐藏时未接管焦点 (终局 Tab 到「重新开始」激活后焦点掉回 body)');
+// (e) app: 还原条隐藏保焦点 / 还原清当前手标记 / 归档禁用保焦点 / 回放关闭焦点兜底
+if (!/var barHadFocus = bar\.contains\(document\.activeElement\);/.test(appCode)) wire48.push('还原条隐藏时未接管焦点 (还原按钮自己就在被隐藏的条里)');
+if (!/if \(barHadFocus && !replayStack\.length\)/.test(appCode)) wire48.push('还原条焦点交还判据缺失 (守卫锚点失效)');
+if (!/e48\.classList\.remove\('active'\);\r?\n\s*e48\.removeAttribute\('aria-current'\);/.test(appCode)) wire48.push('还原未清主界面当前手标记 (.active/aria-current 停在已还原离开的那一手)');
+if (!/var actSA = document\.activeElement;/.test(appCode)) wire48.push('syncArchive 未在改 disabled 前取焦点宿主 (第47轮传输按钮同款: 赋值那一刻即失焦)');
+/* 锚点必须含前导 `if (actSA && (`: 只钉子串时用 `if (false && actSA && …)` 前缀仍会匹配 (第45轮同款教训 —
+   那时是探针太弱, 这次是锚点太弱, 两者互为镜像; 变异探针当场抓出)。 */
+else if (!/if \(actSA && \(actSA\.id === 'btn-save' \|\| actSA\.id === 'btn-undo'\) && actSA\.disabled\) \{/.test(appCode)) wire48.push('syncArchive 未识别被禁用的归档按钮 (守卫锚点失效)');
+if (!/if \(document\.activeElement !== rpOpener\) \{/.test(appCode)) wire48.push('回放关闭未校验焦点是否真的落上 (打开者被自身定时器隐藏时 focus() 是静默 no-op)');
+// (f) 语言热切: 命令式写入的三处文案必须重绘
+if (!/function paintServerWarn\(\)/.test(appCode)) wire48.push('缺 paintServerWarn 单出口 (设置面板内切语言后中继提示停在旧语言且会被 live region 重播)');
+else if (!/if \(soOv && soOv\.classList\.contains\('show'\)\) paintServerWarn\(\);/.test(appCode)) wire48.push('语言热切未重绘 #server-warn (面板内切语言后仍是旧语言)');
+if (!/function paintEndStats\(\)/.test(appCode)) wire48.push('缺 paintEndStats 单出口 (终局结算块/回放本局按钮停在旧语言)');
+else if (!/if \(engine\.isOver\(\)\) paintEndStats\(\);/.test(appCode)) wire48.push('语言热切未重绘终局结算块');
+// (g) i18n 占位符: 试连结果必须走 tArgs
+if (!/var T2 = XQ\.I18N \? XQ\.I18N\.tArgs : function \(k\) \{ return k; \};/.test(appCode)) wire48.push('试连结果别名仍是单参 t() (界面显示字面量 {ms} 而非实测延迟)');
+// (h) 回放走法表高倍速轻路径: 活动项引用 + aria-current 同步
+if (!/var _rpActiveLi = null;/.test(appCode)) wire48.push('缺 _rpActiveLi (高倍速轻路径每步全表扫描且 aria-current 滞后最多 4 手)');
+else if (!/_rpActiveLi\.setAttribute\('aria-current', 'true'\)/.test(appCode)) wire48.push('轻路径未同步 aria-current (视觉当前手与读屏当前手脱钩)');
+if (!/_rpActiveLi = rpEl\.movelist\.querySelector\('li\.active'\);/.test(appCode)) wire48.push('整块重建后未刷新活动项引用 (旧节点已脱离文档)');
+console.log('第22节 规范化判黑名单/路由/中继收尾/隐藏禁用保焦点/语言热切守卫:', wire48.length ? wire48.join(' | ') : 'OK (规范化后逐段黑名单 + pathname 路由 + 中继收尾单出口与响应体上限 + sw 缓存前缀 + 将杀将军判定与统计快照栈 + 隐藏/禁用保焦点 + 语言热切重绘 + 占位符走 tArgs + 轻路径 aria-current)');
+if (wire48.length) process.exit(1);

@@ -84,11 +84,20 @@ function serveStatic(req, res, urlPath) {
      是 ROOT 内的正常路径 → **逐字返回含真实 apiKey 的密钥文件** (实测 200), /.git/config 同样可取
      (可能含远端凭据), logs/ 暴露运行时产物 — 与 README「密钥永不离开服务器」直接矛盾。
      按首段判定并顺带拒绝一切点开头目录 (.git/.github 等, 静态面本无此需求)。 */
-  const seg0 = p.split('/').filter(Boolean)[0] || '';
-  if (seg0.charAt(0) === '.' || DENY_DIRS.has(seg0.toLowerCase())) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('forbidden'); }
   const full = path.normalize(path.join(ROOT, p));
   // 第27轮: 前缀穿越加固 — 裸 startsWith(ROOT) 会放行同名前缀兄弟目录 (…/LLM-chess-backup/…), 必须按路径段比对
   if (full !== ROOT && !full.startsWith(ROOT + path.sep)) { res.writeHead(403, { 'Cache-Control': 'no-store' }); return res.end('forbidden'); }   // 第28轮: no-store
+  /* 第48轮关键修复: 黑名单必须在**规范化之后**按每一段判定。第47轮的实现取 raw 路径的**首段**,
+     而 path.normalize 随后才折叠 `..` → 首段只要是个无关目录名即可整条绕过:
+     `GET /x/..%5cconfig/keys.json` (%5c 解码为反斜杠; 浏览器 URL 解析器不把 %5c 当路径分隔符, 故原样送达)
+     的 raw 首段是 'x' → 通过黑名单, 规范化后却是 ROOT/config/keys.json (落在 ROOT 内, 前缀校验也通过)
+     → 实测 200 **逐字返回含真实 apiKey 的密钥文件**, 第47轮刚加的黑名单被整条绕过。
+     (Windows 上 \ 是分隔符故可折叠; Linux 上该串只是一个文件名 → 404, 所以这类绕过只在 Windows 部署上活着。)
+     改为对规范化后的相对路径逐段判定, 与平台无关。 */
+  const relSegs = path.relative(ROOT, full).split(path.sep).filter(Boolean);
+  for (const seg of relSegs) {
+    if (seg.charAt(0) === '.' || DENY_DIRS.has(seg.toLowerCase())) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('forbidden'); }
+  }
   function sendBuf(buf) {
     const etag = '"' + require('crypto').createHash('sha1').update(buf).digest('hex').slice(0, 16) + '"';
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, { ETag: etag }); return res.end(); }
@@ -112,6 +121,9 @@ function serveStatic(req, res, urlPath) {
  * 第38轮: keep-alive Agents — 上游默认每请求新建连接 (TLS 握手 ~100-400ms); LLM 调用密集 (会诊双选民/重试) 下复用连接显著省时 */
 const _httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 16, keepAliveMsecs: 30000 });
 const _httpAgent = new http.Agent({ keepAlive: true, maxSockets: 16, keepAliveMsecs: 30000 });
+/* 第48轮: 非流式上游响应体上限 — 与 readBody 的 2MB 请求体上限对称。上游是 operator 可配的任意网关
+   (或自身失控), 回一个超大体会在 Buffer.concat 前先撑爆中继内存 (零依赖进程无 --max-old-space 兜底)。 */
+const MAX_UPSTREAM_BYTES = 16 * 1024 * 1024;
 function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 传入 (v1.0.3 起函数内引用 req 但不在作用域, 真实中继调用上游响应时 ReferenceError 崩进程)
   const base = (providerCfg.baseUrl || '').replace(/\/+$/, '');
   const path = providerCfg.chatPath || '/chat/completions';
@@ -144,14 +156,36 @@ function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 
   }, upRes => {
     if (!wantStream) {
       const out = [];
-      upRes.on('data', c => out.push(c));
-      upRes.on('end', () => {
+      let got = 0, settled = false;
+      /* 第48轮关键修复: 非流式路径此前只有 'data'/'end' — 上游**连上之后中途断连** (写完头/半截体
+         再拆 socket) 时既不 emit 'end' 也没有 'error' 监听, 于是这里永不响应: 实测客户端一路挂到
+         超时 (12s 无任何字节) 而不是像「连不上」那样拿到 502 (第45轮补的 502 只覆盖连接失败)。
+         注意这不是崩溃而是**永久挂起**: Node 的客户端响应只在**存在** 'error' 监听时才 emit 'error'
+         (实测同一场景无监听只有 'aborted'+'close'), 所以既不会 unhandled 抛出也不会有人来收尾。
+         收口成 settle() 单出口: 'end' 正常交付; 提前 'close' → 502。用 upRes.complete 判定
+         (而不是依赖 'error' 是否 emit), 免得把「已完整收完」误判成中断。 */
+      const settle = (buf, bad) => {
+        if (settled) return;
+        settled = true;
+        if (bad) {
+          if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+          try { res.end(JSON.stringify({ error: 'relay upstream error: ' + bad })); } catch (eR) {}
+          return;
+        }
         res.writeHead(upRes.statusCode || 502, {
           'Content-Type': upRes.headers['content-type'] || 'application/json',
           'Access-Control-Allow-Origin': req_origin_safe(req)
         });
-        res.end(Buffer.concat(out));
+        res.end(buf);
+      };
+      upRes.on('data', c => {
+        got += c.length;
+        if (got > MAX_UPSTREAM_BYTES) { try { upRes.destroy(); } catch (eD) {} return settle(null, 'upstream response exceeds ' + Math.round(MAX_UPSTREAM_BYTES / 1048576) + 'MB cap'); }
+        out.push(c);
       });
+      upRes.on('end', () => settle(Buffer.concat(out)));
+      upRes.on('error', eU => settle(null, (eU && eU.message) || 'response error'));   // 有监听才不会变成 unhandled 'error'
+      upRes.on('close', () => { if (!settled) settle(upRes.complete ? Buffer.concat(out) : null, upRes.complete ? null : 'upstream closed before response completed'); });
     } else {
       // SSE 透传: 状态码+头照抄上游, chunks 直通浏览器
       res.writeHead(upRes.statusCode || 502, {
@@ -222,8 +256,24 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
     }, providerCfg.headers || {})
   }, upRes => {
     const out = [];
-    upRes.on('data', c => out.push(c));
+    let got = 0, settled = false;
+    /* 第48轮: 与 relay 的非流式路径同款 — 上游连上后中途断连时本路径也永不响应 (实测挂到客户端超时;
+       Node 只在有 'error' 监听时才 emit 'error', 故表现为挂起而非崩溃), 补 premature-close → 502
+       与响应体上限 (见 MAX_UPSTREAM_BYTES 注释)。 */
+    const failUp = msg => {
+      if (settled) return;
+      settled = true;
+      if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      try { res.end(JSON.stringify({ error: 'relay upstream error: ' + msg })); } catch (eR) {}
+    };
+    upRes.on('data', c => {
+      got += c.length;
+      if (got > MAX_UPSTREAM_BYTES) { try { upRes.destroy(); } catch (eD) {} return failUp('upstream response exceeds ' + Math.round(MAX_UPSTREAM_BYTES / 1048576) + 'MB cap'); }
+      out.push(c);
+    });
     upRes.on('end', () => {
+      if (settled) return;
+      settled = true;
       let text = '', usage = null, httpErr = null;
       try {
         const jr = JSON.parse(Buffer.concat(out).toString('utf8'));
@@ -245,6 +295,8 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
       res.write('data: [DONE]\n\n');
       res.end();
     });
+    upRes.on('error', eU => failUp((eU && eU.message) || 'response error'));   // 有监听才不会变成 unhandled 'error'
+    upRes.on('close', () => { if (!settled && !upRes.complete) failUp('upstream closed before response completed'); });
   });
   const beat = setInterval(() => { try { res.write(': ping\n\n'); } catch (eB) {} }, 15000);   // v3.5: SSE 心跳防 streamIdle 误杀
   upReq.on('timeout', () => upReq.destroy(new Error('anthropic timeout(180s)')));
@@ -299,7 +351,12 @@ function readBody(req) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const u = req.url || '/';
+  /* 第48轮: 路由只认 pathname — 原实现拿裸 req.url 做精确比对, 于是任何带 query 的请求
+     (`POST /api/chat?t=1` 这类缓存击穿/埋点参数, 或前端调试时随手加的查询串) 都匹配不上 API 分支,
+     一路落到静态分支 → 404, 前端只看到一句「404 Not Found」而不是真实的中继错误/服务商提示;
+     `/api/health?x=1` 同理 (探测脚本带参数即误判服务未起)。serveStatic 内部本就自行 split('?'),
+     故这里先行剥离对静态路径零影响。 */
+  const u = (req.url || '/').split('?')[0];
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {

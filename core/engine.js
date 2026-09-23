@@ -37,6 +37,9 @@
     var genesis = board.clone();   // A2 v3.9: 起始盘面原像 — undoPly 重放基点 (修复自定义起始局面误用标准开局板回放)
     var turn = opts.turn || 'red';
     var history = [];        // Move[]
+    /* 第48轮: 每手走完后的 {长将计数, 自然限着时钟} 快照栈 — 与 history 严格同长 (仅 applyPlayerMove 压、
+       undoPly 弹、newGame 清), 让悔棋/复盘跳转 O(1) 恢复统计而不必重放历史 (见 undoPly 处注释)。 */
+    var statStack = [];
     var lastMove = null;
     var _tgtCache = null;   // 第37轮: legalTargets memo (任意盘面变更即由 apply/undo 重置)
     var _dgrCache = null;   // 第39轮: dangerTargets memo (选中格每帧重算静态交换 → 记忆化)
@@ -158,8 +161,17 @@
                      //            否则这里会命中「走子前」的旧键, 把重复计数记到上一个局面上
         bumpPos(1);
         var st = refreshStatus();
+        /* 第48轮关键修复: 判定「这一手是否将军」必须用「对方是否被将军」, 而不是 `st.result === 'check'` —
+           Judge.status 对**将杀**返回 result:'checkmate' (只有「将军但有解」才是 'check'), 于是将杀那一手
+           被当成普通着法: 长将计数被**清零** (应为 +1 — 与本节文档「每手都将军则累加」以及纯函数
+           replayStats/checkStreaksFrom 的口径直接矛盾), 自然限着时钟也 +1 (将军着法按亚洲棋规不计入)。
+           实测 60 局随机对局 16951 手中有 21 手两条实现不一致, 全部落在将杀手 (增量 0/时钟+1 vs 重放 1/时钟不变);
+           由于 undoPly 一直走重放, 这一分歧在「将杀后悔棋」时会被静默抹平, 平时则只影响盘上读数
+           (checkStreak()/长将风险指示) 与入谱 note。必须在下方规则闭环改写 st 之前取值。
+           gaveCheck ⟺ Rules.inCheck(board, Piece.opponent(m.piece.color))。 */
+        var gaveCheck = (st.result === 'check' || st.result === 'checkmate');
         // v1.7.8 长将追踪: 走完后对方被将军 → 该方连续将军计数+1, 否则清零
-        if (st.result === 'check') checkStreaks[m.piece.color]++; else checkStreaks[m.piece.color] = 0;
+        if (gaveCheck) checkStreaks[m.piece.color]++; else checkStreaks[m.piece.color] = 0;
         // v2.0 规则闭环 — 长将判负: 一方连续将军 6 半回合 (3 回合) 仍不变招 → 长将方判负。
         // 依据: 亚洲棋规长将属违例着法; 优先级低于将杀/困毙 (refreshStatus 已判 over 时不再覆盖)。
         // 阈值 6 = 连续 3 回合每手都将军, 正常战术抽将达不到; LLM 连将拉锯 (实战高频) 由规则强制终局。
@@ -179,11 +191,15 @@
         // 优先级低于将杀/困毙/长将判负/重复判和; 将军着法不计入 (与亚洲棋规一致), ruleEnforce 关闭时不判 (分析器/回放不重判)。
         // A2 v3.9 修复: v3.8 注释「将军着法不计入」但实现把将军着法也累加 (与注释/E14 测试口径矛盾) — 对齐: 吃子清零 / 将军保持 / 普通+1
         if (m.captured) naturalClock = 0;
-        else if (st.result !== 'check') naturalClock++;
+        else if (!gaveCheck) naturalClock++;
         if (ruleEnforce && !over && naturalCap > 0 && st.result !== 'check' && naturalClock >= naturalCap) {
           over = true; result = 'natural'; winner = null;
           st = { over: true, result: result, winner: null };
         }
+        /* 第48轮: 统计快照栈 — 与 history 严格同长 (每手压入走完后的长将计数+自然限着时钟),
+           undoPly 弹栈即 O(1) 恢复, 取代原先「每次悔棋都从 genesis 重放整条历史」的 O(n) 重算
+           (复盘跳转是连续 undoPly → 489 手棋谱点第一手 ≈ 24 万次 applyMove + 全盘攻击扫描, 主线程可见卡顿)。 */
+        statStack.push({ red: checkStreaks.red, black: checkStreaks.black, naturalClock: naturalClock });
         emit('move', { move: Move.clone(m), status: st });
         return { ok: true, move: Move.clone(m), status: st };
       },
@@ -204,9 +220,26 @@
         bumpVer();     // 第39轮: memo 失效 (undo 后重选/重演不复用旧盘面结果)
         // A2 v3.9 修复: 旧版从标准开局盘 Board.create() 重放 — 自定义起始局面 (opts.startBoard) 时 genesis 错位,
         // 长将计数/自然限着时钟在含将军/吃子的历史下全错; 改从真正的起始原像一次性重算 (与 applyPlayerMove 单步语义同源)
-        var rs = replayStats(genesis, history);
-        checkStreaks = rs.streaks;
-        naturalClock = rs.naturalClock;
+        /* 第48轮: 改为弹统计快照栈 (O(1)) — 原实现每次都从 genesis 重放整条 history (O(n) 次 applyMove +
+           Rules.inCheck 全盘攻击扫描), 而「复盘点第 N 手」是连续 undoPly → O(n²): 489 手棋谱点第一手约 24 万次
+           applyMove, 主线程可见卡顿。栈由 applyPlayerMove 逐手压入, 且该处的将军判定已与本函数原用的
+           replayStats 口径对齐 (见 applyPlayerMove 的 gaveCheck), 故两者结果逐键相同。
+           兜底: 若不变式被破坏 (将来新增了别的写路径) 则回退到重放算法并清栈, 语义与旧实现完全一致。 */
+        if (statStack.length > history.length) {
+          /* statStack[i] 存的是「第 i+1 手走完之后」的统计, 所以被撤销那一手的快照要先丢弃,
+             再**读取**(而非弹出) 新的栈顶 = 「上一手走完之后」; 栈空 = 回到起始局面 (create() 初值全 0,
+             opts.startBoard 自定义起始局面同样从 0 起算, 与 replayStats(genesis, []) 一致)。
+             首版直接用了弹出的那一项 (即「被撤销那一手之后」), 等价性探针当场报 318/320 步不一致。 */
+          statStack.pop();
+          var prevS = statStack.length ? statStack[statStack.length - 1] : null;
+          checkStreaks = prevS ? { red: prevS.red, black: prevS.black } : { red: 0, black: 0 };
+          naturalClock = prevS ? prevS.naturalClock : 0;
+        } else {
+          statStack.length = 0;
+          var rs = replayStats(genesis, history);
+          checkStreaks = rs.streaks;
+          naturalClock = rs.naturalClock;
+        }
         over = false; result = 'normal'; winner = null;
         lastMove = history.length ? history[history.length - 1] : null;
         emit('undo', {});
@@ -219,6 +252,7 @@
         turn = 'red';
         history = [];
         lastMove = null;
+        statStack = [];   // 第48轮: 统计快照栈随新局清空 (与 history 同长不变式)
         posCounts = {};   // v1.7.7: 重复计数随新局清零
         checkStreaks = { red: 0, black: 0 };   // v1.7.8: 长将计数随新局清零
         naturalClock = 0;   // v3.8: 自然限着计数随新局清零
