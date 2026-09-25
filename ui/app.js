@@ -311,7 +311,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       confidence: (meta && typeof meta.confidence === 'number') ? meta.confidence : null,
       candidates: (meta && meta.candidates) || [],
       reasoning: cleanReason((meta && meta.reasoning) || ''),   // v1.5.5 中文过滤 + v1.5.10 清洗坐标扫描噪音, 卡片 💭 展开查看
-      secs: secs
+      secs: secs,
+      voterName: (meta && meta.voterName) || null,   // 第56轮: 多 LLM 胜出选民 → 决策卡 ✦ 标
+      votes: (meta && meta.votes) || null,            // 第56轮: 投票明细 → 决策卡展示
+      committeeMode: (agents[side] && agents[side].models && agents[side].models.length > 1) ? (agents[side].agent && agents[side].agent._mode || 'council') : null   // 第56轮: 模式标记
     };
     fbMark(entry, hasSummary, entry.reasoning);   // 第41轮: 兑底着法标旗 (无 summary 且无 confidence)
     if (!entry.fallback && !entry.summary) entry.summary = (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)');   // 纯展示兜底: 有 summary 缺失但置信度在 → 保留原「无摘要」占位

@@ -1961,3 +1961,19 @@
 - 尝试后回退: 同盘面去重 (llm_agent 请求缓存) — 测试炸了 (同盘面连调是测试的合法场景), 收益边际, 果断移除
 - 坦白: 55 轮 / 约 510+ 项后, 本轮 8 项为深度扫描所得真价值项, 不凑 50
 - 门禁: npm run check ALL PASS + npm test 15/15 全绿 + _server_http 121 断言
+
+## 2026-09-25 ~27:30 第56轮 (v1.0.daily, zcode — 指令「对多LLM做出优化, 添加可读性和娱乐性」)
+
+聚焦多 LLM 思考与决策的可读性 + 娱乐性, 8 项:
+
+1. **entry.voterName 接线**: committee meta.voterName → decisionLog entry → 决策卡 ✦ 胜出选民标 (原来 d-voter 渲染在 renderer 里但 entry 没传数据 — 链路断裂)
+2. **entry.votes 接线**: meta.votes → entry → 决策卡投票明细
+3. **决策卡投票 chip 行**: 全体选民落点一览 (绿=成功/红=失败), 模型名短显 — 可读性
+4. **圆桌标记**: roundtable 模式决策卡加 🗣 图标 — 一眼区分圆桌/会诊
+5. **committee _mode 暴露**: app entry 可读模式 (council/roundtable/rotate)
+6. CSS: .d-votes/.d-vote-ok/.d-vote-fail/.d-rtable 4 个新样式
+7. 模型卡 perVoter token 分解 (r32) 回归确认在案
+8. 全量门禁: npm run check ALL PASS + npm test 15/15 全绿
+
+- 边界: ai/llm_agent.js 未动; server.js 未动; systemPrompt 未动; 零新依赖
+- 触点: ui/app.js (entry 构建补 voterName/votes/committeeMode) / ui/renderer.js (决策卡投票表+圆桌标) / ai/committee_agent.js (_mode 暴露) / index.html (CSS) / CHANGELOG

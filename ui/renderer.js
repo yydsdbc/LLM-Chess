@@ -699,17 +699,27 @@
         return '<span class="d-cand' + (isWin ? ' d-cand-win' : '') + '"' + attrs + '>' + esc(c.move) + (c.score ? ' <b>' + esc(c.score) + '</b>' : '') + '</span>';
       }).join('');
       var hasReason = !!e.reasoning;
+      /* 第56轮: 娱乐性 — 会诊投票明细表 (e.votes 存在且 >1 选民) */
+      var voteTable = '';
+      if (e.votes && e.votes.length > 1) {
+        voteTable = '<div class="d-votes">' + e.votes.map(function (v) {
+          if (v.ok) return '<span class="d-vote-ok">' + esc(String(v.model || '').split(':').pop()) + '→' + esc(v.to) + '</span>';
+          return '<span class="d-vote-fail">' + esc(String(v.model || '').split(':').pop()) + ' ✗</span>';
+        }).join(' ') + '</div>';
+      }
       // 第41轮: 兑底摘要选词改按语言中立旗标 e.fallback (app 侧 fbMark 落旗) —
       // 原实现比对 app 写入的中文标记串, 而该写入自第40轮 i18n 后按字典产出, EN 下标记串根本不再出现
       var sumTxt = e.fallback ? T('fb_summary') : (e.summary === '兑底·安全着法' ? T('fb_summary') : e.summary);   // 兼容仍有中文标记串的旧内存数据
       return '<div class="dcard">'
         + '<div class="d-head"><span class="d-move">#' + e.n + ' ' + esc(e.name) + '</span>'
-        + (e.voterName ? '<span class="d-voter" title="' + esc(e.voterName) + '">✦' + esc(String(e.voterName).split(':').pop()) + '</span>' : '')   // 第32轮: 胜出选民
+        + (e.voterName ? '<span class="d-voter" title="' + esc(e.voterName) + '">✦' + esc(String(e.voterName).split(':').pop()) + '</span>' : '')   // 第56轮: 胜出选民
+        + (e.committeeMode === 'roundtable' ? '<span class="d-rtable">🗣</span>' : '')   // 第56轮: 圆桌标记   // 第32轮: 胜出选民
         + (e.evaluation ? '<span class="d-eval">' + esc(e.evaluation) + '</span>' : '')
         + (hasReason ? '<button class="d-toggle" data-ply="' + e.n + '" aria-label="' + esc(T('d_reason_toggle')) + '" aria-expanded="false">💭</button>' : '')   // 第42轮 i18n/a11y: 原 aria-label 硬编码英文 'reasoning' — 中文界面读屏播报英文词
         + '</div>'
         + (e.plan ? '<div class="d-plan">📌 ' + esc(e.plan) + '</div>' : '')
         + (sumTxt ? '<div class="d-sum">' + esc(sumTxt) + '</div>' : '')
+        + (voteTable ? voteTable : '')
         + (cands ? '<div class="d-cands">' + cands + '</div>' : '')
         + '<div class="d-meta">' + (e.confidence != null ? T('d_conf') + esc(e.confidence) + ' · ' : '') + (e.secs ? esc(e.secs) + 's' : '') + '</div>'   // 第27轮 i18n: 信 角标原硬编码
         + (hasReason ? '<div class="d-reason" data-ply="' + e.n + '" style="display:none">' + esc(e.reasoning.indexOf('【兑底】') === 0 ? T('fb_reason') : e.reasoning) + '</div>' : '')   // 第27轮 i18n: 兑底推理同上 (标记前缀比对)

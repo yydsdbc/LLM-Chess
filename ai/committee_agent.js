@@ -244,6 +244,7 @@
 
     return {
       name: 'Committee(' + agents.map(function (a) { return a.name; }).join('+') + ')',
+      _mode: mode,   // 第56轮: 暴露模式 (app entry 读)
       side: side, kind: 'llm', next: next, usage: usage,
       reset: function () { rotation = 0; errStreak = {}; streams = []; agents.forEach(function (a) { if (a.agent.reset) a.agent.reset(); }); },
       abort: function () { agents.forEach(function (a) { if (a.agent.abort) a.agent.abort(); }); },
