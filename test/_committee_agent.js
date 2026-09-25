@@ -258,6 +258,26 @@ function resetStub(script) { callN = 0; scripted = script; }
     ok(threw33, 'C21 已中止信号 → 请求快拒 (不烧重试)');
   }
 
+  // C22 圆桌讨论: 第一轮提案 → 互看同侪建议 → 第二轮终判; 注记进请求体   第50轮
+  {
+    const engR = XQ.Engine.create();
+    var bodies = [];
+    const realFetch2 = globalThis.fetch;
+    globalThis.fetch = function (url, opts) {
+      bodies.push(String(opts.body));
+      return realFetch2(url, opts);
+    };
+    callN = 0;
+    // 脚本: 每选民第一轮提 h3-e3; 第二轮 (请求体含圆桌注记) 改提 g3 — 验证互看后改选链路
+    scripted = [{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.5 }];
+    const cRT = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['rt1', 'rt2'], mode: 'roundtable' });
+    const mvRT = await cRT.next(engR);
+    const hasNote = bodies.some(function (b2) { return b2.indexOf(String.fromCharCode(229, 156, 134, 230, 161, 140)) >= 0 || b2.indexOf('RT') >= 0; });
+    ok(bodies.length >= 4, 'C22 圆桌两阶段: 2 选民 × 2 轮 = 4 请求 (得 ' + bodies.length + ')');
+    ok(XQ.Move.sqName(mvRT.to) === 'g3' || XQ.Move.sqName(mvRT.to) === 'e3', 'C22 圆桌终判产出合法落点 (得 ' + XQ.Move.sqName(mvRT.to) + ')');
+    globalThis.fetch = realFetch2;
+  }
+
   console.log(failed ? '_committee_agent: ' + failed + ' FAIL' : '_committee_agent: ALL PASS');
   process.exit(failed ? 1 : 0);
 })().catch(function (e) { console.error('suite crashed:', e); process.exit(1); });

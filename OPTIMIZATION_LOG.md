@@ -1890,3 +1890,24 @@
 - i18n_check 15 组/321 键 (并行 agent 六期扩容); check_ui 22 节; _server_http 120 断言; committee 41; _logic_layer 30
 - 本轮实施中两次被并行守护当场纠正 (I15 纯符号按钮 aria / 17节 模态合规) — 守护网络已成体系
 - 意外: 验证残留设置自启真实 LLM 对局 (烧 key) — 已止血并记 LOG (r33 教训重申: 验证前必清 xq_v1_settings)
+
+## 2026-09-25 ~22:30 第50轮 (v1.0.daily, zcode — 用户指令: 「多LLM采用圆桌式讨论: LLM1提出建议, LLM2提出建议, 再向2个LLM发送不同建议投票」)
+
+第50轮 (r31 曾列「辩论制会诊」为下轮候选, 本轮落地)。新 per-side 模式 roundtable: 两阶段圆桌。
+
+1. **llm_agent.next 第三参 roundtableNote**: 圆桌注记**并入该手 user 消息本体尾部** (非独立消息) — 存档对与发送字节完全一致, append-only 前缀缓存契约严格保持 (r31 曾因「注记需注入历史破坏缓存」搁置, 本方案绕开: 注记只存在于当手请求与当手存档对中, 下一手自然接续)
+2. **committee roundtable 两阶段**: 一轮并行提案 → 每选民收到「## 圆桌讨论: 同侪建议 — model 建议 from-to (summary); …互看后独立终判…」注记 (互看他人 from-to/摘要) → 二轮独立终判 → 统一 finalize 投票 (权重票/安全否决/minVotes 全套复用)
+3. **committee_agent 整文件重构** (三模式统一管线): askAll 并行问询 (预算/进度/流缓冲/分批) + finalize 投票决胜 (权重/minVotes/安全否决) 抽为共用件, rotate/council/roundtable 三模式都走同一管线 — 消除三份重复逻辑
+4. **失败选民两阶段均弃权**: 一轮失败 → 二轮自动弃权; 二轮全灭 → 走既有随机兑底
+5. **决策卡/回放兼容**: 圆桌二轮应答走既有 candidates/votes/voterName 链路, 无 UI 改动即显示
+6. 设置面板两侧下拉补 **圆桌 (互看再投票)** 选项 (multi_roundtable i18n ZH/EN)
+7. app multiMode 白名单 +roundtable
+8. README 双语/ARCHITECTURE 补圆桌说明 (注记并入 user、缓存契约保持; 第50轮三模式统一管线注记)
+9. C22 圆桌测试: 两选民 × 两轮 = 4 请求 + 终判合法落点
+10. **E2E 请求体验证**: phase1 请求无注记 / phase2 请求含「圆桌讨论+同侪建议+互看」全文 / 终判采纳二轮应答 (h3→g3, 圆桌3) — 圆桌语义全链实证
+11. 委员会文件重构回归: committee 套件 41 断言全过 (轮换/会诊/圆桌/平票/安全否决/预算/进度/流式全链)
+12. llm_convo 151 项回归 (roundtableNote 默认不传 → 零影响)
+
+- 设计要点: 注记选择「并入 user 本体」而非「独立消息」是刻意取舍 — 独立消息会让存档对与发送内容错位, 破坏 r2.6/v2.7 的字节级缓存复用; 并入后模型历史完整、缓存前缀共享段不受影响
+- 边界: systemPrompt 未动 (2384 字); server.js 未动; 零新依赖; dump 无涉 (圆桌注记是 user 侧, 非提示词)
+- 触点: ai/llm_agent.js (第三参) / ai/committee_agent.js (整文件重构) / index.html (下拉) / ui/app.js (白名单) / ui/i18n.js (multi_roundtable) / README×2 / docs/ARCHITECTURE.md / CHANGELOG

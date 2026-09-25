@@ -681,7 +681,7 @@ function create(opts) {
       name: 'LLM(' + provider + ':' + model + ')',
       side: side,
       kind: 'llm',
-      next: function (engine, history) {
+      next: function (engine, history, roundtableNote) {   // 第50轮: 第三参圆桌讨论注记 (committee 互看同侪建议用)
         if (!model) return Promise.reject(new Error('模型名为空 — 请在设置中填写模型名'));   // 第38轮: 空模型早退 (免一次必然 400 的中继往返)
         var attempt = 0, lastBad = null;
         var tagCache = {};   // v3.7: 本手合法列表标注缓存 (重试复用, 引擎状态单次 next() 内不变 → 安全)
@@ -690,6 +690,7 @@ function create(opts) {
           usage.attempts = (usage.attempts || 0) + 1;   // v3.9a: LLM 调用总次数 (含重试; usage.requests 只计拿到上游 usage 的)
           var legal = engine.generateLegalMoves(side);
           var msgs = buildMessagesWithEngine(engine, attempt > 1, lastBad, legal, tagCache);
+          if (roundtableNote) msgs[msgs.length - 1].content += '\n' + roundtableNote;   // 第50轮: 圆桌注记并入 user 本体 — 存档对与发送字节一致, append-only 严格保持 (重试每次重建, 幂等)
           var userMsgStr = msgs[msgs.length - 1].content;   // v2.7: 本请求 user 原样存档 — 下一请求作为历史对前缀 (字节级一致 → 缓存复用)
           return chat(msgs, attempt > 1 ? Math.min(temperature, 0.1) : temperature).then(function (out) {
             var txt = out.answer || out.reasoning;

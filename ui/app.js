@@ -911,7 +911,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           tok = tok.trim();
           if (tok && specs.indexOf(tok) < 0) specs.push(tok);
         });
-        var multiMode = (v.multi === 'rotate' || v.multi === 'council') && specs.length > 1 ? v.multi : 'off';
+        var multiMode = (['rotate', 'council', 'roundtable'].indexOf(v.multi) >= 0) && specs.length > 1 ? v.multi : 'off';
         var onThink = function (s2, text) { if (aiBusy && s2 === side) showThinking(s2, text); };
         var onRetry2 = function (info) { view.aiRetries = view.aiRetries || {}; view.aiRetries[side] = info.attempt; view.aiRetryWait = info.waitMs || 0; };   // 第38轮: 等待量可见   // v2.5: 重试实时可见 (状态条 重试N次)
         var onProg = function (p) {   // 第31轮: 会诊进度实时上卡 (⚡ 思考中卡片文字替换)
