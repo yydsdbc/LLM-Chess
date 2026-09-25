@@ -87,6 +87,15 @@
     }
     return record;
   }
+  function storageUsage() {   // 第59轮: 存储用量估算
+    var total = 0;
+    try {
+      for (var k in root.localStorage) {
+        if (root.localStorage.hasOwnProperty(k) && k.indexOf('xq_') === 0) total += (root.localStorage[k] || '').length;
+      }
+    } catch (e) {}
+    return { bytes: total * 2, kb: Math.round(total * 2 / 1024) };
+  }
   function list() {
     var raw = null;
     try { raw = localStorage.getItem(LS_KEY) || '[]'; } catch (eR) { raw = '[]'; }
@@ -283,7 +292,7 @@
     blank: blank, addMove: addMove, finish: finish,
     save: save, list: list, get: get, remove: remove,
     saveImported: saveImported, summarize: summarize, importFromPGN: importFromPGN,
-    exportAll: exportAll, importAllBackup: importAllBackup, exportCSV: exportCSV,
+    exportAll: exportAll, importAllBackup: importAllBackup, storageUsage: storageUsage, exportCSV: exportCSV,
     toPrettyJSON: toPrettyJSON, downloadFile: downloadFile, importFromFile: importFromFile
   };
 })(typeof window !== 'undefined' ? window : globalThis);
