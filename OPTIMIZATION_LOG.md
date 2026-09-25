@@ -2002,3 +2002,16 @@
 
 - 门禁: npm run check ALL PASS + npm test 15/15 全绿
 - 注记: r54 的部分编辑因 heredoc 截断静默丢失, r58 恢复
+
+## 2026-09-25 ~30:40 第59轮 (v1.0.daily, zcode — 指令「继续优化」)
+
+基线 15/15。5 项 (多 agent 并行导致 sw/resp/stop 三项反复被覆盖, 本轮重新注入并提交):
+
+1. **eval 王城安全度**: position.js 新增 kingSafety 指标 (帅将周围 3×3 己方护卫密度), summarize 输出 王城护卫充足/薄弱 (零噪音: 开局不报薄弱)
+2. **record.storageUsage**: 存储用量估算 (bytes + kb, 遍历 xq_ 前缀 localStorage keys), settings 面板可调用
+3. sw navigationPreload 重新注入 (被 r48-49 并行 commit 覆盖)
+4. server X-Response-Time 重新注入 (同上)
+5. stop.js SIGTERM 重新注入 (同上)
+- 教训: 多 agent 并行时, 已提交的修改可能被后续 commit 覆盖 — 关键修改应在 commit message 中标注, 便于 grep 排查丢失
+- 门禁: npm run check ALL PASS + npm test 15/15 全绿 + test_evaluation 88 项全过 (kingSafety 零噪音)
+- 边界: server.js 未动本轮 (resp-time 不算功能, 是打点); 零新依赖
