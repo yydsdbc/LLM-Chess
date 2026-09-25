@@ -29,7 +29,7 @@
                 }
               }
             : (idx === 0 ? opts.onThinking : null),
-          onRetry: opts.onRetry, signal: (typeof opts.signal === 'function' ? opts.signal() : opts.signal),
+          onRetry: opts.onRetry, signal: opts.signal,   // 第61轮修复: 传递原始 getter (llm_agent 内每请求重新求值; 委员会不提前执行 — 换局后子代理拿旧已中止信号 → 全拒退化随机)
           jitter: opts.jitter, timeoutMs: opts.timeoutMs, maxTokens: opts.maxTokens, temperature: opts.temperature
         })
       };
@@ -68,7 +68,7 @@
       if (!good.length) throw (rs[0] && rs[0].err) || new Error('committee: all voters failed');
       var tally = {};
       good.forEach(function (r) {
-        var sq = XQ.Move.sqName(r.mv.to);
+        var sq = XQ.Move.sqName(r.mv.from) + '-' + XQ.Move.sqName(r.mv.to);   // 第61轮修复: 完整 from-to 作为 key (防同落点不同起点合票)
         if (!tally[sq]) tally[sq] = { sq: sq, votes: 0, weight: 0, conf: 0, first: r };
         tally[sq].votes++;
         tally[sq].weight += weightOf(r.name);
@@ -86,7 +86,7 @@
       if (best.votes < minVotes) {
         var top = good[0];
         good.forEach(function (r) { if (confOf(r.mv) > confOf(top.mv)) top = r; });
-        if (top.name !== winName) { winName = top.name; winMv = top.mv; best = tally[XQ.Move.sqName(winMv.to)]; vetoNote = ' [minVotes ' + minVotes + ' 未达 → 改最高信心 ' + winName + ']'; }
+        if (top.name !== winName) { winName = top.name; winMv = top.mv; best = tally[XQ.Move.sqName(winMv.from) + '-' + XQ.Move.sqName(winMv.to)]; vetoNote = ' [minVotes ' + minVotes + ' 未达 → 改最高信心 ' + winName + ']'; }
       }
       if (opts.safetyCheck !== 'off' && XQ.LLMAgent && XQ.LLMAgent.evalMove2Static) {
         var uniq = {}, order = [];
@@ -101,7 +101,7 @@
           if (r.name === winName) winS = sc;
         });
         if (winS != null && bestS != null && bestS - winS >= 3 && alt && alt.name !== winName) {
-          winName = alt.name; winMv = alt.mv; best = tally[XQ.Move.sqName(winMv.to)];
+          winName = alt.name; winMv = alt.mv; best = tally[XQ.Move.sqName(winMv.from) + '-' + XQ.Move.sqName(winMv.to)];
           vetoNote = ' [安全否决: 多数落点静态净损 ' + (bestS - winS).toFixed(1) + ' → 改静态最优 ' + winName + ']';
         }
       }

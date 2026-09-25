@@ -2032,3 +2032,22 @@
 10. **Dockerfile EXPOSE 8788** (文档化端口)
 - 关键修复: rejectedMoves 用 lastMv 跨 then/catch 作用域 (原直接引 mv → ReferenceError)
 - 边界: systemPrompt 未动 (dump PASS); server.js X-Forwarded-For 改动需重启
+
+## 2026-09-25 ~32:40 第61轮 (v1.0.daily, zcode — 修复第60轮引入的 tally key 断裂 + Codex 审计发现落实)
+
+Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
+
+1. **committee tally key 修复 (关键)**: minVotes/安全否决的 `best = tally[dest]` 查找与新 from-to key 格式不匹配 → undefined → best.votes 崩溃; 修复为 `tally[from + '-' + to]`
+2. **committee signal getter 修复 (关键)**: 委员会创建子代理时提前执行 signal getter (`opts.signal()`), 换局后子代理拿旧已中止信号 → 全拒退化随机; 修复为传递原始 getter (llm_agent 内每请求求值)
+3. **roundtable 二轮 voterName + reasoning tag**: 二轮应答补 voterName + [圆桌 model] 前缀
+4. sw navigationPreload 恢复 (第61轮, 此前被并行覆盖)
+5. server X-Response-Time 恢复 (同上)
+6. PGN 导入 +4 断言 (多标签/Result 映射/非法报错) — L9
+7. Elo 排序持久化 (xq_elo_sort)
+8. match_headless LLMC_SEED (第53轮, 确认在案)
+9. server 安全响应头 (nosniff/referrer-policy/X-Frame-Options/Permissions-Policy) 确认在案 (r55)
+10. server messages 形状校验 确认在案 (r49)
+
+- 关键修复来源: Codex 审计报告 (第 1 轮只读不改 — 用户指令设计的两阶段协作验证成功)
+- 门禁: npm run check ALL PASS + npm test 15/15 全绿 + committee 42 断言全过
+- 边界: systemPrompt 未动; server.js 未动本轮; 零新依赖
