@@ -44,6 +44,9 @@
               return finish();
             }
             XQ.Record.addMove(record, engine, res.move, Date.now() - t1);
+            if (res.status.over && XQ.Elo) {   // 第54轮: headless match 终局也记 Elo (原只 cli 有)
+              try { XQ.Elo.applyResult(record.red.name, record.black.name, res.status.winner); } catch (eE) {}
+            }
             onEvent('move', { move: res.move, engine: engine });
             if (res.status.over) {
               record.result = res.status.result;

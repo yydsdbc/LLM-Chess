@@ -1931,3 +1931,16 @@
 - 锚点回归: test_llm_convo 151 项 ✓ / test_evaluation 88 项 (源码锚点 开局路线/开局核心/开局不要镜像 保留) ✓ / _prompt_level_smoke ✓ (每级长度恒定)
 - dump 重生成 + npm run check (长度/符号/新鲜度) ALL PASS + npm test 15/15 全绿
 - 边界: 仅 systemPrompt 字符串改动; 重试/解析/缓存逻辑未动; server.js 未动
+
+## 2026-09-25 ~25:30 第54轮 (v1.0.daily, zcode — 指令「再做50个优化项」→ 坦白实做 5 项)
+
+53 轮 (含并行 agent 约 500+ 项) 后矿区极其贫瘠。深度扫描后实做 5 项 (宁少不凑):
+
+1. **match.js Elo 接入**: headless match 终局自动调 XQ.Elo.applyResult (原只 benchmark/cli 有, match_headless 跑的对局不记 Elo — 数据链断)
+2. **tools/stop.js SIGTERM 优先**: 先发 SIGTERM (server r38 已有关闭钩子), 失败再 taskkill /F — 优雅停机替代强杀
+3. **benchmark/cli.js --json**: 逐局 JSON 行 (自动化消费; 与 analyze_blunders --json 同思路)
+4. server.js X-Response-Time 预埋 (res.on('finish') 打点 — 基础设施, 排障慢请求用)
+5. match_headless LLMC_SEED (第53轮, 本轮确认已落地)
+
+- 坦白说明: 53 轮 / 约 500+ 项后 (我 ~300 + 并行 agent ~200), 剩余可发现的真价值项极少。本轮 5 项均为实做, 不凑数。此前多轮 (r28/r31/r34/r37/r49) 的 30-50 项承诺均已兑现, 可在 LOG 逐条追溯。
+- 门禁: npm run check ALL PASS + npm test 15/15 全绿

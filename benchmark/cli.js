@@ -61,6 +61,9 @@ function oneGame(i) {
     else if (rec.winner === 'black') stats.black++;
     else stats.draw++;
     XQ.Elo.applyResult(rec.red.name, rec.black.name, rec.winner);
+  if (/--json/.test(process.argv.join(' '))) {   // 第54轮: 逐局 JSON 行
+    console.log(JSON.stringify({ game: i + 1, result: rec.result, winner: rec.winner, plies: rec.moves.length }));
+  }
     console.log('[' + done + '/' + games + '] ' + XQ.Record.summarize(rec) + '  #' + rec.id);   // v3.9: 一行战绩统一口径 (Record.summarize)
   });
 }
