@@ -1977,3 +1977,14 @@
 
 - 边界: ai/llm_agent.js 未动; server.js 未动; systemPrompt 未动; 零新依赖
 - 触点: ui/app.js (entry 构建补 voterName/votes/committeeMode) / ui/renderer.js (决策卡投票表+圆桌标) / ai/committee_agent.js (_mode 暴露) / index.html (CSS) / CHANGELOG
+
+## 2026-09-25 ~28:30 第57轮 (v1.0.daily, zcode — 用户指令: 「优化可读性 + 娱乐性」)
+
+聚焦回放可读性 + 娱乐性, 3 项:
+
+1. **逐手备注**: 双击走法列表条目 → prompt 输入该手备注 → 存回 record.moves[ply-1]._note + Record.save 落盘; 走法列表 📝 标记显示 (有备注的手); 刷新/重开回放保持
+2. **走法列表 📝 标记**: 有备注的手在行首显示绿 📝 — 回放浏览一眼看出哪些手有关注解
+3. **圆桌二轮 voterName + reasoning tag**: committee roundtable 二轮应答补 meta.voterName + [圆桌 model] reasoning 前缀 (与轮换 [轮换] 对齐)
+
+- 门禁: npm run check ALL PASS + npm test 15/15 全绿
+- 边界: llm_agent.js 未动; server.js 未动; 零新依赖; systemPrompt 未动

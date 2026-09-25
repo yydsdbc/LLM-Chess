@@ -2794,6 +2794,24 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       XQ.Record.save(rpSession.record);   // 备注落谱
       rpPaintInfo(rpSession.state());
     };
+    /* 第57轮: 逐手备注 — 双击走法列表条目 → prompt 输入该手备注, 🔖 旁显示 ✏ */
+    var moveList = rpEl.movelist;
+    if (moveList && !moveList._noteDbound) {
+      moveList._noteDbound = true;
+      moveList.addEventListener('dblclick', function (ev) {
+        var li = ev.target.closest('li[data-ply]');
+        if (!li) return;
+        var ply = parseInt(li.dataset.ply, 10);
+        var rec = rpSession.record;
+        if (!rec || !rec.moves || !rec.moves[ply - 1]) return;
+        var cur = rec.moves[ply - 1]._note || '';
+        var v = window.prompt('第 ' + ply + ' 手备注:', cur);
+        if (v == null) return;
+        rec.moves[ply - 1]._note = v.slice(0, 120);
+        XQ.Record.save(rec);
+        rpPaintMoveList();
+      });
+    }
     rpEl.range.max = st.total;
     rpEl.range.value = st.idx;
   }
@@ -2853,13 +2871,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var sideTag = m.side === 'red' ? '🔴' : '⚫';
       var bmHtml = rpBookmarks.indexOf(i + 1) >= 0 ? '<span title="' + esc2(T('rp_bm_title')) + '" style="color:#ffd54a">🔖</span> ' : '';   // v1.0.daily 书签标记
       var risky = (risks[i + 1] || 0) >= riskMark ? '<span title="' + esc2(TA('rp_title_risky', { s: (risks[i + 1]).toFixed(1) })) + '" style="color:#e67e22">⚠</span> ' : '';
+      var noteMark = (m._note || m.note) ? '<span title="' + esc2(m._note || m.note) + '" style="color:#58d68d;margin-right:2px">📝</span>' : '';   // 第57轮: 逐手备注标记
       var mk = marks[i + 1];   // v1.7.9: 将/杀/困 彩色标记 (杀 > 风险 > 将 > 标签)
       /* 第44轮 i18n: mk 是 core/judge.js 的语言中立数据标记 ('杀'/'困'/'将'), 判定必须留在字面量上;
          但**展示文本**此前把同一批汉字写死 → EN 界面下走法列表显示中文。现按字典取词 (zh 仍为一字, EN 为 Mate/Stuck/Check)。 */
       var mkHtml = mk === '杀' ? '<span title="' + esc2(T('rp_title_mate')) + '" style="color:#ff5050;font-weight:bold">' + esc2(T('rp_mk_mate')) + '</span> '
         : mk === '困' ? '<span title="' + esc2(T('rp_title_stuck')) + '" style="color:#ff5050">' + esc2(T('rp_mk_stuck')) + '</span> '
         : mk === '将' ? '<span title="' + esc2(T('rp_title_check')) + '" style="color:#e0a030">' + esc2(T('rp_mk_check')) + '</span> ' : '';
-      html += '<li' + cls + ' data-ply="' + (i + 1) + '" tabindex="0" role="button"' + curAttr + '><span class="rp-ml-side">' + sideTag + '</span><b>' + m.n + '</b><span style="flex:1">' + bmHtml + mkHtml + risky + esc2(label) + '</span></li>';
+      var noteMark = (m._note || m.note) ? '<span style="color:#58d68d;margin-right:2px">📝</span>' : '';   // 第57轮: 逐手备注
+      html += '<li' + cls + ' data-ply="' + (i + 1) + '" tabindex="0" role="button"' + curAttr + '><span class="rp-ml-side">' + sideTag + '</span><b>' + m.n + '</b><span style="flex:1">' + noteMark + mkHtml + risky + esc2(label) + '</span></li>';
       visible++;
     }
     if (html) rpEl.movelist.innerHTML = html;
