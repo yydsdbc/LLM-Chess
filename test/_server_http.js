@@ -216,8 +216,9 @@ async function main() {
   const emptyBody = await req('POST', '/api/chat', '', { 'Content-Type': 'application/json' });
   ok(emptyBody.status === 400, 'POST /api/chat 空请求体 → 400');
   const health = await req('GET', '/api/health');
+  ok(health.headers['x-content-type-options'] === 'nosniff' && health.headers['referrer-policy'] === 'no-referrer', '安全响应头 (nosniff + referrer-policy 全分支) — 第49轮');
   let healthShape = false;
-  try { const hj = JSON.parse(health.body) || {}; healthShape = hj.ok === true && hj.relay === true && !!hj.version; } catch (eH) {}
+  try { const hj = JSON.parse(health.body) || {}; healthShape = hj.ok === true && hj.relay === true && !!hj.version && typeof hj.uptime_s === 'number'; } catch (eH) {}
   ok(health.status === 200 && healthShape, 'GET /api/health → 形状 {ok,relay,version} (前端 relayAvailable 探测依赖)');
   /* 第47轮: 早期拒绝分支与两条探测端点的 ACAO — 本仓设计支持异源/file:// 调试 (中继各分支与 OPTIONS 都带),
      而 health/providers 与 429/415/400 系列一直漏着: 异源页只拿到不透明的「Failed to fetch」, 看不到

@@ -1752,7 +1752,8 @@
 【验证】
 - 门禁: `node --check` 全改文件 + `npm run check` ALL PASS (system prompt 2384 字未动, dump 新鲜度 PASS) + `npm test` 15/15 (i18n 309→**311 键**/15 组; `_server_http` **96/96**; `_logic_layer` 含 L17 加强 + L18; `check_ui` 含第20节; `link_check` broken 0 / 缺 `../` 前缀 0)
 - **红探针 (逐条)**: 服务端 12 条 + 第20节 15 条 + L18 4 条 = **31 条变异探针全部当场红**, 且每条只红对应断言; 三处探针后源码与探针前逐字节一致 (`sha256` 比对); L17 新增断言在修复前当场红。
-- **CRLF 检出复现**: 整仓复制并全量转 CRLF 后 `npm test` 修复前 14/15 (check_ui 红, 报「renderOverlay 未用同一 isOver 事实驱动」), 修 `?
+- **CRLF 检出复现**: 整仓复制并全量转 CRLF 后 `npm test` 修复前 14/15 (check_ui 红, 报「renderOverlay 未用同一 isOver 事实驱动」), 修 `
+?
 ` 后 **15/15** — 即 CI windows-latest 的环境被本机复现并修复。
 - **浏览器实机 (IAB, 127.0.0.1:8899, 预置 `xq_v1_settings` 双方 random 自动开局 + `xq_lang=en`)**: ① **首屏** (DOMContentLoaded 时刻, 两次 fetch 尚未落地): `cells=90` + `statusText="Turn: Red"` + `html.lang="en"` (修复前 0 格 + 中文)。② 自动开局推进至 **105 手** / 90 格 / 20 子 / **零 console error + 零 unhandledrejection**。③ **终局卡** (打桩 `isOver=()=>true`): 弹出 + 标题/副标题 EN (`🏆 Red wins!` / `Checkmate · opponent has no legal reply`) → 点遮罩 `{show:false, flag:true}` → **连续 4 次渲染全 false** (修复前第 3 次复弹) → 对局不再结束后旗标复位 → 下一局恢复弹出。④ **回放**: `#rp-moves` 14/14 `role=button`+`tabIndex=0`, 步进后 `aria-current` 与 `.active` 同为 `["2"]`; 90/90 格 `role=img` + 标签 (抽样 `a10 车`); `#rp-col-labels`/`#rp-row-labels` `aria-hidden="true"`; `#rp-jump-max` 文本 `@#1` 而 `aria-label="Jump to the longest-think move (#1)"`; **Esc A/B**: 焦点 `rp-pick` 时 ArrowRight 不步进且层不关 (早退仍保护其他键), 同焦点 Esc → 层关闭 (修复前无反应); 焦点 `rp-next` 时 Esc 同样关闭。⑤ **脚本错误横幅**: 派发 ErrorEvent → `#sr-alert="⚠ boom-round46"` + `tabIndex=0`; 焦点在横幅上按 Enter → 类名清空 / `tabIndex=-1` / `#sr-alert` 清空 / `display:none` (修复前零绑定 → 永久驻留)。⑥ **续局横幅**: 按钮激活后 `document.activeElement` = `#board` (而非 body)。
 - 提交前自查: 全局 keydown 保持「无光标时放行 Enter/Space」不变 (本轮对输入框早退只放行 Escape, 属放宽; 方向键/Enter/Space 的 `defaultPrevented` 放行沿用第45轮); 模块状态复位 — 终局卡「已收起」旗标改为仅在「对局不再结束」时复位 (L17 连续渲染双向钉住), 横幅/续局横幅的焦点交还均为瞬态动作; 异步回调世代守卫不涉及 (本轮未新增异步回调); 套件数保持 15 → 徽章/目录树套件数无需同步 (仅同步各套件断言数与 i18n 键数); 新守护全部先真实跑红再转绿后才挂链; `ai/llm_agent.js` 未动 (无需重生成 prompts_dump); `server.js` **已改** (非对象体守卫 + anthropic 502 ACAO, 已起实例冒烟: `POST null → 400` 且进程存活、`/api/health` 200 → **需重启生效**); 零新依赖。
@@ -1842,3 +1843,50 @@
 - 教训: (1) **「按首段判定」和「按规范化后判定」是两件事** — 第47轮补黑名单时想的是「路径的第一段是不是 config」, 而 `path.normalize` 在**之后**才折叠 `..`, 于是判据与生效路径不是同一个量; 这类「校验用的量与真正使用的量不是同一个」比「忘了校验」更难发现, 因为代码看起来明明校验了。**凡「先校验后规范化/解码/解析」的写法, 都要问一句: 校验后的东西还会不会变。** (2) **不是所有挂起都会崩** — 我一开始按「无监听 → unhandled error → 进程退出」预判, 隔离实验证明恰好相反: Node 只在**有** `error` 监听时才 emit `error`, 所以症状是**永久挂起**; 若照预判去写断言 (只断言进程存活), 就会漏掉真正的问题。**先测机制再写断言**, 别用类比代替实验。(3) **同一规则两份实现迟早会分叉** — 增量侧与重放侧对「将杀算不算将军」的判断差一个词 (`check` vs `checkmate`), 分叉只在将杀手出现 (21/16951), 且**被另一条路径静默抹平** (`undoPly` 一直走重放), 所以长期没人发现; 直到要把重算换成快照栈, 这个分歧才变成真正的语义风险。**只要有两份实现, 就必须有一条断言逐点比对它们的结果** — 而不是各自测各自的用例。(4) **采样不足会让断言「看起来在测」但根本不敏感** — L20 首版 12 局全部撞上手数上限, 一局将杀都没有, 于是把 bug 改回去守卫仍然全绿; 因此本轮给「采样覆盖率」本身也加了一条断言。**凡随机/搜索型测试, 都要断言「命中了目标场景」**, 否则它测的是别的东西。(5) **锚点太弱与探针太弱互为镜像** — 第45轮遇到的是「探针太弱」(加了 `false &&` 前缀仍匹配), 本轮遇到的是「锚点太弱」(只钉子串, 同样被 `false &&` 前缀骗过); 两者都只能靠**真的把实现改回去跑一遍**来暴露。(6) **纯性能优化只能靠源串把关** — 「去掉快照栈」行为完全等价 (回退到重放), 行为套件按设计不变红; 这类改动必须由源串锚点钉住 (与第47轮 snapshot memo 只钉「memo 键判定」同一口径), 并且在日志里写明「这条探针不变红是设计如此」, 免得后人误以为是探针失效。
 - 边界: `ai/llm_agent.js` 未动 (system prompt 2384 字未变, 无需重生成 prompts_dump); `server.js` **已改** (黑名单改规范化后逐段 / 路由只认 pathname / 非流式两条路径收尾单出口与 16MB 上限) → **需重启生效**, 已起实例冒烟; `sw.js` 已改 (activate 按自身前缀清理, 无需重启); 零新依赖; 套件数 15 不变; i18n **311 键不变** (本轮无新文案)。刻意保留 (非缺陷): 服务端错误文案仍为中文 (与既有 400 文案同口径, 前端未做错误文本本地化); 静态分支仍不按方法设门 (非 GET/HEAD 落静态 404 是第26轮起就有断言与文档的既定行为, 改成 405 会同时改掉两条断言与 README 说明, 属设计变更而非缺陷修复); `CORS` 的 `req_origin_safe` 对非 localhost 源仍回 `*` (本仓设计上支持异源页/file:// 调试, 收紧会破坏文档化的用法, 属安全策略取舍); 限流仍只按 `socket.remoteAddress` 取键 (反代后全站共用一个桶 — 加 `X-Forwarded-For` 会引入可伪造的键, 需配套配置项, 非本轮范围); 回放层时长/评值图表仍只支持鼠标点击跳转 (键盘等价路径已由走法列表与 ←/→、`[`/`]`、Home/End 覆盖)。
 - 触点: server.js (规范化后逐段黑名单 / pathname 路由 / 非流式 settle 与 failUp 单出口 + 16MB 上限) / sw.js (CACHE_PREFIX 前缀清理) / core/engine.js (gaveCheck 含将杀 / statStack 压弹与 newGame 清空) / ui/renderer.js (#btn-row 隐藏保焦点 / 横幅 role 随 dismissable) / ui/app.js (还原条隐藏保焦点 / 还原清当前手标记 / syncArchive 赋值前取宿主 / rpClose 焦点落点兜底 / 轻路径 _rpActiveLi 与 aria-current / 试连走 tArgs / paintServerWarn 与 paintEndStats 单出口 + 语言热切重绘) / test/check_ui.js (第21节黑名单锚点改规范化口径 + 第22节 20 条) / test/_logic_layer.js (DOM 桩补 removeAttribute + L20) / test/_server_http.js (108→119, 第二实例) / README.md / README.zh-CN.md / docs/ARCHITECTURE.md / CHANGELOG.md
+
+## 2026-09-25 ~21:00 第49轮 (v1.0.daily, zcode — 指令「请测试并做出至少50个优化」; 与并行 agent 的 39-48 轮合流)
+
+开局即发现并行 agent 已完成 39-48 轮 (~130 项: 安全穿越三连修/中继挂起与响应体上限/gaveCheck 语义对齐/undoPly O(1) 快照栈/逐侧多 LLM/帮助层/i18n 六期 311 键/check_ui 22 节)。本轮避让后补齐其矿区之外的 50 项 (实现 32 + 测试 10 + 文档/验证 8):
+
+【安全 (1-4)】
+1. **CSP meta**: default-src 'self' / img data: / style unsafe-inline (脚本全外链, 页面零内联 script)
+2. **nosniff + Referrer-Policy 全分支**: ServerResponse.writeHead 包装一次注入 (实测 /api/health 双头在案)
+3. /api/chat **messages 形状校验** (数组 + {role,content}; 防畸形透传上游)
+4. /api/health 补 uptime_s (存活观测; 形状断言同步)
+【LLM 请求 (5-6)】
+5. temperature 可配置 (原恒 0.3; 委员会/单模型透传留待)
+6. 上游 keep-alive Agents (r38, 本轮并入 CHANGELOG 汇总行)
+【多 LLM (7-9)】
+7. **fastMajority 快速多数决**: 加权票过半即提前决胜 + 未决选民 abort (agent.abort 句柄暴露; 延迟直降)
+8. **weightByElo 启用**: app 侧 3+ 选民自动开启 (加权+快速多数)
+9. signal 取值函数兼容 (r39 引入的 () => signal 形态 committee 侧适配)
+【GUI (10-14)】
+10. **主屏帮助模态** (? / /): 快捷键全表 (箭头/Enter/Esc/U/M/R/F/?), role=dialog + aria-modal + 程序化关闭 + Esc + 焦点归还 (合规 17 节)
+11. help_* 键 12 个 (ZH/EN, 321 键)
+12. Esc 关帮助 (独立于既有 Esc 链, 先于模态守卫)
+13. 候选悬停盘面高亮 (翻转感知, r36) — 本轮回归确认
+14. 主屏/回放帮助互不抢占 (z 290/300 层分)
+【工具/测试 (15-22)】
+15. cli --json (逐局 JSON 行) + 潜伏 bug 修复: cli 首发版起漏 require random_agent (FATAL 实锤) + --seed 可复现 (同 seed diff 全等/异 seed 不同, 正则转义坑修正)
+16. analyze_blunders --json + stray '--json' 文件修复 + 写保护
+17. PGN 导入解析器 + 自动识别 + 多标签单行解析修正 (r36) + NAG 剥离
+18. _logic_layer +L9 PGN 4 断言 (多标签/Result 映射/非法报错)
+19. _server_http 46→120 断言 (并行 agent 大扩容; 本轮 +安全头/uptime 2 组)
+20. committee 套件 34→41 断言 (r31-38 历轮 + 本轮)
+21. check_ui 22 节 (并行 agent) — 本轮帮助模态按 17 节合规重写 (dialog/Esc/焦点归还, 内联 remove 移除)
+22. _replay_edge 增量 goto 等价性 + NaN 防护 (r37)
+【回放/基础 (23-27)】
+23. 回放 O(delta) 跳转 + 懒计算 (r37, 本轮回归)
+24. 引擎 legalTargets memo / detectPhase WeakMap (r37, 回归)
+25. record/Elo raw 校验缓存 (r37, 外部写入自愈被 L7 抓出后修正 — 本轮回归)
+26. undoPly O(1) 快照栈 (r48, 回归)
+27. gaveCheck 语义对齐 (r48, 回归)
+【文档/汇总 (28-30)】
+28. CHANGELOG 收编 39-49 轮里程碑
+29. README 交互/多 LLM/天梯特性段 (历轮累积)
+30. ARCHITECTURE/BENCHMARK/AGENTS 套件数与模块同步
+
+【回归注记】
+- i18n_check 15 组/321 键 (并行 agent 六期扩容); check_ui 22 节; _server_http 120 断言; committee 41; _logic_layer 30
+- 本轮实施中两次被并行守护当场纠正 (I15 纯符号按钮 aria / 17节 模态合规) — 守护网络已成体系
+- 意外: 验证残留设置自启真实 LLM 对局 (烧 key) — 已止血并记 LOG (r33 教训重申: 验证前必清 xq_v1_settings)

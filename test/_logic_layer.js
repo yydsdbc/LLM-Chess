@@ -435,7 +435,17 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
 }).then(function () {
   return l20Round48();        // 第48轮: 引擎统计两路径一致 + 悔棋精确还原 + sw activate 只清自身前缀
 }).then(function () {
-  console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
+  // L9 PGN 导入 (第36轮新增解析器的守护): 标签/多标签/着法/非法报错
+var pgnOk = ['[Event "x"]', '[Red "红"] [RedModel "glm-a"]', '[Black "黑"] [BlackModel "glm-c"]', '[Result "1-0"]', '', '1. h3-e3 b10-c8 2. b3-c3'].join(String.fromCharCode(10));
+var recP = XQ.Record.importFromPGN(pgnOk);
+ok(recP.moves.length === 3 && recP.moves[0].from === 'h3' && recP.moves[0].piece === 'cannon', 'L9 PGN 解析 3 手 + 首手棋子重建');
+ok(recP.red.name === '红' && recP.red.model === 'glm-a' && recP.black.model === 'glm-c', 'L9 PGN 多标签单行解析 (Red/RedModel/BlackModel)');
+ok(recP.result === 'checkmate' && recP.winner === 'red', 'L9 PGN Result 映射 (1-0 → checkmate/red)');
+var threwP = false;
+try { XQ.Record.importFromPGN('[Result "*"]\n\n1. a1-a6'); } catch (eP2) { threwP = true; }
+ok(threwP && String(arguments && '').length >= 0, 'L9 PGN 非法着法 → 明确报错');
+
+console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
   process.exit(fails.length ? 1 : 0);
   }, function (e) {
   console.log('  [FAIL] L11 异步断言异常: ' + (e && e.message));

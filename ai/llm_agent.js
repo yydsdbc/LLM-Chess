@@ -453,6 +453,7 @@ function create(opts) {
       usage.httpCalls = (usage.httpCalls || 0) + 1;   // 第38轮: HTTP 调用级计数 (独立于 requests: 后者仅计上报 usage 的应答, 本项含未上报上游)
       return new Promise(function (resolve, reject) {
         var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            if (_liveCtrlRef) _liveCtrlRef.ctrl = ctrl;   // 第49轮: abort 句柄暴露 (委员会 fastMajority 早期弃权用)
         var extSig = (typeof opts.signal === 'function' ? opts.signal() : opts.signal) || null;   // v3.9a: 外部中断 (对局取消/页面关闭) — 与内部看门狗共用 ctrl, 上抛时按 aborted 归因; 第39轮: signal 支持取值函数形态 (app 侧对局世代换代, 固化实例会被下一局的 abort 误伤)
         if (extSig && extSig.aborted) { reject(new Error('外部中止: 对局已取消')); return; }
         if (extSig && ctrl && typeof extSig.addEventListener === 'function') {
@@ -672,6 +673,8 @@ function create(opts) {
       return null;
     }
 
+    var _liveCtrlRef = {};   // 第49轮: 最近一次请求的 AbortController 引用 (abort 句柄)
+
     var onRetryCb = typeof opts.onRetry === 'function' ? opts.onRetry : null;   // v2.5 重试可见性钩子 (HUD/调用方观测重试)
 
     return {
@@ -799,6 +802,7 @@ function create(opts) {
         return loop();
       },
       usage: function () { return usage; },
+      abort: function () { if (_liveCtrlRef.ctrl) { try { _liveCtrlRef.ctrl.abort(); } catch (eA) {} } },   // 第49轮: 中止在飞请求 (委员会快速多数决用)
       reset: function () { convo.length = 0; },
       /** v2.2 送吃守卫诊断口 (测试/分析用): null=安全, 字符串=拦截原因 */
       guardCheck: function (eng, fromSq, toSq) {

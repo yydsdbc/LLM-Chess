@@ -350,6 +350,13 @@ function readBody(req) {
   });
 }
 
+// 第49轮: 安全响应头统一注入 (nosniff/referrer-policy; writeHead 包装一次, 全分支生效)
+const _origWriteHead = http.ServerResponse.prototype.writeHead;
+http.ServerResponse.prototype.writeHead = function (code, headers) {
+  const h = Object.assign({ 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' }, headers || {});
+  return _origWriteHead.call(this, code, h);
+};
+
 const server = http.createServer(async (req, res) => {
   /* 第48轮: 路由只认 pathname — 原实现拿裸 req.url 做精确比对, 于是任何带 query 的请求
      (`POST /api/chat?t=1` 这类缓存击穿/埋点参数, 或前端调试时随手加的查询串) 都匹配不上 API 分支,
@@ -373,7 +380,7 @@ const server = http.createServer(async (req, res) => {
      异源页拿到的只有一句不透明的「Failed to fetch」, 看不到「未配置 apiKey」「rate limited」这类可操作提示。 */
   if (u === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': req_origin_safe(req) });
-    return res.end(JSON.stringify({ ok: true, relay: true, version: VERSION }));
+    return res.end(JSON.stringify({ ok: true, relay: true, version: VERSION, uptime_s: Math.round(process.uptime()) }));   // 第49轮: 运行时长
   }
 
   if (u === '/api/providers' && req.method === 'GET') {   // 第26轮: 加 GET 门禁 (原任意方法都返回列表; 非 GET 落静态分支 404, 与 /api/chat 的方法守卫同款) — 需重启生效
@@ -430,6 +437,10 @@ const server = http.createServer(async (req, res) => {
     if (!payload.model || !payload.messages) {
       res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': req_origin_safe(req) });
       return res.end(JSON.stringify({ error: '缺少 model/messages' }));
+    }
+    if (!Array.isArray(payload.messages) || !payload.messages.length || payload.messages.some(function (m) { return !m || typeof m.role !== 'string' || (typeof m.content !== 'string' && typeof m.content !== 'object'); })) {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      return res.end(JSON.stringify({ error: 'messages 需为 [{role,content}] 数组' }));   // 第49轮: 形状校验 (防畸形消息透传上游)
     }
     if ((cfg.protocol || '') === 'anthropic') return relayAnthropic(cfg, payload, res, req);   // v3.5: Claude 走协议转换
     return relay(cfg, payload, res, req);

@@ -927,7 +927,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             onThinking: onThink, onRetry: onRetry2, onProgress: onProg,
             signal: function () { return gameAbort ? gameAbort.signal : undefined; },   // 第39轮: 取值函数 — applyAgents 先于 startRecord, 固化实例拿到的是随即被 abort 的旧代控制器 (每手请求被秒拒 → LLM 退化为随机走子)
             voterBudgetMs: 90000,
-            jitter: true                                         // 第38轮: 退避抖动 (多选民错峰不撞限流窗)
+            jitter: true,
+            fastMajority: specs.length >= 3,   // 第49轮: 3+ 选民启用快速多数决
+            weightByElo: true                   // 第49轮: Elo 加权投票                                         // 第38轮: 退避抖动 (多选民错峰不撞限流窗)
           });
           modelName = specs.join('+');
           modelsOut = specs;
@@ -1622,6 +1624,36 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         }
       }
     });
+  /* 第49轮: 主屏快捷键帮助 (? / /) */
+  function showMainHelp() {
+    if (document.getElementById('main-help-overlay')) return;
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    var opener = document.activeElement;   // 第49轮: 焦点归还
+    var row = function (keys, label) { return '<tr><td style="padding:2px 8px"><kbd>' + keys + '</kbd></td><td style="padding:2px 8px">' + label + '</td></tr>'; };
+    var html = '<div id="main-help-overlay" role="dialog" aria-modal="true" aria-label="' + T('help_main_title') + '" style="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:290;display:flex;align-items:center;justify-content:center">'
+      + '<div style="background:#2a1a0c;border:1px solid #7a5a2a;border-radius:14px;padding:20px 24px;min-width:420px;color:#f0e0c0;box-shadow:0 8px 32px rgba(0,0,0,.7)">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b style="color:#f0d9a0;font-size:18px">' + T('help_main_title') + '</b>'
+      + '<button class="btn" id="main-help-close" aria-label="close" style="background:#c0392b">✕</button></div>'
+      + '<table style="width:100%;font-size:13px;line-height:2">'
+      + row('←→↑↓', T('help_arrows')) + row('Enter / Space', T('help_enter')) + row('Esc', T('help_esc'))
+      + row('U', T('help_u')) + row('M', T('help_m')) + row('R', T('help_r')) + row('F', T('help_f')) + row('? / /', T('help_q'))
+      + '</table><div style="margin-top:10px;font-size:12px;color:#c4a56e">' + T('help_drag') + '</div></div></div>';
+    var d = document.createElement('div');
+    d.innerHTML = html;
+    var ov = d.firstChild;
+    document.body.appendChild(ov);
+    function closeHelp() {   // 第49轮: 程序化关闭 + 焦点归还 (17节守卫: 模态禁内联 this.remove)
+      ov.remove();
+      if (opener && opener.focus) { try { opener.focus(); } catch (eF) {} }
+      document.removeEventListener('keydown', escClose, true);
+    }
+    function escClose(e33) { if (e33.key === 'Escape') { e33.preventDefault(); e33.stopPropagation(); closeHelp(); } }
+    document.addEventListener('keydown', escClose, true);
+    ov.addEventListener('click', function (ev) { if (ev.target === ov) closeHelp(); });
+    var xc = ov.querySelector('#main-help-close');
+    if (xc) { xc.onclick = closeHelp; xc.focus(); }
+  }
+
     // 快捷键: M 静音 / R 重开
     document.addEventListener('keydown', function (ev) {
       /* 第46轮: Esc 必须穿过输入控件早退 — 回放层的默认焦点是 #rp-pick (<select>), 而「退出回放」的 Esc
@@ -1690,6 +1722,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       }
       /* v1.0.daily a11y 键盘走子: 方向键光标 / Enter·Space 选子走子 / Esc 取消 */
       var k = (ev.key || '').toLowerCase();
+      if (k === '?' || k === '/') { showMainHelp(); ev.preventDefault(); return; }   // 第49轮: 主屏帮助 (Esc 亦关)
+      if (k === 'escape' && document.getElementById('main-help-overlay')) { document.getElementById('main-help-overlay').remove(); ev.preventDefault(); return; }   // 第49轮: Esc 关帮助
       if (k === 'escape') {   // Esc 必须先于模态守卫求值 (关闭面板 + 清理棋盘光标是它的既有职责)
         /* 第46轮: 已被更早的监听消费 (设置层 Esc 会 preventDefault) 就放行 — 否则同一次 Esc 会连锁收起终局卡。 */
         if (ev.defaultPrevented) return;

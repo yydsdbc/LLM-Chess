@@ -129,7 +129,37 @@
           }, batch * 300 + (idx % maxP) * 60);
           }));
       });
-      return Promise.all(calls).then(function (rs) {
+      var master = Promise.all(calls);
+      /* 第49轮: fastMajority — 加权票超过总权重一半即提前决胜, 未应答选民 abort 弃权 (延迟直降; 默认关) */
+      if (opts.fastMajority) {
+        var totalW = 0, doneW = {};
+        agents.forEach(function (a) { totalW += weightOf(a.name); });
+        master = new Promise(function (resAll) {
+          var settledAll = false;
+          var finishEarly = function () {
+            if (settledAll) return;
+            var tallyNow = {};
+            votes.forEach(function (v) { if (v.ok) tallyNow[v.to] = (tallyNow[v.to] || 0) + weightOf(v.model); });
+            var keys = Object.keys(tallyNow);
+            var lead = keys.length ? Math.max.apply(null, keys.map(function (k) { return tallyNow[k]; })) : 0;
+            var pendingW = agents.filter(function (a, j2) { return vstate[j2] === 'pending'; }).reduce(function (s2, a) { return s2 + weightOf(a.name); }, 0);
+            if (keys.length && lead > pendingW + (totalW - lead - pendingW)) {
+              settledAll = true;
+              agents.forEach(function (a, j2) { if (vstate[j2] === 'pending' && a.agent.abort) a.agent.abort(); });
+              resAll({ early: true });
+            }
+          };
+          calls.forEach(function (cP) { cP.then(finishEarly); });
+          master.then(function (rs) { settledAll = true; resAll(rs); }, function (e) { settledAll = true; resAll({ allFailed: e }); });
+        }).then(function (rs) {
+          if (rs && rs.early) {   // 提前路径: 未决选民按弃权计
+            return rs;
+          }
+          if (rs && rs.allFailed) throw rs.allFailed;
+          return rs;
+        });
+      }
+      return master.then(function (rs) {
         var good = rs.filter(function (r) { return r.mv; });
         if (!good.length) throw (rs[0] && rs[0].err) || new Error('committee: all voters failed');
         var tally = {};
