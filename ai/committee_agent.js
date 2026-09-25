@@ -226,7 +226,12 @@
             return new Promise(function (res) {
               setTimeout(function () {
                 a.agent.next(engine, history, note)
-                  .then(function (mv) { res({ mv: mv, name: a.name }); })
+                  .then(function (mv) {
+                    mv.meta = mv.meta || {};
+                    mv.meta.voterName = a.name;   // 第53轮: 圆桌二轮也标 voterName
+                    mv.meta.reasoning = '[圆桌 ' + a.name + '] ' + (mv.meta.reasoning || '');   // 第53轮: 圆桌二轮标记
+                    res({ mv: mv, name: a.name });
+                  })
                   .catch(function (err) { res({ err: err, name: a.name }); });
               }, idx * 300);
             });

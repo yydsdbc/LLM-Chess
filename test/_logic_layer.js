@@ -445,6 +445,16 @@ var threwP = false;
 try { XQ.Record.importFromPGN('[Result "*"]\n\n1. a1-a6'); } catch (eP2) { threwP = true; }
 ok(threwP && String(arguments && '').length >= 0, 'L9 PGN 非法着法 → 明确报错');
 
+// L10 PGN 导入 (第36轮新增解析器的守护)
+var pgnOk = ['[Event "x"]', '[Red "红"] [RedModel "glm-a"]', '[Black "黑"] [BlackModel "glm-c"]', '[Result "1-0"]', '', '1. h3-e3 b10-c8 2. b3-c3'].join(String.fromCharCode(10));
+var recP = XQ.Record.importFromPGN(pgnOk);
+ok(recP.moves.length === 3 && recP.moves[0].from === 'h3' && recP.moves[0].piece === 'cannon', 'L10 PGN 解析 3 手 + 首手棋子重建');
+ok(recP.red.name === '红' && recP.red.model === 'glm-a' && recP.black.model === 'glm-c', 'L10 PGN 多标签单行解析');
+ok(recP.result === 'checkmate' && recP.winner === 'red', 'L10 PGN Result 映射');
+var threwP = false;
+try { XQ.Record.importFromPGN('[Result "*"]' + String.fromCharCode(10) + String.fromCharCode(10) + '1. a1-a6'); } catch (eP2) { threwP = true; }
+ok(threwP, 'L10 PGN 非法着法 → 明确报错');
+
 console.log(fails.length ? '_logic_layer: ' + fails.length + ' FAIL' : '_logic_layer: ALL PASS');
   process.exit(fails.length ? 1 : 0);
   }, function (e) {

@@ -27,6 +27,9 @@ globalThis.fetch = function (url, opts) {
 };
 
 const engine = XQ.Engine.create();
+/* 第53轮: LLMC_SEED 环境变量 — 兑底/安全阀的随机成分可复现 */
+var _seed = parseInt(process.env.LLMC_SEED || '0', 10) >>> 0;
+function _rng() { if (!_seed) return Math.random; var st = _seed; return function () { st = (st * 1664525 + 1013904223) >>> 0; return st / 4294967296; }; }
 const redAgent = XQ.LLMAgent.create({ side: 'red', provider: PROVIDER, model: MODEL });
 const blackAgent = XQ.LLMAgent.create({ side: 'black', provider: PROVIDER, model: MODEL });
 const record = XQ.Record.blank({ redName: MODEL + '(红)', redKind: 'llm', redModel: MODEL, blackName: MODEL + '(黑)', blackKind: 'llm', blackModel: MODEL });

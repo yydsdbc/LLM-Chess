@@ -2469,6 +2469,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (document.getElementById('rp-elo-overlay')) return;
     var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
     var sortKey = 'rating';
+    try { var sk = localStorage.getItem('xq_elo_sort'); if (sk) sortKey = sk; } catch (eSK) {}   // 第53轮: 排序列持久化
     function paint() {
       var rows = XQ.Elo.leaderboard();
       rows.sort(function (a, b) { return (b[sortKey] || 0) - (a[sortKey] || 0) || (a.name < b.name ? -1 : 1); });
@@ -2507,7 +2508,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     modalMarkOpen('rp-elo-overlay', ov);
     ov.addEventListener('click', function (ev) {
       var k2 = ev.target && ev.target.getAttribute ? ev.target.getAttribute('data-k') : null;
-      if (k2) { sortKey = k2; paint(); }
+      if (k2) { sortKey = k2; try { localStorage.setItem('xq_elo_sort', k2); } catch (eS2) {} paint(); }   // 第53轮: 排序持久化
     });
     document.body.appendChild(ov);
     paint();
