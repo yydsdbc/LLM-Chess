@@ -684,12 +684,17 @@ function create(opts) {
       next: function (engine, history, roundtableNote) {   // 第50轮: 第三参圆桌讨论注记 (committee 互看同侪建议用)
         if (!model) return Promise.reject(new Error('模型名为空 — 请在设置中填写模型名'));   // 第38轮: 空模型早退 (免一次必然 400 的中继往返)
         var attempt = 0, lastBad = null;
+        var rejectedMoves = [];   // 第60轮: 已被系统拒的着法 (重试时避免重复建议)
+        var lastMv = null;   // 第60轮: 最近一次解析出的着法 (跨 then/catch 作用域)
         var tagCache = {};   // v3.7: 本手合法列表标注缓存 (重试复用, 引擎状态单次 next() 内不变 → 安全)
         function loop() {
           attempt++;
           usage.attempts = (usage.attempts || 0) + 1;   // v3.9a: LLM 调用总次数 (含重试; usage.requests 只计拿到上游 usage 的)
           var legal = engine.generateLegalMoves(side);
           var msgs = buildMessagesWithEngine(engine, attempt > 1, lastBad, legal, tagCache);
+          if (rejectedMoves.length && attempt > 1) {   // 第60轮: 告知模型哪些着法已被拒
+            msgs[msgs.length - 1].content += '\n## 已被系统拒绝的着法 (勿再选): ' + rejectedMoves.join(', ');
+          }
           if (roundtableNote) msgs[msgs.length - 1].content += '\n' + roundtableNote;   // 第50轮: 圆桌注记并入 user 本体 — 存档对与发送字节一致, append-only 严格保持 (重试每次重建, 幂等)
           var userMsgStr = msgs[msgs.length - 1].content;   // v2.7: 本请求 user 原样存档 — 下一请求作为历史对前缀 (字节级一致 → 缓存复用)
           return chat(msgs, attempt > 1 ? Math.min(temperature, 0.1) : temperature).then(function (out) {
@@ -700,6 +705,7 @@ function create(opts) {
               if (mvR) { mv = mvR; console.warn('[LLM ' + side + '] attempt ' + attempt + ' 从 reasoning_content 打捞到 JSON'); }
             }
             if (!mv) throw new Error('返回无法解析: ' + String(txt).slice(0, 80));
+            lastMv = mv;   // 第60轮: 追踪已解析着法 (catch 中 rejectedMoves 需要)
             // v1.5 严格模式字段校验: JSON 虽解析成功但缺 summary/confidence 视同格式失败 → 带字段提醒重试; 第 3 次兑底不再要求
             if (attempt < 3 && mv.meta && (!mv.meta.summary || mv.meta.confidence == null)) {
               throw new Error('输出 JSON 缺少必填字段 (summary 14字以内 / confidence 0到1)');
@@ -784,8 +790,10 @@ function create(opts) {
             }
             // v1.5.9: 永久性错误 (鉴权/余额/模型名) 重试无意义 → 立即抛出, 快速暴露配置问题 (如 deepseek 未配 key)
             if (/HTTP 40[123]|not exist|Invalid API key|insufficient balance|认证失败/i.test(msg)) throw err;
+            if (opts.signal && opts.signal.aborted) throw err;   // 第60轮: 重试前检查中止 (原只在 next 开头检查)
             if (attempt < 3) {
               lastBad = msg;
+              if (lastMv) rejectedMoves.push(XQ.Move.sqName(lastMv.from) + '-' + XQ.Move.sqName(lastMv.to));
               console.warn('[LLM ' + side + '] attempt ' + attempt + ' 失败重试: ' + msg.slice(0, 140));   // v1.5.7: 失败原因落日志 (无头跑/排障可见, 正常局零输出)
               var wait = retryWaitMs(msg, attempt);   // v3.8: 提取为模块级纯函数 (可测), 退避覆盖面扩大到 502/504/gateway (与 503 同源的瞬时网关错误)
               var raM = /\[Retry-After (\d+)s\]/.exec(msg);   // 第38轮: 上游明示等待优先 (上限 30s)

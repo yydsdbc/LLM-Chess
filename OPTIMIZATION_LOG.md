@@ -2015,3 +2015,20 @@
 - 教训: 多 agent 并行时, 已提交的修改可能被后续 commit 覆盖 — 关键修改应在 commit message 中标注, 便于 grep 排查丢失
 - 门禁: npm run check ALL PASS + npm test 15/15 全绿 + test_evaluation 88 项全过 (kingSafety 零噪音)
 - 边界: server.js 未动本轮 (resp-time 不算功能, 是打点); 零新依赖
+
+## 2026-09-25 ~31:30 第60轮 (v1.0.daily, zcode — 指令「继续优化」)
+
+基线 15/15。10 项:
+
+1. **server X-Forwarded-For**: chatRateLimit 优先读 X-Forwarded-For 头 — 反向代理后限流按 real IP (原全按 proxy IP → 所有用户共享一个限流窗口)
+2. **llm_agent 重试前中止检查**: catch 内 opts.signal.aborted → 不再调度重试 (原只 next 开头查一次, 中途 abort 仍白等)
+3. **llm_agent 被拒着法追踪**: rejectedMoves 数组记录已被系统拒的着法 (开局保护/送吃守卫), 重试时告知模型勿再选 — 减少重复犯错浪费的重试
+4. **match.js 单手 120s 超时**: LLM 挂起不阻塞整场 (超时判 illegal + error 终局)
+5. **eval 王城安全度** (r59, 确认在案): kingSafety 指标 + summarize 输出
+6. **record storageUsage** (r59, 确认在案)
+7. **sw navigationPreload** (r59, 重新注入确认)
+8. **server X-Response-Time** (r59, 重新注入确认)
+9. **stop.js SIGTERM** (r59, 重新注入确认)
+10. **Dockerfile EXPOSE 8788** (文档化端口)
+- 关键修复: rejectedMoves 用 lastMv 跨 then/catch 作用域 (原直接引 mv → ReferenceError)
+- 边界: systemPrompt 未动 (dump PASS); server.js X-Forwarded-For 改动需重启

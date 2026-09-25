@@ -321,7 +321,7 @@ function req_origin_safe(req) {
 // v1.0.daily: 补秒窗 — 原仅分钟窗, 脚本可单秒连击打空整分钟预算再等下一窗; 人机/双 agent 每手 ≤2 请求远低于秒窗上限
 const _rlMap = new Map();
 function chatRateLimit(req) {
-  const ip = (req.socket && req.socket.remoteAddress) || 'unknown';
+  const ip = req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : (req.socket && req.socket.remoteAddress) || 'unknown';   // 第60轮: 反向代理后取 real IP
   const now = Date.now();
   const sec = Math.floor(now / 1000);
   let entry = _rlMap.get(ip);

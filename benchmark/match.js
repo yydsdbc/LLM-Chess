@@ -32,9 +32,15 @@
         var agent = side === 'red' ? red : black;
         var t1 = Date.now();
 
+        var moveTimeout = setTimeout(function () {   // 第54/60轮: 单手超时 (120s) — LLM 挂起不阻塞整场
+          record.illegal++;
+          record.result = 'error';
+          finish();
+        }, 120000);
         Promise.resolve()
           .then(function () { return agent.next(engine); })
           .then(function (mv) {
+            clearTimeout(moveTimeout);
             var res = engine.applyPlayerMove(mv.from.x, mv.from.y, mv.to.x, mv.to.y);
             if (!res.ok) {
               record.illegal++;
