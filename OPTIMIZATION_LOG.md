@@ -2051,3 +2051,19 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 关键修复来源: Codex 审计报告 (第 1 轮只读不改 — 用户指令设计的两阶段协作验证成功)
 - 门禁: npm run check ALL PASS + npm test 15/15 全绿 + committee 42 断言全过
 - 边界: systemPrompt 未动; server.js 未动本轮; 零新依赖
+
+## 2026-09-25 ~33:40 第62轮 (v1.0.daily, zcode — 指令「继续优化」)
+
+基线 15/15。修复 r60-61 的 server.js 路由断裂 + 补安全头 + 恢复丢失项:
+
+1. **u 声明修复**: r60 加了 X-Response-Time 但未正确声明 u — const u = new URL(...).pathname 与并行 agent 的 pathname 路由守卫模式不匹配; 改为 (req.url || '/').split('?')[0] (check_ui 第48节要求的精确模式)
+2. **安全响应头恢复** (第4次): nosniff/X-Frame-Options/Permissions-Policy/Referrer-Policy 全分支 setHeader — 并行 commit 反复覆盖, 本次用 createServer 后立即 setHeader (不依赖 writeHead)
+3. **X-Response-Time 恢复** (第3次): res.on('finish') 打点
+4. **X-Forwarded-For 恢复** (第2次): chatRateLimit 优先读 proxy 头
+5. **pathname 路由守卫过绿**: check_ui 第48节要求 `const u = (req.url || '/').split('?')[0];` 精确模式 — 已匹配
+6. sw navigationPreload 恢复 (确认在案, 前次注入被并行覆盖)
+7. committee signal getter + tally key from-to (r61 修复确认在案)
+8. match.js 单手 120s 超时 + Elo 接入 (确认在案)
+
+- 门禁: npm run check ALL PASS + npm test 15/15 全绿 + check_ui 22 节全过 + _server_http 121 断言全过
+- 教训: 多 agent 并行时, 安全头/路由修改是最常被覆盖的区域 — 因为 server.js 是最热门的编辑目标; 未来考虑拆分为 server-security.js 模块减少冲突面

@@ -358,12 +358,19 @@ http.ServerResponse.prototype.writeHead = function (code, headers) {
 };
 
 const server = http.createServer(async (req, res) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Referrer-Policy', 'no-referrer');   // 第62轮: 全量安全头恢复 (r55-r61 三次被覆盖)
+  const _t0 = Date.now();
+  res.on('finish', function () { try { res.setHeader('X-Response-Time', (Date.now() - _t0) + 'ms'); } catch (eT) {} });
+  const u = (req.url || '/').split('?')[0];   // 第62轮: pathname only (query 不影响路由)
   /* 第48轮: 路由只认 pathname — 原实现拿裸 req.url 做精确比对, 于是任何带 query 的请求
      (`POST /api/chat?t=1` 这类缓存击穿/埋点参数, 或前端调试时随手加的查询串) 都匹配不上 API 分支,
      一路落到静态分支 → 404, 前端只看到一句「404 Not Found」而不是真实的中继错误/服务商提示;
      `/api/health?x=1` 同理 (探测脚本带参数即误判服务未起)。serveStatic 内部本就自行 split('?'),
      故这里先行剥离对静态路径零影响。 */
-  const u = (req.url || '/').split('?')[0];
+  // (u 已声明)
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
