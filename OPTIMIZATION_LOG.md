@@ -1988,3 +1988,17 @@
 
 - 门禁: npm run check ALL PASS + npm test 15/15 全绿
 - 边界: llm_agent.js 未动; server.js 未动; 零新依赖; systemPrompt 未动
+
+## 2026-09-25 ~29:40 第58轮 (v1.0.daily, zcode — 用户指令: 「继续优化」)
+
+基线 15/15。6 项:
+
+1. sw.js navigationPreload 恢复 (r54 丢失 — 导航预加载, 网络请求与 SW 启动并行)
+2. server X-Response-Time 恢复 (r54 丢失 — res.on('finish') 打点)
+3. 悔棋后清落子徽章 (lastMoveBadge(null) — 原悔棋后旧着法徽章残留)
+4. PWA 全屏 meta 标签 ×3 (mobile-web-app-capable / apple-mobile-web-app-capable / status-bar-style)
+5. 逐手备注 📝 标记落地 (r57 的 noteMark 在 rpPaintMoveList 注入)
+6. 双击备注编辑监听落地 (r57 的 dblclick 在 movelist)
+
+- 门禁: npm run check ALL PASS + npm test 15/15 全绿
+- 注记: r54 的部分编辑因 heredoc 截断静默丢失, r58 恢复

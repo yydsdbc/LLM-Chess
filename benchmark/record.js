@@ -61,8 +61,14 @@
    * (QuotaExceeded → 逐级裁剪重试: 留30 → 留15 → 只存当前局, 保证刚下的这局永不丢) */
   var MAX_RECORDS = 60;
   var _listCache = null, _listRaw = null;   // 第37轮: list() 解析缓存 (raw 串校验 — 外部写入/跨标签自愈)
+  function movesHash(record) {   // 第58轮: 走法序列指纹 (同谱去重)
+    return record.moves.map(function (m) { return m.from + m.to; }).join('|');
+  }
   function save(record) {
     var all = list();
+    var hash = movesHash(record);
+    var dup = all.find(function (r) { return r.id !== record.id && movesHash(r) === hash && r.moves.length === record.moves.length; });
+    if (dup && record.moves.length > 4) { console.log('[Record] 同谱去重: 跳过 ' + record.id + ' (与 ' + dup.id + ' 相同)'); return dup; }
     var i = all.findIndex(function (r) { return r.id === record.id; });
     if (i >= 0) { all.splice(i, 1); }   // 更新也视为最近活动: 移到末尾再截断, 上限裁剪按活跃度
     all.push(record);
