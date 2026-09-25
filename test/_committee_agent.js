@@ -278,6 +278,26 @@ function resetStub(script) { callN = 0; scripted = script; }
     globalThis.fetch = realFetch2;
   }
 
+  // C23 fastMajority: 2/3 快速同选 → 第三选民 (永不回) 被 abort+弃权, 整体提前出招   第52轮回归修复
+  {
+    var hangFetch = globalThis.fetch;
+    globalThis.fetch = function (url, opts) {
+      // 选民 3 的请求永不返回
+      if (String(url).indexOf('f3') >= 0 || String(JSON.parse(opts.body).model).indexOf('f3') >= 0) return new Promise(function () {});
+      return hangFetch(url, opts);
+    };
+    callN = 0;
+    scripted = [{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.5 }];
+    const cFM = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['f1', 'f2', 'f3'], mode: 'council', fastMajority: true });
+    var resolved = false;
+    const mvFM = await Promise.race([
+      cFM.next(eng).then(function (m) { resolved = true; return m; }),
+      new Promise(function (r2) { setTimeout(function () { r2(null); }, 3000); })
+    ]);
+    ok(resolved && mvFM && XQ.Move.sqName(mvFM.to) === 'e3', 'C23 fastMajority: 2/3 同选即提前出招 (挂起选民不阻塞)');
+    globalThis.fetch = hangFetch;
+  }
+
   console.log(failed ? '_committee_agent: ' + failed + ' FAIL' : '_committee_agent: ALL PASS');
   process.exit(failed ? 1 : 0);
 })().catch(function (e) { console.error('suite crashed:', e); process.exit(1); });

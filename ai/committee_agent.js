@@ -136,9 +136,11 @@
         votes.forEach(function (v) { if (v.ok) t[v.to] = Math.round(((t[v.to] || 0) + weightOf(v.model)) * 100) / 100; });
         return t;
       }
+      var resolvers = [];   // 第52轮: fastMajority 需跨闭包 resolve 未决选民
       var calls = agents.map(function (a, idx) {
         var batch = Math.floor(idx / maxP);
         return new Promise(function (res) {
+          resolvers[idx] = res;
           var settled = false;
           var done = function (v) {
             if (settled) return;
@@ -153,6 +155,25 @@
                 opts.onProgress({ answered: answered, total: agents.length, voter: a.name, ok: !!v.mv,
                   voters: agents.map(function (a2, j2) { return { name: a2.name, state: vstate[j2] }; }), tally: liveTally() });
               } catch (eP) {}
+            }
+            /* 第52轮: fastMajority — 领先票权重 > 全部未决权重之和 → 未决选民 abort+弃权 */
+            if (opts.fastMajority) {
+              var lt2 = liveTally();
+              var lk = Object.keys(lt2);
+              if (lk.length) {
+                var leadW = Math.max.apply(null, lk.map(function (k) { return lt2[k]; }));
+                var pendW = 0;
+                agents.forEach(function (a2, j2) { if (vstate[j2] === 'pending') pendW += weightOf(a2.name); });
+                if (leadW > pendW) {
+                  agents.forEach(function (a3, j3) {
+                    if (vstate[j3] === 'pending') {
+                      vstate[j3] = 'fail';
+                      if (a3.agent.abort) a3.agent.abort();
+                      if (resolvers[j3]) resolvers[j3]({ err: new Error('fastMajority'), name: a3.name });
+                    }
+                  });
+                }
+              }
             }
             res(v);
           };
