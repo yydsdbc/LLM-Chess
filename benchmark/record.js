@@ -221,6 +221,18 @@
     return rec;
   }
 
+  /* 第55轮: CSV 导出 */
+  function exportCSV() {
+    var rows = [['name', 'rating', 'games', 'win', 'draw', 'loss']];
+    try {
+      var elo = JSON.parse(root.localStorage.getItem('xq_elo_v1') || '{}');
+      Object.keys(elo).filter(function (k) { return k.indexOf('stats:') !== 0; }).forEach(function (name) {
+        var st = elo['stats:' + name] || { games: 0, win: 0, draw: 0, loss: 0 };
+        rows.push([name, elo[name] || 1500, st.games, st.win, st.draw, st.loss]);
+      });
+    } catch (e) {}
+    return rows.map(function (r) { return r.join(','); }).join('\n');
+  }
   /* ── 第30轮 一键备份/恢复: records + Elo + 界面设置 打包为单 JSON ── */
   function exportAll() {
     var elo = null, settings = null;
@@ -265,7 +277,7 @@
     blank: blank, addMove: addMove, finish: finish,
     save: save, list: list, get: get, remove: remove,
     saveImported: saveImported, summarize: summarize, importFromPGN: importFromPGN,
-    exportAll: exportAll, importAllBackup: importAllBackup,
+    exportAll: exportAll, importAllBackup: importAllBackup, exportCSV: exportCSV,
     toPrettyJSON: toPrettyJSON, downloadFile: downloadFile, importFromFile: importFromFile
   };
 })(typeof window !== 'undefined' ? window : globalThis);

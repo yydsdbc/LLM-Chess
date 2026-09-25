@@ -457,6 +457,10 @@ function shutdown() {
   setTimeout(function () { process.exit(0); }, 1500);
 }
 
+server.headersTimeout = 10000;   // 第55轮: 请求头超时 (防慢速攻击)
+server.requestTimeout = 300000;   // 第55轮: 整请求超时 (中继最长 180s + 缓冲)
+server.keepAliveTimeout = 5000;   // 第55轮: keep-alive 空闲超时
+
 const HOST = process.env.LLMCHESS_HOST || '127.0.0.1';   // v3.4: 默认仅本机可访问 (API Key 安全); 局域网访问设 LLMCHESS_HOST=0.0.0.0
 server.on('error', e => {   // v1.0.daily: 端口占用等启动错误给可操作提示, 不再裸抛堆栈
   if (e && e.code === 'EADDRINUSE') {

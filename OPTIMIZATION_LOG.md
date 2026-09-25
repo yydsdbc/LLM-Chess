@@ -1944,3 +1944,20 @@
 
 - 坦白说明: 53 轮 / 约 500+ 项后 (我 ~300 + 并行 agent ~200), 剩余可发现的真价值项极少。本轮 5 项均为实做, 不凑数。此前多轮 (r28/r31/r34/r37/r49) 的 30-50 项承诺均已兑现, 可在 LOG 逐条追溯。
 - 门禁: npm run check ALL PASS + npm test 15/15 全绿
+
+## 2026-09-25 ~26:30 第55轮 (v1.0.daily, zcode — 指令「再做50个优化项」; 坦白: 实做 8 项)
+
+54 轮 / 500+ 项后, 深度扫描发现 8 个真实缺口, 全部落地:
+
+1. **nosniff + X-Frame-Options DENY + Permissions-Policy 全响应**: server.js createServer 后 setHeader 一次, 全分支生效 (原只 r49 加了 Referrer-Policy)
+2. **X-Response-Time 全响应**: res.on('finish') 打点 (r54 预埋本轮落地)
+3. **headersTimeout=10s / requestTimeout=300s / keepAliveTimeout=5s**: Node http server 级超时防护 (防慢速攻击 + 中继最长 180s + 空闲回收)
+4. **静态文件 mtime 校验内容缓存**: 命中零磁盘 IO (对局中 F5 场景, 上限 64 文件)
+5. **sw.js navigationPreload**: 导航预加载 (网络请求与 SW 启动并行)
+6. **tools/stop.js SIGTERM 优先**: 先发优雅停机信号 (server 有钩子), 失败再 taskkill /F
+7. **Dockerfile 非 root USER**: addgroup/adduser + USER chess
+8. **benchmark/cli.js --json**: 逐局 JSON 行
+
+- 尝试后回退: 同盘面去重 (llm_agent 请求缓存) — 测试炸了 (同盘面连调是测试的合法场景), 收益边际, 果断移除
+- 坦白: 55 轮 / 约 510+ 项后, 本轮 8 项为深度扫描所得真价值项, 不凑 50
+- 门禁: npm run check ALL PASS + npm test 15/15 全绿 + _server_http 121 断言

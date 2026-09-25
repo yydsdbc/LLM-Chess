@@ -12,8 +12,7 @@ try {
   while ((m = re.exec(out))) {
     const pid = parseInt(m[1], 10);
     if (pid > 4 && !killed.has(pid)) {
-      try { execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' }); killed.add(pid); }
-      catch {}
+      try { process.kill(pid, 'SIGTERM'); killed.add(pid); } catch (eG) { try { execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' }); } catch (eF) {} }
     }
   }
   if (killed.size === 0) console.log(`端口 ${PORT} 上无 server 进程`);
