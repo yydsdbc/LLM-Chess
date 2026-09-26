@@ -87,6 +87,8 @@
     think_wait: '等待对局开始…',
     think_busy: '⚡ 思考中…',
     council_progress: '⚡ 会诊中 ({a}/{t} 已应答)…',
+    roundtable_proposal_progress: '🗣 圆桌提案 ({a}/{t} 已应答)…',
+    roundtable_final_progress: '🗳 圆桌终判 ({a}/{t} 已应答)…',
     sr_move: '第{n}手 {side} {cn}',
     sr_cursor_piece: '光标 {sq} {p}',   // 第41轮 a11y: 键盘走子光标播报 (原只有视觉描边, 读屏用户按方向键零反馈)
     sr_cursor_empty: '光标 {sq} 空格',
@@ -273,6 +275,8 @@
     think_wait: 'Waiting for the game to start…',
     think_busy: '⚡ Thinking…',
     council_progress: '⚡ Council ({a}/{t} answered)…',
+    roundtable_proposal_progress: '🗣 Roundtable proposals ({a}/{t} answered)…',
+    roundtable_final_progress: '🗳 Roundtable final vote ({a}/{t} answered)…',
     sr_move: 'Move {n} {side} {cn}',
     sr_cursor_piece: 'Cursor {sq} {p}',
     sr_cursor_empty: 'Cursor {sq} empty',

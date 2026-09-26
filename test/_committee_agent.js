@@ -4,7 +4,7 @@ const path = require('path');
 const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 for (const f of ['core/piece.js','core/move.js','core/board.js','core/rules.js','core/generator.js','core/judge.js','core/engine.js',
-  'evaluation/xiangqi_knowledge.js','evaluation/position.js','benchmark/elo.js','ai/llm_agent.js','ai/committee_agent.js']) {
+  'evaluation/xiangqi_knowledge.js','evaluation/position.js','benchmark/elo.js','benchmark/record.js','ai/llm_agent.js','ai/committee_agent.js']) {
   vm.runInThisContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), { filename: f });
 }
 const XQ = globalThis.XQ;
@@ -140,6 +140,19 @@ function resetStub(script) { callN = 0; scripted = script; }
   const cU = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['u1', 'u2'], mode: 'council' });
   const mvU = await cU.next(eng);
   ok((mvU.meta.summary || '').indexOf('2/2') >= 0, 'C10 全票标记 2/2 (得 ' + (mvU.meta.summary || '').slice(-16) + ')');
+  ok(mvU.meta.unanimity === true, 'C10b 共识元数据在渲染层可读');
+
+  // C10c 对局存档应保留委员会元数据, 以便恢复/回放看见真实票型与改选。
+  {
+    const rec = XQ.Record.blank();
+    const eRec = XQ.Engine.create();
+    const moveRec = { piece: { color: 'red', type: 'rook' }, from: XQ.Move.parseSq('h3'), to: XQ.Move.parseSq('e3'), captured: null };
+    XQ.Record.addMove(rec, eRec, moveRec, 250, { summary: 'roundtable', unanimity: false, committeeMode: 'roundtable', voterName: 'stub:r2',
+      votes: [{ model: 'stub:r1', from: 'd1', to: 'e2', conf: 0.7, weight: 1.1, changed: true, ok: true }] });
+    const savedVote = rec.moves[0].votes[0];
+    ok(rec.moves[0].committeeMode === 'roundtable' && rec.moves[0].unanimity === false && rec.moves[0].voterName === 'stub:r2', 'C10c 棋谱保留委员会模式/共识/胜出者');
+    ok(savedVote.from === 'd1' && savedVote.to === 'e2' && savedVote.changed && savedVote.weight === 1.1, 'C10c 棋谱保留完整着法/权重/改选标记');
+  }
 
   // C11 进度回调: answered 1→2→3   第31轮
   resetStub([{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.5 }, { f: 'h3', t: 'c3', c: 0.5 }]);
@@ -188,7 +201,19 @@ function resetStub(script) { callN = 0; scripted = script; }
     await cP2.next(eng);
     const lastP = progPayloads[progPayloads.length - 1];
     ok(lastP && lastP.voters && lastP.voters.length === 3 && lastP.voters.every(function (v) { return v.state === 'ok'; }), 'C15 进度 payload 含全体选民 ok 态');
-    ok(lastP && lastP.tally && lastP.tally.e3 === 2 && lastP.tally.g3 === 1, 'C15 实时票型 e3×2/g3×1');
+    ok(lastP && lastP.side === 'red', 'C15 进度 payload 含 side, 前端侧别守卫可通过');
+    ok(lastP && lastP.tally && lastP.tally['h3-e3'] === 2 && lastP.tally['h3-g3'] === 1, 'C15 实时票型按完整着法统计');
+  }
+
+  // C15b 不同棋子走向同一落点, 进度票型仍按完整 from-to 区分。
+  {
+    resetStub([{ f: 'd1', t: 'e2', c: 0.6 }, { f: 'f1', t: 'e2', c: 0.6 }]);
+    progPayloads = [];
+    const cSameDest = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['sd1', 'sd2'], mode: 'council', safetyCheck: 'off', onProgress: function (p) { progPayloads.push(p); } });
+    const mvSameDest = await cSameDest.next(XQ.Engine.create());
+    const finalP = progPayloads[progPayloads.length - 1];
+    ok(finalP && finalP.tally && finalP.tally['d1-e2'] === 1 && finalP.tally['f1-e2'] === 1, 'C15b 相同落点的不同起点不合并计票');
+    ok(mvSameDest.meta.unanimity === false && (mvSameDest.meta.summary || '').indexOf('1/2') >= 0, 'C15b 同落点异着不误报共识');
   }
 
   // C16 usage perVoter: 逐选民 token 分解   第32轮
@@ -296,6 +321,43 @@ function resetStub(script) { callN = 0; scripted = script; }
     ]);
     ok(resolved && mvFM && XQ.Move.sqName(mvFM.to) === 'e3', 'C23 fastMajority: 2/3 同选即提前出招 (挂起选民不阻塞)');
     globalThis.fetch = hangFetch;
+  }
+
+  // C24 圆桌第二阶段复用预算调度: 永久挂起的终判请求必须收到 abort, 且整手仍能收束。
+  {
+    const priorFetch = globalThis.fetch;
+    var finalAbortSeen = false;
+    var retryAfterBudgetAbort = false;
+    var phaseProgress = [];
+    globalThis.fetch = function (url, opts) {
+      const body = JSON.parse(opts.body);
+      const last = body.messages && body.messages[body.messages.length - 1];
+      const isFinal = last && String(last.content || '').indexOf('圆桌讨论') >= 0;
+      if (body.model === 'rtHang' && isFinal) {
+        return new Promise(function (resolve, reject) {
+          if (opts.signal && opts.signal.aborted) { finalAbortSeen = true; reject(new Error('aborted early')); return; }
+          opts.signal.addEventListener('abort', function () {
+            finalAbortSeen = true;
+            var abortErr = new Error('aborted by budget'); abortErr.name = 'AbortError'; reject(abortErr);
+          }, { once: true });
+        });
+      }
+      return priorFetch(url, opts);
+    };
+    resetStub([{ f: 'h3', t: 'e3', c: 0.6 }, { f: 'h3', t: 'e3', c: 0.6 }, { f: 'h3', t: 'g3', c: 0.8 }]);
+    const cRTBudget = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['rtHang', 'rtFast'], mode: 'roundtable', voterBudgetMs: 50, maxParallel: 2,
+      onProgress: function (p) { phaseProgress.push(p.phase); }, onRetry: function () { retryAfterBudgetAbort = true; } });
+    var raceTimer;
+    const budgetResult = await Promise.race([
+      cRTBudget.next(XQ.Engine.create()),
+      new Promise(function (resolve) { raceTimer = setTimeout(function () { resolve(null); }, 1200); })
+    ]);
+    clearTimeout(raceTimer);
+    globalThis.fetch = priorFetch;
+    ok(budgetResult && XQ.Move.sqName(budgetResult.to) === 'g3', 'C24 圆桌第二阶段单模型挂起时由其他选民完成决策');
+    ok(finalAbortSeen, 'C24 第二阶段预算到期会中止底层请求');
+    ok(!retryAfterBudgetAbort, 'C24 已取消的请求不会在整手结束后继续重试');
+    ok(phaseProgress.indexOf('proposal') >= 0 && phaseProgress.indexOf('final') >= 0, 'C24 进度明确区分提案与终判阶段');
   }
 
   console.log(failed ? '_committee_agent: ' + failed + ' FAIL' : '_committee_agent: ALL PASS');

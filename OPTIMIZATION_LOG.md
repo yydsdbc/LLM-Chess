@@ -2113,3 +2113,13 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 定向: `node --check ui/app.js` / `ui/i18n.js` PASS; `node test/check_ui.js` PASS; `node test/i18n_check.js` 15/15 组、323 键 PASS。
 - 浏览器: 1920×1080 主画面下方常驻控件收起; 操作区鼠标展开、观看回放关闭设置、退出回放焦点回齿轮均通过。360×640 卡片滚动/无横向溢出、summary Tab 到翻转按钮、Escape 关闭并归还焦点通过。
 - 最终完整门禁: `npm test` 15/15 PASS; `npm run check` ALL PASS (50 个 JS 文件语法、提示词与 dump 检查); `git diff --check` PASS。
+
+## 2026-09-26 15:22 第66轮 (codex — 完整测试后修复圆桌调度与直播票型)
+
+- 基线: 工作树干净, HEAD `fa16809`; `npm test` 15/15 PASS; `npm run check` ALL PASS。
+- 修复圆桌终判阶段绕过 askAll 的超时/取消/并发预算/进度/错误隔离问题, 两轮共享原调度器; 仅首轮成功选民进入终判; 预算到期中止在途模型并禁止该手继续重试, 同时清理未发车定时器。进度增加提案/终判阶段标签。
+- 修复委员会进度缺少 side 字段导致 app 侧别守卫丢弃所有进度; 实时票数统一以完整 from-to 计, 不同棋子同落点不合票; 保留逐选民请求耗时。
+- 修复 unanimity 在初始化前写入 meta 的顺序错误, 决策卡可读共识标记; 落谱调用传递并保存票型/改选/胜出者/模式元数据, 续局与回放可恢复并显示。
+- 回归: `_committee_agent` 增加共识元数据、落谱完整票型、progress side、同落点异起点票型与圆桌第二阶段永久挂起/abort/不重试/阶段进度覆盖。
+- 定向: 修改的 JS `node --check` PASS; `node test/_committee_agent.js` ALL PASS; `node test/check_ui.js` PASS; `node test/i18n_check.js` 15/15 组、325 键 PASS。
+- 最终完整门禁: `npm test` 15/15 PASS; `npm run check` ALL PASS (50 个 JS 文件语法、提示词与 dump 检查); `git diff --check` PASS。

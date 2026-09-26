@@ -314,7 +314,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       secs: secs,
       voterName: (meta && meta.voterName) || null,   // 第56轮: 多 LLM 胜出选民 → 决策卡 ✦ 标
       votes: (meta && meta.votes) || null,            // 第56轮: 投票明细 → 决策卡展示
-      committeeMode: (agents[side] && agents[side].models && agents[side].models.length > 1) ? (agents[side].agent && agents[side].agent._mode || 'council') : null   // 第56轮: 模式标记
+      unanimity: !!(meta && meta.unanimity),
+      committeeMode: (meta && meta.committeeMode) || (meta && meta.roundtable ? 'roundtable' : null) || ((agents[side] && agents[side].models && agents[side].models.length > 1) ? (agents[side].agent && agents[side].agent._mode || 'council') : null)   // 第56轮: 模式标记; 复盘优先使用棋谱记录
     };
     fbMark(entry, hasSummary, entry.reasoning);   // 第41轮: 兑底着法标旗 (无 summary 且无 confidence)
     if (!entry.fallback && !entry.summary) entry.summary = (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)');   // 纯展示兜底: 有 summary 缺失但置信度在 → 保留原「无摘要」占位
@@ -384,7 +385,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       }
     }
     if (currentRecord) {
-      XQ.Record.addMove(currentRecord, engine, m, secs * 1000);
+      XQ.Record.addMove(currentRecord, engine, m, secs * 1000, meta);
       if (engine.ply() % 5 === 0) XQ.Record.save(currentRecord);   // 第30轮: 进行中对局每 5 手自动存档 (崩溃/F5 可续)
       syncArchive();   // v1.0.daily: 有手可存 → 启用 存棋谱
       if (res.status.over) {
@@ -924,7 +925,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         var onProg = function (p) {   // 第31轮: 会诊进度实时上卡 (⚡ 思考中卡片文字替换)
           if (!aiBusy || p.side !== side) return;
           var dc = document.querySelector('#think-' + side + '-body .dcard.d-thinking');
-          if (dc) dc.textContent = XQ.I18N ? XQ.I18N.tArgs('council_progress', { a: p.answered, t: p.total }) : '⚡ 会诊中 (' + p.answered + '/' + p.total + ' 已应答)…';
+          var key = p.phase === 'proposal' ? 'roundtable_proposal_progress' : (p.phase === 'final' ? 'roundtable_final_progress' : 'council_progress');
+          var fallback = p.phase === 'proposal' ? '🗣 圆桌提案 (' : (p.phase === 'final' ? '🗳 圆桌终判 (' : '⚡ 会诊中 (');
+          if (dc) dc.textContent = XQ.I18N ? XQ.I18N.tArgs(key, { a: p.answered, t: p.total }) : fallback + p.answered + '/' + p.total + ' 已应答)…';
         };
         var agent, modelName, modelsOut = null;
         if (multiMode !== 'off') {
@@ -1244,7 +1247,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       // 故「无 summary 且无 confidence」即兑底手; 原实现无条件写 summary_none 占位 → 续局后兑底标记整体丢失)
       var entry2 = { n: m.n, name: (m.piece ? pg(m.side, m.piece) : '?') + '-' + m.from + '→' + m.to,
         summary: m.summary || '', plan: m.plan || '', evaluation: m.evaluation || '',
-        confidence: (typeof m.confidence === 'number') ? m.confidence : null, candidates: m.candidates || [], reasoning: '', secs: secs2 };
+        confidence: (typeof m.confidence === 'number') ? m.confidence : null, candidates: m.candidates || [], reasoning: '', secs: secs2,
+        voterName: m.voterName || null, votes: m.votes || null, unanimity: !!m.unanimity, committeeMode: m.committeeMode || null };
       fbMark(entry2, !!m.summary, '');
       if (!entry2.fallback && !entry2.summary) entry2.summary = (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)');
       decisionLog[sd].push(entry2);
@@ -2770,7 +2774,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           + '<tr style="color:#c4a56e"><th scope="col" style="' + vth + '">' + T('votes_model') + '</th><th scope="col" style="' + vth + '">' + T('votes_to') + '</th><th scope="col" style="' + vth + '">' + T('votes_conf') + '</th></tr>';
         e.votes.forEach(function (v) {
           html += v.ok
-            ? '<tr><td style="padding:2px 6px">' + esc2(v.model) + '</td><td style="padding:2px 6px;color:#f0d9a0">' + esc2(v.to) + '</td><td style="padding:2px 6px">' + (v.conf != null ? v.conf : '—') + '</td></tr>'
+            ? '<tr><td style="padding:2px 6px">' + esc2(v.model) + (v.changed ? ' ↩' : '') + '</td><td style="padding:2px 6px;color:#f0d9a0">' + (v.from ? esc2(v.from) + '→' : '') + esc2(v.to) + '</td><td style="padding:2px 6px">' + (v.conf != null ? v.conf : '—') + '</td></tr>'
             : '<tr><td style="padding:2px 6px">' + esc2(v.model) + '</td><td colspan="2" style="padding:2px 6px;color:#ff8a7a">' + T('votes_fail') + '</td></tr>';
         });
         html += '</table>';

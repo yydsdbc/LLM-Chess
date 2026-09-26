@@ -42,9 +42,14 @@
       }
       if (Array.isArray(meta.votes) && meta.votes.length) {   // 第34轮: 会诊投票明细入谱 (回放信息面板可展示)
         e.votes = meta.votes.slice(0, 8).map(function (v) {
-          return { model: String(v.model || '').slice(0, 40), to: String(v.to || '').slice(0, 6), conf: typeof v.conf === 'number' ? Math.round(v.conf * 100) / 100 : null, ok: v.ok !== false };
+          return { model: String(v.model || '').slice(0, 40), from: String(v.from || '').slice(0, 6), to: String(v.to || '').slice(0, 6),
+            conf: typeof v.conf === 'number' ? Math.round(v.conf * 100) / 100 : null, weight: typeof v.weight === 'number' ? Math.round(v.weight * 100) / 100 : null,
+            changed: v.changed === true, ok: v.ok !== false };
         });
       }
+      if (typeof meta.unanimity === 'boolean') e.unanimity = meta.unanimity;
+      if (['rotate', 'council', 'roundtable'].indexOf(meta.committeeMode) >= 0) e.committeeMode = meta.committeeMode;
+      if (meta.voterName) e.voterName = String(meta.voterName).slice(0, 40);
     }
     record.moves.push(e);
   }

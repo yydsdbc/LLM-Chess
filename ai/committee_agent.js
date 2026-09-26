@@ -44,6 +44,7 @@
       return Math.max(0.6, Math.min(1.4, w));
     }
     function confOf(mv) { return (mv.meta && typeof mv.meta.confidence === 'number') ? mv.meta.confidence : 0.5; }
+    function moveKey(mv) { return XQ.Move.sqName(mv.from) + '-' + XQ.Move.sqName(mv.to); }
 
     function usage() {
       var u = { total: 0, prompt: 0, cacheHit: 0, blocked: 0, attempts: 0, httpCalls: 0, perVoter: [] };
@@ -68,7 +69,7 @@
       if (!good.length) throw (rs[0] && rs[0].err) || new Error('committee: all voters failed');
       var tally = {};
       good.forEach(function (r) {
-        var sq = XQ.Move.sqName(r.mv.from) + '-' + XQ.Move.sqName(r.mv.to);   // 第61轮修复: 完整 from-to 作为 key (防同落点不同起点合票)
+        var sq = moveKey(r.mv);   // 第61轮修复: 完整 from-to 作为 key (防同落点不同起点合票)
         if (!tally[sq]) tally[sq] = { sq: sq, votes: 0, weight: 0, conf: 0, first: r };
         tally[sq].votes++;
         tally[sq].weight += weightOf(r.name);
@@ -86,12 +87,12 @@
       if (best.votes < minVotes) {
         var top = good[0];
         good.forEach(function (r) { if (confOf(r.mv) > confOf(top.mv)) top = r; });
-        if (top.name !== winName) { winName = top.name; winMv = top.mv; best = tally[XQ.Move.sqName(winMv.from) + '-' + XQ.Move.sqName(winMv.to)]; vetoNote = ' [minVotes ' + minVotes + ' 未达 → 改最高信心 ' + winName + ']'; }
+        if (top.name !== winName) { winName = top.name; winMv = top.mv; best = tally[moveKey(winMv)]; vetoNote = ' [minVotes ' + minVotes + ' 未达 → 改最高信心 ' + winName + ']'; }
       }
       if (opts.safetyCheck !== 'off' && XQ.LLMAgent && XQ.LLMAgent.evalMove2Static) {
         var uniq = {}, order = [];
         good.forEach(function (r) {
-          var k2 = XQ.Move.sqName(r.mv.from) + XQ.Move.sqName(r.mv.to);
+          var k2 = moveKey(r.mv);
           if (!uniq[k2]) { uniq[k2] = true; order.push(r); }
         });
         var bestS = null, winS = null, alt = null;
@@ -101,20 +102,21 @@
           if (r.name === winName) winS = sc;
         });
         if (winS != null && bestS != null && bestS - winS >= 3 && alt && alt.name !== winName) {
-          winName = alt.name; winMv = alt.mv; best = tally[XQ.Move.sqName(winMv.from) + '-' + XQ.Move.sqName(winMv.to)];
+          winName = alt.name; winMv = alt.mv; best = tally[moveKey(winMv)];
           vetoNote = ' [安全否决: 多数落点静态净损 ' + (bestS - winS).toFixed(1) + ' → 改静态最优 ' + winName + ']';
         }
       }
+      var unanimity = good.length > 1 && Object.keys(tally).length === 1;
       var mv = winMv;
       mv.meta = mv.meta || {};
       mv.meta.voterName = winName;
       mv.meta.votes = votes;
       mv.meta.unanimity = unanimity;
+      mv.meta.committeeMode = mode;
       mv.meta.roundtable = mode === 'roundtable';
       mv.meta.candidates = good.map(function (r) {
         return { move: XQ.Move.sqName(r.mv.from) + '-' + XQ.Move.sqName(r.mv.to) + (r.name === winName ? '*' : ''), score: confOf(r.mv).toFixed(2) };
       });
-      var unanimity = good.length > 1 && Object.keys(tally).length === 1;
       var emoji = unanimity ? '🤝' : (best.votes > good.length / 2 ? '✌' : '💥');
       var tag = ' [' + emoji + (mode === 'roundtable' ? ' 圆桌' : ' 会诊') + ' ' + best.votes + '/' + good.length + ']';
       if (mv.meta.summary) mv.meta.summary = mv.meta.summary + tag;
@@ -127,27 +129,37 @@
     }
 
     /* 并行问询 (错峰+分批), 每选民预算/进度/流缓冲; note 为圆桌注记 (第二轮传入) */
-    function askAll(engine, history, note) {
+    function askAll(engine, history, note, phase, eligibleIndexes) {
       var budget = typeof opts.voterBudgetMs === 'number' ? opts.voterBudgetMs : 60000;
       var maxP = typeof opts.maxParallel === 'number' && opts.maxParallel > 0 ? opts.maxParallel : agents.length;
+      var eligible = agents.map(function (_, idx) { return !eligibleIndexes || eligibleIndexes.indexOf(idx) >= 0; });
+      var activeCount = eligible.filter(Boolean).length;
+      var activeOrdinal = 0;
       var answered = 0;
       var votes = [];
       var t0 = Date.now();
-      var vstate = agents.map(function () { return 'pending'; });
+      var vstate = eligible.map(function (isActive) { return isActive ? 'pending' : 'fail'; });
       function liveTally() {
         var t = {};
-        votes.forEach(function (v) { if (v.ok) t[v.to] = Math.round(((t[v.to] || 0) + weightOf(v.model)) * 100) / 100; });
+        votes.forEach(function (v) { if (v.ok) { var k = v.from + '-' + v.to; t[k] = Math.round(((t[k] || 0) + weightOf(v.model)) * 100) / 100; } });
         return t;
       }
-      var resolvers = [];   // 第52轮: fastMajority 需跨闭包 resolve 未决选民
+      var settleFns = [];
+      var fastMajorityFired = false;
+      function abortAgent(a) { try { if (a.agent.abort) a.agent.abort(); } catch (eA) {} }
       var calls = agents.map(function (a, idx) {
-        var batch = Math.floor(idx / maxP);
+        if (!eligible[idx]) return Promise.resolve({ err: new Error('round1 failed'), name: a.name, index: idx });
+        var launchOrder = activeOrdinal++;
+        var batch = Math.floor(launchOrder / maxP);
         return new Promise(function (res) {
-          resolvers[idx] = res;
           var settled = false;
+          var launchTimer = null;
+          var budgetTimer = null;
           var done = function (v) {
             if (settled) return;
             settled = true;
+            if (launchTimer) clearTimeout(launchTimer);
+            if (budgetTimer) clearTimeout(budgetTimer);
             answered++;
             vstate[idx] = v.mv ? 'ok' : 'fail';
             votes.push(v.mv
@@ -155,12 +167,12 @@
               : { model: a.name, fail: String((v.err && v.err.message) || v.err || 'failed').slice(0, 60), ok: false });
             if (opts.onProgress) {
               try {
-                opts.onProgress({ answered: answered, total: agents.length, voter: a.name, ok: !!v.mv,
+                opts.onProgress({ side: side, answered: answered, total: activeCount, voter: a.name, ok: !!v.mv, phase: phase || null,
                   voters: agents.map(function (a2, j2) { return { name: a2.name, state: vstate[j2] }; }), tally: liveTally() });
               } catch (eP) {}
             }
             /* 第52轮: fastMajority — 领先票权重 > 全部未决权重之和 → 未决选民 abort+弃权 */
-            if (opts.fastMajority) {
+            if (opts.fastMajority && !fastMajorityFired) {
               var lt2 = liveTally();
               var lk = Object.keys(lt2);
               if (lk.length) {
@@ -168,24 +180,33 @@
                 var pendW = 0;
                 agents.forEach(function (a2, j2) { if (vstate[j2] === 'pending') pendW += weightOf(a2.name); });
                 if (leadW > pendW) {
+                  fastMajorityFired = true;
                   agents.forEach(function (a3, j3) {
                     if (vstate[j3] === 'pending') {
-                      vstate[j3] = 'fail';
-                      if (a3.agent.abort) a3.agent.abort();
-                      if (resolvers[j3]) resolvers[j3]({ err: new Error('fastMajority'), name: a3.name });
+                      abortAgent(a3);
+                      if (settleFns[j3]) settleFns[j3]({ err: new Error('fastMajority'), name: a3.name });
                     }
                   });
                 }
               }
             }
-            res(v);
+            res({ mv: v.mv, err: v.err, name: v.name || a.name, index: idx, timeout: !!v.timeout, ms: Date.now() - t0 });
           };
-          setTimeout(function () {
-            if (budget > 0) setTimeout(function () { done({ err: new Error('voter budget ' + budget + 'ms exceeded'), name: a.name, timeout: true }); }, budget);
-            a.agent.next(engine, history, note)
-              .then(function (mv) { done({ mv: mv, name: a.name }); })
-              .catch(function (err) { done({ err: err, name: a.name }); });
-          }, batch * 300 + (idx % maxP) * 60);
+          settleFns[idx] = done;
+          launchTimer = setTimeout(function () {
+            launchTimer = null;
+            if (settled) return;
+            if (budget > 0) budgetTimer = setTimeout(function () {
+              abortAgent(a);
+              done({ err: new Error('voter budget ' + budget + 'ms exceeded'), name: a.name, timeout: true });
+            }, budget);
+            var voterNote = typeof note === 'function' ? note(a, idx) : note;
+            try {
+              Promise.resolve(a.agent.next(engine, history, voterNote))
+                .then(function (mv) { done({ mv: mv, name: a.name }); })
+                .catch(function (err) { done({ err: err, name: a.name }); });
+            } catch (err) { done({ err: err, name: a.name }); }
+          }, batch * 300 + (launchOrder % maxP) * 60);
         });
       });
       return Promise.all(calls);
@@ -213,37 +234,31 @@
         });
       }
       /* council / roundtable 共用问询; roundtable 两阶段 (提案→互看→终判) */
-      var master = askAll(engine, history, null);
+      var master = askAll(engine, history, null, mode === 'roundtable' ? 'proposal' : null);
       if (mode === 'roundtable') {
         master = master.then(function (rs1) {
           var good1 = rs1.filter(function (r) { return r.mv; });
           if (!good1.length) throw (rs1[0] && rs1[0].err) || new Error('committee: all voters failed (round 1)');
           var round1Map = {};   // 第63轮: 记录一轮提案 (改选检测用)
-          good1.forEach(function (r) { round1Map[r.name] = XQ.Move.sqName(r.mv.from) + '-' + XQ.Move.sqName(r.mv.to); });
-          var calls2 = agents.map(function (a, idx) {
-            var self = null;
-            good1.forEach(function (r) { if (r.name === a.name) self = r; });
-            if (!self) return Promise.resolve({ err: new Error('round1 failed'), name: a.name });   // 一轮失败选民弃权
+          good1.forEach(function (r) { round1Map[r.index] = moveKey(r.mv); });
+          var eligible2 = good1.map(function (r) { return r.index; });
+          var calls2 = askAll(engine, history, function (a, idx) {
+            if (eligible2.indexOf(idx) < 0) return null;
             var peers = good1.filter(function (r) { return r.name !== a.name; }).map(function (r) {
               return r.name + ' 建议 ' + XQ.Move.sqName(r.mv.from) + '-' + XQ.Move.sqName(r.mv.to) + ((r.mv.meta && r.mv.meta.summary) ? ' (' + r.mv.meta.summary + ')' : '');
             });
-            var note = '## 圆桌讨论: 同侪建议 — ' + (peers.length ? peers.join('; ') : '(无)') + ' — 互看后独立终判: 可坚持原选或改选, 勿盲从多数, 以局面与合法列表为准, 仍需给出完整 JSON。';
-            return new Promise(function (res) {
-              setTimeout(function () {
-                a.agent.next(engine, history, note)
-                  .then(function (mv) {
-                    mv.meta = mv.meta || {};
-                    mv.meta.voterName = a.name;
-                    mv.meta.reasoning = '[圆桌 ' + a.name + '] ' + (mv.meta.reasoning || '');
-                    var finalSq = XQ.Move.sqName(mv.from) + '-' + XQ.Move.sqName(mv.to);
-                    mv.meta.changed = round1Map[a.name] !== finalSq;   // 第63轮: 改选标记 (娱乐性: 看到同侪建议后改变主意)
-                    res({ mv: mv, name: a.name });
-                  })
-                  .catch(function (err) { res({ err: err, name: a.name }); });
-              }, idx * 300);
+            return '## 圆桌讨论: 同侪建议 — ' + (peers.length ? peers.join('; ') : '(无)') + ' — 互看后独立终判: 可坚持原选或改选, 勿盲从多数, 以局面与合法列表为准, 仍需给出完整 JSON。';
+          }, 'final', eligible2).then(function (rs2) {
+            rs2.forEach(function (r) {
+              if (!r.mv) return;
+              r.mv.meta = r.mv.meta || {};
+              r.mv.meta.voterName = r.name;
+              r.mv.meta.reasoning = '[圆桌 ' + r.name + '] ' + (r.mv.meta.reasoning || '');
+              r.mv.meta.changed = round1Map[r.index] !== moveKey(r.mv);   // 第63轮: 改选标记 (娱乐性: 看到同侪建议后改变主意)
             });
+            return rs2;
           });
-          return Promise.all(calls2);
+          return calls2;
         });
       }
       return master.then(function (rs) { return finalize(rs, engine); });

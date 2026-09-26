@@ -683,6 +683,8 @@ function create(opts) {
       kind: 'llm',
       next: function (engine, history, roundtableNote) {   // 第50轮: 第三参圆桌讨论注记 (committee 互看同侪建议用)
         if (!model) return Promise.reject(new Error('模型名为空 — 请在设置中填写模型名'));   // 第38轮: 空模型早退 (免一次必然 400 的中继往返)
+        var callState = { cancelled: false };
+        _liveCtrlRef.state = callState;
         var attempt = 0, lastBad = null;
         var rejectedMoves = [];   // 第60轮: 已被系统拒的着法 (重试时避免重复建议)
         var lastMv = null;   // 第60轮: 最近一次解析出的着法 (跨 then/catch 作用域)
@@ -782,6 +784,7 @@ function create(opts) {
           }).catch(function (err) {
             var msg = String(err && err.message || err);
             var _extAbort = typeof opts.signal === 'function' ? opts.signal() : opts.signal;   // 第39轮: 取值函数形态同 chat
+            if (callState.cancelled) throw err;   // 委员会预算/快速多数已取消本手, 内部 abort 不得触发下一轮重试
             if (_extAbort && _extAbort.aborted) throw err;   // v3.9a: 外部中止 — 调用方已放弃, 立即上抛不烧重试
             if (/开局保护|送吃守卫/.test(msg)) usage.blocked = (usage.blocked || 0) + 1;   // v2.9: 代码级拦截计数 (match_headless 统计行用)
             // 强制思考型模型: 摘掉 thinking 字段重试 (400 REASONING_REQUIRED)
@@ -811,7 +814,10 @@ function create(opts) {
         return loop();
       },
       usage: function () { return usage; },
-      abort: function () { if (_liveCtrlRef.ctrl) { try { _liveCtrlRef.ctrl.abort(); } catch (eA) {} } },   // 第49轮: 中止在飞请求 (委员会快速多数决用)
+      abort: function () {
+        if (_liveCtrlRef.state) _liveCtrlRef.state.cancelled = true;
+        if (_liveCtrlRef.ctrl) { try { _liveCtrlRef.ctrl.abort(); } catch (eA) {} }
+      },   // 第49轮: 中止在飞请求并阻止该手重试 (委员会预算/快速多数用)
       reset: function () { convo.length = 0; },
       /** v2.2 送吃守卫诊断口 (测试/分析用): null=安全, 字符串=拦截原因 */
       guardCheck: function (eng, fromSq, toSq) {
