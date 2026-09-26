@@ -696,14 +696,14 @@
         var isWin = String(c.move || '').indexOf('*') >= 0;   // 第32轮: 会诊胜出候选金色
         var mm = /^([a-i](?:10|[1-9]))-([a-i](?:10|[1-9]))/.exec(String(c.move || ''));
         var attrs = mm ? ' data-from="' + mm[1] + '" data-to="' + mm[2] + '"' : '';   // 第36轮: 悬停高亮定位
-        return '<span class="d-cand' + (isWin ? ' d-cand-win' : '') + '"' + attrs + '>' + esc(c.move) + (c.score ? ' <b>' + esc(c.score) + '</b>' : '') + '</span>';
+        return '<span class="d-cand' + (isWin ? ' d-cand-win' : '') + '"' + attrs + '>' + esc(c.move) + (c.score ? ' <b>' + esc(c.score) + '</b>' : '') + (c.changed ? ' <span class="d-changed">↩</span>' : '') + '</span>';
       }).join('');
       var hasReason = !!e.reasoning;
       /* 第56轮: 娱乐性 — 会诊投票明细表 (e.votes 存在且 >1 选民) */
       var voteTable = '';
       if (e.votes && e.votes.length > 1) {
         voteTable = '<div class="d-votes">' + e.votes.map(function (v) {
-          if (v.ok) return '<span class="d-vote-ok">' + esc(String(v.model || '').split(':').pop()) + '→' + esc(v.to) + '</span>';
+          if (v.ok) return '<span class="d-vote-ok">' + esc(String(v.model || '').split(':').pop()) + '→' + esc(v.to) + (v.changed ? ' ↩' : '') + '</span>';
           return '<span class="d-vote-fail">' + esc(String(v.model || '').split(':').pop()) + ' ✗</span>';
         }).join(' ') + '</div>';
       }
@@ -712,7 +712,8 @@
       var sumTxt = e.fallback ? T('fb_summary') : (e.summary === '兑底·安全着法' ? T('fb_summary') : e.summary);   // 兼容仍有中文标记串的旧内存数据
       return '<div class="dcard">'
         + '<div class="d-head"><span class="d-move">#' + e.n + ' ' + esc(e.name) + '</span>'
-        + (e.voterName ? '<span class="d-voter" title="' + esc(e.voterName) + '">✦' + esc(String(e.voterName).split(':').pop()) + '</span>' : '')   // 第56轮: 胜出选民
+        + (e.voterName ? '<span class="d-voter" title="' + esc(e.voterName) + '">✦' + esc(String(e.voterName).split(':').pop()) + '</span>' : '')
+        + (e.unanimity ? '<span class="d-consensus">🤝</span>' : (e.votes && e.votes.length > 1 ? '<span class="d-split">⚡</span>' : ''))   // 第63轮: 共识/分裂
         + (e.committeeMode === 'roundtable' ? '<span class="d-rtable">🗣</span>' : '')   // 第56轮: 圆桌标记   // 第32轮: 胜出选民
         + (e.evaluation ? '<span class="d-eval">' + esc(e.evaluation) + '</span>' : '')
         + (hasReason ? '<button class="d-toggle" data-ply="' + e.n + '" aria-label="' + esc(T('d_reason_toggle')) + '" aria-expanded="false">💭</button>' : '')   // 第42轮 i18n/a11y: 原 aria-label 硬编码英文 'reasoning' — 中文界面读屏播报英文词

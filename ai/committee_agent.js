@@ -62,7 +62,7 @@
       var good = rs.filter(function (r) { return r.mv; });
       var votes = rs.map(function (r) {
         return r.mv
-          ? { model: r.name, from: XQ.Move.sqName(r.mv.from), to: XQ.Move.sqName(r.mv.to), conf: confOf(r.mv), ms: r.ms || 0, ok: true, weight: weightOf(r.name) }
+          ? { model: r.name, from: XQ.Move.sqName(r.mv.from), to: XQ.Move.sqName(r.mv.to), conf: confOf(r.mv), ms: r.ms || 0, ok: true, weight: weightOf(r.name), changed: !!r.mv.meta.changed }
           : { model: r.name, fail: String((r.err && r.err.message) || r.err || 'failed').slice(0, 60), ok: false };
       });
       if (!good.length) throw (rs[0] && rs[0].err) || new Error('committee: all voters failed');
@@ -109,11 +109,14 @@
       mv.meta = mv.meta || {};
       mv.meta.voterName = winName;
       mv.meta.votes = votes;
+      mv.meta.unanimity = unanimity;
+      mv.meta.roundtable = mode === 'roundtable';
       mv.meta.candidates = good.map(function (r) {
         return { move: XQ.Move.sqName(r.mv.from) + '-' + XQ.Move.sqName(r.mv.to) + (r.name === winName ? '*' : ''), score: confOf(r.mv).toFixed(2) };
       });
       var unanimity = good.length > 1 && Object.keys(tally).length === 1;
-      var tag = unanimity ? ' [会诊 全票 ' + good.length + ']' : ' [会诊 ' + best.votes + '/' + good.length + ']';
+      var emoji = unanimity ? '🤝' : (best.votes > good.length / 2 ? '✌' : '💥');
+      var tag = ' [' + emoji + (mode === 'roundtable' ? ' 圆桌' : ' 会诊') + ' ' + best.votes + '/' + good.length + ']';
       if (mv.meta.summary) mv.meta.summary = mv.meta.summary + tag;
       else mv.meta.summary = '会诊 ' + best.votes + '/' + good.length + ' 同侪同选 ' + best.sq + tag;
       mv.meta.reasoning = '同侪会诊 ' + good.length + '/' + agents.length + ' 应答: '
@@ -215,6 +218,8 @@
         master = master.then(function (rs1) {
           var good1 = rs1.filter(function (r) { return r.mv; });
           if (!good1.length) throw (rs1[0] && rs1[0].err) || new Error('committee: all voters failed (round 1)');
+          var round1Map = {};   // 第63轮: 记录一轮提案 (改选检测用)
+          good1.forEach(function (r) { round1Map[r.name] = XQ.Move.sqName(r.mv.from) + '-' + XQ.Move.sqName(r.mv.to); });
           var calls2 = agents.map(function (a, idx) {
             var self = null;
             good1.forEach(function (r) { if (r.name === a.name) self = r; });
@@ -228,8 +233,10 @@
                 a.agent.next(engine, history, note)
                   .then(function (mv) {
                     mv.meta = mv.meta || {};
-                    mv.meta.voterName = a.name;   // 第53轮: 圆桌二轮也标 voterName
-                    mv.meta.reasoning = '[圆桌 ' + a.name + '] ' + (mv.meta.reasoning || '');   // 第53轮: 圆桌二轮标记
+                    mv.meta.voterName = a.name;
+                    mv.meta.reasoning = '[圆桌 ' + a.name + '] ' + (mv.meta.reasoning || '');
+                    var finalSq = XQ.Move.sqName(mv.from) + '-' + XQ.Move.sqName(mv.to);
+                    mv.meta.changed = round1Map[a.name] !== finalSq;   // 第63轮: 改选标记 (娱乐性: 看到同侪建议后改变主意)
                     res({ mv: mv, name: a.name });
                   })
                   .catch(function (err) { res({ err: err, name: a.name }); });

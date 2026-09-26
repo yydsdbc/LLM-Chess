@@ -2067,3 +2067,28 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 
 - 门禁: npm run check ALL PASS + npm test 15/15 全绿 + check_ui 22 节全过 + _server_http 121 断言全过
 - 教训: 多 agent 并行时, 安全头/路由修改是最常被覆盖的区域 — 因为 server.js 是最热门的编辑目标; 未来考虑拆分为 server-security.js 模块减少冲突面
+
+## 2026-09-26 ~01:20 第62-63轮 (v1.0.daily, zcode — 指令「继续优化」+「优化可读性+娱乐性」合并)
+
+聚焦多 LLM 娱乐性与可读性, 12 项 (r62+r63):
+
+【娱乐性 (1-5)】
+1. **共识/分裂 emoji**: 决策卡头部 🤝 (全票同选) / ⚡ (有分歧) — 观战者一眼判断委员会是否达成共识
+2. **改选标记 ↩**: 圆桌模式二轮应答与一轮提案不同时, 投票 chip 加 ↩ 标 (金色, title=changed) — 观战者看到模型被同侪说服改变主意的戏剧性时刻
+3. **投票 chip 加 weight 标记**: 圆桌改选的选民额外标注
+4. **committee meta 补 unanimity/roundtable**: 传递到决策卡数据层 (渲染层按此选择 emoji)
+5. **圆桌二轮 reasoning tag**: [圆桌 model] 前缀与轮换 [轮换 model] 对齐
+
+【可读性 (6-9)】
+6. **投票 chip 改选标记**: 投票明细表中 changed 选民加 ↩ 后缀
+7. **逐手备注 📝**: 双击走法列表条目添加备注, 行首绿 📝 标记
+8. **rpPaintMoveList noteMark 注入修复**: r57 首轮锚点漂移导致注入失败, 本轮修正
+9. **I9 守护抓出 3 处 CJK tooltip 漏挂**: 互看后改选/全体同选/有分歧 — 去除硬编码中文 (emoji 自解释)
+
+【基础 (10-12)】
+10. sw navigationPreload 恢复 (再次被并行覆盖)
+11. server X-Response-Time 恢复 (同上)
+12. match_headless LLMC_SEED + stop SIGTERM 确认在案
+
+- I9 教训: emoji 是语言中立的娱乐元素, 配套 tooltip 不应用硬编码 CJK — 要么走 i18n 要么用 emoji 自解释
+- 门禁: npm run check ALL PASS + npm test 15/15 全绿 + i18n_check 15/15 组 322 键

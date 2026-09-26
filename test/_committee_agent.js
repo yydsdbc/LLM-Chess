@@ -67,7 +67,7 @@ function resetStub(script) { callN = 0; scripted = script; }
   ok(XQ.Move.sqName(mv1.to) === 'e3', 'C1 会诊 2/3 胜出落点 e3 (得 ' + XQ.Move.sqName(mv1.to) + ')');
   ok(mv1.meta && mv1.meta.candidates && mv1.meta.candidates.length === 3, 'C1 候选含全体选民 (3)');
   ok(mv1.meta.candidates.some(function (c) { return c.move.indexOf('*') >= 0; }), 'C1 胜出选民带 * 标记');
-  ok((mv1.meta.summary || '').indexOf('[会诊 2/3]') >= 0, 'C1 摘要带 [会诊 2/3] 标记');
+  ok((mv1.meta.summary || '').indexOf('2/3') >= 0, 'C1 摘要带投票标记 2/3 (含 emoji 前缀)');
   ok((mv1.meta.reasoning || '').indexOf('同侪会诊') === 0, 'C1 reasoning 记录投票明细');
 
   // C2 平票决胜: 1/1/1 各一票 → 比信心和 (g3 0.95 最高)
@@ -139,7 +139,7 @@ function resetStub(script) { callN = 0; scripted = script; }
   resetStub([{ f: 'h3', t: 'e3', c: 0.8 }, { f: 'h3', t: 'e3', c: 0.7 }]);
   const cU = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['u1', 'u2'], mode: 'council' });
   const mvU = await cU.next(eng);
-  ok((mvU.meta.summary || '').indexOf('[会诊 全票 2]') >= 0, 'C10 全票标记 (得 ' + (mvU.meta.summary || '').slice(-12) + ')');
+  ok((mvU.meta.summary || '').indexOf('2/2') >= 0, 'C10 全票标记 2/2 (得 ' + (mvU.meta.summary || '').slice(-16) + ')');
 
   // C11 进度回调: answered 1→2→3   第31轮
   resetStub([{ f: 'h3', t: 'e3', c: 0.5 }, { f: 'h3', t: 'g3', c: 0.5 }, { f: 'h3', t: 'c3', c: 0.5 }]);
