@@ -278,20 +278,25 @@
         c.classList.toggle('last-start', !!(snap.lastMove && x === snap.lastMove.from.x && y === snap.lastMove.from.y));
         c.classList.toggle('last-move', !!(snap.lastMove && x === snap.lastMove.to.x && y === snap.lastMove.to.y));
         c.classList.toggle('in-check', !overNow && !!p && p.type === 'king' && p.color === snap.turn && engine.inCheck(snap.turn));
-        if (!c._clickBound) {   // 第24轮: 池化后 onclick 只绑一次 (原每帧重建 90 个闭包; 坐标恒定, 重复绑定是纯浪费)
+        if (!c._clickBound) {   // 第24轮: 池化后只绑定一次; 闭包保存稳定显示坐标, 输入时再读取当前视角映射盘面坐标
           c._clickBound = true;
-          (function (rx, ry) {
-            c.onclick = function () { if (Date.now() < _suppressUntil) return; view.onCellClick(rx, ry); };   // 第33轮: 拖拽松手后抑制合成 click
+          (function (dx, dy) {
+            c.onclick = function () {
+              if (Date.now() < _suppressUntil) return;
+              var rx = view.flip ? 8 - dx : dx, ry = view.flip ? 9 - dy : dy;
+              view.onCellClick(rx, ry);
+            };   // 第33轮: 拖拽松手后抑制合成 click
             /* 第33轮: pointerdown 拖拽走子入口 (有己方棋子才可拖; 终局/AI 思考中/复盘栈中由 onCellClick 语义兜底) */
             c.addEventListener('pointerdown', function (ev) {
               if (ev.button !== 0 && ev.pointerType === 'mouse') return;
               var engLive = view._liveEngine;
               if (!engLive || engLive.isOver() || view.aiThinking || _drag || view.dragEnabled === false) return;   // 第34轮: 拖拽开关
+              var rx = view.flip ? 8 - dx : dx, ry = view.flip ? 9 - dy : dy;
               var pd = engLive.pieceAt(rx, ry);
               if (!pd || pd.color !== engLive.turn()) return;
               startDrag(rx, ry, engLive.pieceAt(rx, ry) && c.querySelector('.piece'), ev, view);
             });
-          })(x, y);
+          })(dx0, dy0);
         }
       }
     }

@@ -151,7 +151,16 @@ function mkEl(tag) {
     setAttribute: function (k, v) { this._attrs[k] = v; if (k === 'id') { this.id = v; } },
     getAttribute: function (k) { return this._attrs[k]; },
     removeAttribute: function (k) { delete this._attrs[k]; },   // 第48轮: 横幅角色随态增删需要它 (桩此前只实现了 setAttribute)
-    addEventListener: function () {}, removeEventListener: function () {},
+    addEventListener: function (type, fn) {
+      this._listeners = this._listeners || {};
+      (this._listeners[type] || (this._listeners[type] = [])).push(fn);
+    },
+    removeEventListener: function (type, fn) {
+      var listeners = this._listeners && this._listeners[type];
+      if (!listeners) return;
+      var index = listeners.indexOf(fn);
+      if (index >= 0) listeners.splice(index, 1);
+    },
     contains: function (c) { return c === this || this.children.indexOf(c) >= 0; },
     querySelector: function () { return null; }, querySelectorAll: function () { return []; }
   };
@@ -176,7 +185,16 @@ sandbox.document = {
   getElementById: function (id) { return DOC_MAP[id] || null; },
   querySelector: function () { return null; },
   querySelectorAll: function () { return []; },
-  addEventListener: function () {},
+  addEventListener: function (type, fn) {
+    this._listeners = this._listeners || {};
+    (this._listeners[type] || (this._listeners[type] = [])).push(fn);
+  },
+  removeEventListener: function (type, fn) {
+    var listeners = this._listeners && this._listeners[type];
+    if (!listeners) return;
+    var index = listeners.indexOf(fn);
+    if (index >= 0) listeners.splice(index, 1);
+  },
   body: mkEl('body'),
   documentElement: { dataset: {} }
 };
@@ -434,6 +452,8 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
   l19Round47();               // 第47轮: snapshot memo 的行为 (同版本复用 / 走子换代 / undo 不吃旧盘面)
 }).then(function () {
   return l20Round48();        // 第48轮: 引擎统计两路径一致 + 悔棋精确还原 + sw activate 只清自身前缀
+}).then(function () {
+  l21Round64();               // 第64轮: 池化棋盘翻转后 click / 拖拽仍按当前视角映射
 }).then(function () {
   // L9 PGN 导入 (第36轮新增解析器的守护): 标签/多标签/着法/非法报错
 var pgnOk = ['[Event "x"]', '[Red "红"] [RedModel "glm-a"]', '[Black "黑"] [BlackModel "glm-c"]', '[Result "1-0"]', '', '1. h3-e3 b10-c8 2. b3-c3'].join(String.fromCharCode(10));
@@ -969,4 +989,67 @@ function l20Round48() {
     ok(deleted.indexOf('other-app-cache') < 0 && deleted.indexOf('workbox-precache-v2') < 0,
       'L20 sw activate 不动同源其他应用的缓存 (旧判据「名字不等于当前 CACHE 就删」会把它们一并清掉)');
   });
+}
+
+/* ═══ L21 第64轮: 棋盘翻转后的池化格输入坐标 ═══
+   格子 DOM 节点按显示坐标复用, 但首帧处理器捕获了盘面坐标。翻转后棋子被重排到另一格,
+   旧处理器却仍把点击和拖拽起点送给原盘面格, 使显示位置与实际操作对象分离。 */
+function l21Round64() {
+  var base = XQ.Engine.create();
+  var engine = {
+    snapshot: function () { return base.snapshot(); },
+    isOver: function () { return base.isOver(); },
+    legalTargets: function (x, y) { return base.legalTargets(x, y); },
+    dangerTargets: function (x, y) { return base.dangerTargets(x, y); },
+    inCheck: function (color) { return base.inCheck(color); },
+    naturalClock: function () { return base.naturalClock(); },
+    result: function () { return base.result(); },
+    pieceAt: function (x, y) { return base.pieceAt(x, y); },
+    turn: function () { return base.turn(); }
+  };
+  var clicked = null;
+  var view = {
+    boardEl: mkEl('div'), selected: null, flip: false, pendingAnim: null,
+    startTime: Date.now(), arrow: true,
+    onCellClick: function (x, y) { clicked = [x, y]; }
+  };
+  view.boardEl.parentNode = mkEl('div');
+  sandbox.XQ.UI.render(engine, view);
+  var topLeft = view.boardEl.children[0];
+
+  view.flip = true;
+  sandbox.XQ.UI.render(engine, view);
+  topLeft.onclick();
+  ok(clicked && clicked[0] === 8 && clicked[1] === 9,
+    'L21 翻转后复用的左上显示格点击映射到当前盘面右下格 (8,9)');
+
+  clicked = null;
+  view.flip = false;
+  sandbox.XQ.UI.render(engine, view);
+  topLeft.onclick();
+  ok(clicked && clicked[0] === 0 && clicked[1] === 0,
+    'L21 翻回后同一池化显示格重新映射到盘面左上格 (0,0)');
+
+  view.flip = true;
+  sandbox.XQ.UI.render(engine, view);
+  // L12 为事件派发测试把 document.addEventListener 换成了 no-op; 此处临时记录拖拽生命周期监听。
+  var docListeners = {};
+  var realDocAdd = sandbox.document.addEventListener;
+  var realDocRemove = sandbox.document.removeEventListener;
+  sandbox.document.addEventListener = function (type, fn) {
+    (docListeners[type] || (docListeners[type] = [])).push(fn);
+  };
+  sandbox.document.removeEventListener = function (type, fn) {
+    var listeners = docListeners[type] || [], index = listeners.indexOf(fn);
+    if (index >= 0) listeners.splice(index, 1);
+  };
+  var pointerDown = topLeft._listeners && topLeft._listeners.pointerdown && topLeft._listeners.pointerdown[0];
+  if (pointerDown) pointerDown({ button: 0, pointerType: 'mouse', clientX: 20, clientY: 30 });
+  var dragStarted = !!(docListeners.pointerup && docListeners.pointerup.length);
+  ok(dragStarted, 'L21 翻转后显示格上的红方棋子仍能启动拖拽 (起点按当前视角映射)');
+  if (docListeners.pointercancel && docListeners.pointercancel.length) {
+    docListeners.pointercancel[docListeners.pointercancel.length - 1]();
+  }
+  sandbox.document.addEventListener = realDocAdd;
+  sandbox.document.removeEventListener = realDocRemove;
 }
