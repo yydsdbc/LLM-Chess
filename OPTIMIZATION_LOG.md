@@ -2141,3 +2141,13 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 回归: 普通静态响应耗时头格式、延迟 Anthropic SSE 耗时值，以及跨 1000 个可信代理客户端地址后旧限流桶确实被淘汰。
 - 定向: `node --check server.js` / `node --check test/_server_http.js` PASS; `node test/check_ui.js` PASS; `node test/_server_http.js` 128/128 PASS。
 - 完整门禁: `npm test` 15/15 PASS; `npm run check` 50 个 JS 语法、提示词与 dump 新鲜度检查 ALL PASS。
+
+## 2026-09-26 16:37 第69轮 (codex — 优化回放导航并增强脏棋谱容错)
+
+- 回放向后跳转改为对差量逐手 `undoPly`, 不再从开局重建; 保留目标手之前的风险/将杀点评缓存、隐藏目标之后的标注, 并删除失效的全量重建函数。逐手回退后再前进会复用当前缓存。
+- 非法坐标统一解析与拒绝: 坏坐标在 goto/next/风险补算路径中记为跳过, 不再访问 null 坐标导致回放异常; `goto(NaN/Infinity)` 均保持原位。
+- 回归覆盖引擎实例复用、风险缓存复用、前进/回退盘面一致、非有限跳转、格式错误坐标三条处理路径; 修正 undo 回归原先误操作另一测试会话的问题。
+- 基线: 工作树干净, HEAD `ba73db9`, 第68轮为最新; `node test/_replay_edge.js` 与 `node test/replay_smoke.js` 均通过。
+- 定向: `node --check replay/replay.js` / `node --check test/_replay_edge.js` PASS; `_replay_edge` 与 `replay_smoke` ALL PASS。
+- 追加验证: `node test/replay_risk_check.js` ALL PASS (包含 goto/prev 后风险/将杀 memo 的既有行为守卫)。
+- 完整门禁: `npm test` 15/15 PASS; `npm run check` 50 个 JS 语法、提示词与 dump 新鲜度检查 ALL PASS。

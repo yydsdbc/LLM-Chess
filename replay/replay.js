@@ -120,24 +120,23 @@ function parseEval(s) {
     var risks = {};     // {手号: 静态风险分} — v1.7.6 疑误着法标注
     var marks = {};     // {手号: '将'|'杀'|'困'} — v1.7.9 一步效果标注
 
-    function rebuild(n) {
-      eng = XQ.Engine.create({ ruleEnforce: false });   // v2.2: 同上, 重建也关规则强制
-      skipped = {};
-      applied = [];
-      risks = {};
-      marks = {};
-      for (var i = 0; i < n; i++) {
-        applyPly(i);
-      }
+    function parseMoveCoords(m) {
+      if (!m || typeof m.from !== 'string' || typeof m.to !== 'string') return null;
+      var f = XQ.Move.parseSq(m.from), t = XQ.Move.parseSq(m.to);
+      return f && t ? { from: f, to: t } : null;
     }
 
     /* 第37轮: 单手应用 + 风险懒计算 — goto 前向/后向 O(delta), 长局拖拽不再每次全量重放;
        风险仍在首次访问某手时计算并 memo (risks/arks 结构不变, 调用方零适配) */
     function applyPly(i) {
       var m = moves[i];
-      if (!m || !m.from || !m.to) { skipped[i + 1] = 'missing_coord'; applied[i] = false; return false; }
-      var f = XQ.Move.parseSq(m.from), t = XQ.Move.parseSq(m.to);
-      var res = eng.applyPlayerMove(f.x, f.y, t.x, t.y);
+      var coords = parseMoveCoords(m);
+      if (!coords) {
+        skipped[i + 1] = !m || !m.from || !m.to ? 'missing_coord' : 'invalid_coord';
+        applied[i] = false;
+        return false;
+      }
+      var res = eng.applyPlayerMove(coords.from.x, coords.from.y, coords.to.x, coords.to.y);
       applied[i] = !!res.ok;
       if (!res.ok) skipped[i + 1] = res.reason || 'illegal';
       return !!res.ok;
@@ -147,8 +146,14 @@ function parseEval(s) {
         for (var i = idx; i < n; i++) applyPly(i);
         idx = n;
       } else if (n < idx) {
+        for (var j = idx - 1; j >= n; j--) {
+          if (applied[j]) eng.undoPly();
+          applied[j] = false;
+          delete skipped[j + 1];
+          delete risks[j + 1];
+          delete marks[j + 1];
+        }
         idx = n;
-        rebuild(n);
       }
     }
     /* 第44轮修复: 懒补齐必须把引擎定位到「该手走**之前**」的局面。
@@ -166,9 +171,9 @@ function parseEval(s) {
       if (!scratch || scratchIdx > ply - 1) { scratch = XQ.Engine.create({ ruleEnforce: false }); scratchIdx = 0; }
       while (scratchIdx < ply - 1) {
         var mm = moves[scratchIdx];
-        if (mm && mm.from && mm.to) {
-          var a = XQ.Move.parseSq(mm.from), b = XQ.Move.parseSq(mm.to);
-          scratch.applyPlayerMove(a.x, a.y, b.x, b.y);
+        var coords = parseMoveCoords(mm);
+        if (coords) {
+          scratch.applyPlayerMove(coords.from.x, coords.from.y, coords.to.x, coords.to.y);
         }
         scratchIdx++;
       }
@@ -177,17 +182,17 @@ function parseEval(s) {
     function computeRisk(ply) {
       if (risks[ply] != null) return;
       var m = moves[ply - 1];
-      if (!m || !m.from || !m.to) { risks[ply] = 0; return; }
-      var f = XQ.Move.parseSq(m.from), t = XQ.Move.parseSq(m.to);
-      risks[ply] = moveRisk(engineBefore(ply), f, t, marks, ply);
+      var coords = parseMoveCoords(m);
+      if (!coords) { risks[ply] = 0; return; }
+      risks[ply] = moveRisk(engineBefore(ply), coords.from, coords.to, marks, ply);
     }
 
     function next() {
       if (idx >= moves.length) return false;
       var m = moves[idx];
-      if (m && m.from && m.to) {
-        var f = XQ.Move.parseSq(m.from), t = XQ.Move.parseSq(m.to);
-        risks[idx + 1] = moveRisk(eng, f, t, marks, idx + 1);
+      var coords = parseMoveCoords(m);
+      if (risks[idx + 1] == null && coords) {
+        risks[idx + 1] = moveRisk(eng, coords.from, coords.to, marks, idx + 1);
       }
       applyPly(idx);
       idx++;
@@ -234,11 +239,11 @@ function parseEval(s) {
         return true;
       },   // 第37轮: O(1) 后退 (undoPly 撤单手; 风险 memo 保留)
       goto: function (n) {
-        if (typeof n !== 'number' || isNaN(n)) return false;   // 第37轮: NaN/非法防护 (n|0 会把 NaN 变 0 误跳起点)
-        n = Math.max(0, Math.min(moves.length, n | 0));
+        if (typeof n !== 'number' || !isFinite(n)) return false;   // NaN/Infinity 不得被整数转换误跳回开局
+        n = Math.max(0, Math.min(moves.length, Math.trunc(n)));
         if (n === idx) return false;
         if (n === idx + 1) { next(); return true; }   // 相邻快路径
-        ensurePly(n);   // 第37轮: O(delta) 前向单步 / 后向重建 (拖拽长局不再 O(n²))
+        ensurePly(n);   // 增量前进或按差量撤销 (拖拽长局不再每次从开局重放)
         idx = n;
         return true;
       },

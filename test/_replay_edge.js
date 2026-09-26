@@ -38,15 +38,21 @@ var dirty = XQ.Replay.create({
     { n: 1, side: 'red', piece: 'cannon', from: 'b3', to: 'e3' },      // 合法 (当头炮)
     { n: 2, side: 'black' },                                            // 缺坐标
     { n: 3, side: 'red', piece: 'pawn', from: 'e4', to: 'e9' },        // 兵越河到 e9 非法
-    null                                                                // 空条目
+    null,                                                               // 空条目
+    { n: 5, side: 'black', from: 'z99', to: 'e3' }                     // 格式错误坐标
   ]
 });
-ok(dirty.total() === 4, 'E2 脏棋谱 total 保留原手数=4');
+ok(dirty.total() === 5, 'E2 脏棋谱 total 保留原手数=5');
 dirty.goto(2);
 ok(dirty.state().skippedCount === 1, 'E2 goto(2) 后 skipped=1 (缺坐标手)');
 dirty.goto(4);
 ok(dirty.state().skippedCount === 3, 'E2 goto(4) 后 skipped=3 (+非法着法 + 空条目)');
-ok(dirty.idx() === 4, 'E2 脏棋谱 goto 末尾不炸');
+dirty.goto(5);
+ok(dirty.state().skippedCount === 4, 'E2 格式错误坐标被跳过且不中断回放');
+ok(dirty.idx() === 5 && dirty.risks()[5] === 0, 'E2 脏棋谱 goto 末尾与风险计算均不炸');
+dirty.goto(4);
+dirty.next();
+ok(dirty.idx() === 5 && dirty.state().skippedCount === 4, 'E2 next 路径也安全跳过格式错误坐标');
 var dirtyBeforeUndo = XQ.Replay.create({
   id: 'edge-dirty',
   moves: [
@@ -56,12 +62,12 @@ var dirtyBeforeUndo = XQ.Replay.create({
     null
   ]
 });
-dirtyBeforeUndo.goto(3);
+dirtyBeforeUndo.goto(4);
 var dirtyExpectedCells = JSON.stringify(dirtyBeforeUndo.engine().snapshot().cells);
-dirty.prev();
-ok(JSON.stringify(dirty.engine().snapshot().cells) === dirtyExpectedCells,
+dirtyBeforeUndo.prev();
+ok(JSON.stringify(dirtyBeforeUndo.engine().snapshot().cells) === dirtyExpectedCells,
   'E2 prev 跳过空/非法手时不撤销之前的合法手');
-ok(dirty.state().skippedCount === 2, 'E2 prev 回退空手后保留之前跳过手的计数');
+ok(dirtyBeforeUndo.state().skippedCount === 2, 'E2 prev 回退空手后保留之前跳过手的计数');
 
 // E3 toggleBookmark 纯逻辑
 var tb = XQ.Replay.toggleBookmark;
@@ -90,7 +96,12 @@ ok(XQ.Replay.bookmarkKey() === 'xq_replay:bm:unknown', 'E4 缺 id 回落 unknown
   var sInc = XQ.Replay.create(recLong);
   sInc.goto(4);            // 前向增量
   var snapA = JSON.stringify(sInc.engine().snapshot().cells);
+  var engineBeforeBack = sInc.engine();
+  var riskMemoBeforeBack = sInc.risks();
   sInc.goto(2);            // 后向
+  ok(sInc.engine() === engineBeforeBack, 'E6 后向 goto 复用引擎并只撤销差量手数');
+  ok(sInc.risks() === riskMemoBeforeBack && Object.keys(sInc.risks()).length === 2,
+    'E6 后向 goto 保留当前前缀缓存并隐藏未来风险点评');
   sInc.goto(4);            // 再前向
   var snapB = JSON.stringify(sInc.engine().snapshot().cells);
   var sFull = XQ.Replay.create(recLong);
@@ -100,6 +111,8 @@ ok(XQ.Replay.bookmarkKey() === 'xq_replay:bm:unknown', 'E4 缺 id 回落 unknown
   ok(Object.keys(sInc.risks()).length === 4, 'E6 懒计算 risks 全量 memo (4 手)');
   sInc.goto(NaN);
   ok(sInc.idx() === 4, 'E6 goto(NaN) 不误跳 (保持原位)');
+  sInc.goto(Infinity);
+  ok(sInc.idx() === 4, 'E6 goto(Infinity) 不被位运算误转为开局');
 }
 
 // E5 控制器: 空棋谱上 play/step 不炸 (回调型)
