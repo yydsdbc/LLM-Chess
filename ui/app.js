@@ -684,7 +684,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (bdBar && bdBar.focus) { try { bdBar.focus({ preventScroll: true }); } catch (eBB) { try { bdBar.focus(); } catch (eBB2) {} } }
     }
   }
-  document.addEventListener('xq:replay', function (ev) { replayTo(ev.detail.ply); });
+  document.addEventListener('xq:replay', function (ev) {
+    var settings = document.getElementById('settings-overlay');
+    if (settings && settings.classList.contains('show')) closeAISettings();
+    replayTo(ev.detail.ply);
+  });
 
   /* 最近走法历史(旧→新, 最多12手) */
   function recentHistory() {
@@ -962,6 +966,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var g = document.getElementById('gear-toggle');
     if (g) g.setAttribute('aria-expanded', 'false');   // 第42轮 a11y: 与 openAISettings 对称 — 读屏可感知开关态
     try { g.focus({ preventScroll: true }); } catch (eF) { g.focus(); }
+  }
+  // 棋谱与操作收进设置后, 执行盘面动作前关闭设置, 避免挡住盘面或与回放模态层争抢键盘。
+  function settingsTool(action) {
+    return function () { closeAISettings(); action(); };
   }
 
   /* 第48轮 i18n 漏挂: 中继状态提示抽成单出口 — 文案是命令式写入的 (含 <b>host</b>, 无法挂 data-i18n),
@@ -1405,9 +1413,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       }
     });
     document.getElementById('gear-toggle').onclick = openAISettings;
-    document.getElementById('btn-restart').onclick = userRestart;   // v1.0.daily 确认入口
+    document.getElementById('btn-restart').onclick = settingsTool(userRestart);   // v1.0.daily 确认入口
     var bfEl = document.getElementById('btn-flip');   // 第34轮: 视角翻转
-    if (bfEl) bfEl.onclick = function () { flipOn = !flipOn; applyFlip(); };
+    if (bfEl) bfEl.onclick = settingsTool(function () { flipOn = !flipOn; applyFlip(); });
     paintFullscreenPressed(!!document.fullscreenElement);   // 第44轮 a11y: 全屏按钮初始 aria-pressed (刷新后仍处全屏时不误报「未全屏」)
     /* 第33轮: 服务商试连 (1-token 探活, 实测延迟/HTTP 错误) */
     ['red', 'black'].forEach(function (sd) {
@@ -1431,7 +1439,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       };
     });
     var buEl = document.getElementById('btn-undo');
-    if (buEl) buEl.onclick = undoLastMove;   // 第30轮: 悔棋
+    if (buEl) buEl.onclick = settingsTool(undoLastMove);   // 第30轮: 悔棋
     var eoOv = document.getElementById('end-overlay');
     if (eoOv && !eoOv._dismissBound) {
       eoOv._dismissBound = true;
@@ -1448,7 +1456,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     document.getElementById('btn-save').onclick = function () {
       if (currentRecord && currentRecord.moves.length) XQ.Record.downloadFile(currentRecord);
     };
-    document.getElementById('btn-load').onclick = function () {
+    document.getElementById('btn-load').onclick = settingsTool(function () {
       var input = document.createElement('input');
       input.type = 'file'; input.accept = '.json,.pgn,application/json';
       input.onchange = function () {
@@ -1476,9 +1484,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         });
       };
       input.click();
-    };
-    document.getElementById('btn-replay-watch').onclick = rpOpen;   // v1.6 回放模式
-    document.getElementById('btn-fullscreen').onclick = toggleFullscreen;   // v2.3 全屏观战
+    });
+    document.getElementById('btn-replay-watch').onclick = settingsTool(rpOpen);   // v1.6 回放模式
+    document.getElementById('btn-fullscreen').onclick = settingsTool(toggleFullscreen);   // v2.3 全屏观战
     ['pointerdown', 'keydown'].forEach(function (ev) {
       document.addEventListener(ev, function () { ensureAudio(); }, { once: false, passive: true });
     });

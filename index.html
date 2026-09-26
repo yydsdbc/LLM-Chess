@@ -103,9 +103,9 @@ h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0
 .eo-title{font-size:30px;font-weight:bold;color:#ffd700;text-shadow:0 2px 8px rgba(255,215,0,.4);margin-bottom:8px;letter-spacing:3px}
 .eo-sub{font-size:14px;color:#e8d098;margin-bottom:18px;letter-spacing:1px}
 .eo-btn{padding:9px 28px;font-size:14px}
-#settings-overlay{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);z-index:70;opacity:0;pointer-events:none;visibility:hidden;transition:opacity .25s,visibility .25s}   /* 第23轮 a11y: 同 end-overlay — 隐藏态不可 Tab 聚焦 */
+#settings-overlay{position:fixed;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);z-index:70;opacity:0;pointer-events:none;visibility:hidden;transition:opacity .25s,visibility .25s}   /* 第23轮 a11y: 同 end-overlay — 隐藏态不可 Tab 聚焦 */
 #settings-overlay.show{opacity:1;pointer-events:auto;visibility:visible}
-.set-card{background:linear-gradient(135deg,#241408,#3a2513);border:1.5px solid #a08040;border-radius:12px;padding:20px 22px 16px;width:540px;max-width:94%;box-shadow:0 10px 40px rgba(0,0,0,.7);text-align:left}
+.set-card{background:linear-gradient(135deg,#241408,#3a2513);border:1.5px solid #a08040;border-radius:12px;padding:20px 22px 16px;width:540px;max-width:94%;max-height:90vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.7);text-align:left}
 .set-card h3{margin:0 0 14px;font-size:15px;color:#f0d9a0;letter-spacing:1px;text-align:center}
 .set-cols{display:flex;gap:14px;margin-bottom:8px}
 .set-col{flex:1;min-width:0;padding:10px 12px 12px;border-radius:8px;border:1px solid rgba(240,217,160,.15)}
@@ -120,7 +120,21 @@ h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0
 .set-check{display:flex;align-items:center;gap:7px;font-size:13px;color:#f0d9a0;margin-bottom:10px;cursor:pointer}
 .set-check input{width:15px;height:15px;accent-color:#3498db;cursor:pointer}
 .set-note{font-size:10px;color:#8a7550;line-height:1.5;margin:2px 0 12px}
-.set-foot{display:flex;justify-content:flex-end;gap:8px}
+.set-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.set-options .set-row{margin-bottom:0}
+.set-toggles{grid-column:1 / -1;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.set-toggles label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.set-toggles input[type=range]{width:90px}
+.set-foot{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.set-foot .btn{white-space:nowrap}
+#ui-resetdata{margin-right:auto;background:rgba(192,57,43,.25);font-size:11px}
+.set-tools{margin-bottom:12px;border-top:1px solid rgba(240,217,160,.15)}
+.set-tools summary{padding:10px 0;cursor:pointer;font-size:12px;color:#f0d9a0}
+#settings-overlay #btn-row{margin:0 0 8px;gap:6px;flex-wrap:wrap}
+#settings-overlay.show #btn-row{opacity:1;visibility:visible;pointer-events:auto}
+#settings-overlay:not(.show) #btn-row{opacity:0;visibility:hidden;pointer-events:none}
+#settings-overlay #archive-row{margin-top:0;flex-wrap:wrap}
+#settings-overlay #move-log{max-width:none;width:100%}
 @media(max-width:600px){.set-cols{flex-direction:column}}
 
 /* v1.0.daily 移动端适配: 棋盘 432px 定宽在小屏等比缩放 (--cell 随视口收缩; SVG 线条走 viewBox 自适应, 列/行标与棋子随动) */
@@ -409,7 +423,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 #panel-splitter-r:hover{background:linear-gradient(180deg,transparent,rgba(255,224,138,.55),transparent)}
 #panel-splitter-r:focus-visible{outline:2px solid #ffd54a;outline-offset:-1px;background:linear-gradient(180deg,transparent,rgba(255,224,138,.55),transparent)}
 .think-panel{width:var(--panel-w,200px)}
-@media(max-width:1020px){.think-panel{width:100%}}
+@media(max-width:1020px){.think-panel{width:100%}#panel-splitter-r{display:none}}
 /* 第33轮: 最新决策卡入场 (仅新卡动画, rebuild 旧卡不动) */
 @keyframes dcardIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 .d-new{animation:dcardIn .18s ease-out}
@@ -546,17 +560,26 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
                  一直是 role=status, 此处漏了)。 -->
             <div id="server-warn" role="status" aria-live="polite" style="display:none;margin:2px 0 12px;padding:8px 10px;border-radius:6px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.35);font-size:11px;color:#f0b8b0;"></div>
             <div class="set-note" data-i18n="keys_note">密钥仅保存在服务端 config/keys.json，前端永不接触。双方可各配不同类型/服务商。</div>
+            <div class="set-options">
+                <div class="set-row set-toggles">
+                    <label><input type="checkbox" id="ui-coords" checked> <span data-i18n="set_coords">棋盘坐标标</span></label>
+                    <label><input type="checkbox" id="ui-drag" checked> <span data-i18n="set_drag">拖拽走子</span></label>
+                    <label><span data-i18n="set_vol">音量</span> <input type="range" id="ui-vol" min="0" max="100" value="90"></label>
+                </div>
+                <div class="set-row"><label for="ui-lang" data-i18n="language_label">语言</label><select id="ui-lang"><option value="zh">中文</option><option value="en">English</option></select></div>
+                <div class="set-row"><label for="ui-pieces" data-i18n="pieces_label">棋子显示</label><select id="ui-pieces"><option value="cn" data-i18n="pieces_cn">汉字</option><option value="en" data-i18n="pieces_en">Letters</option></select></div>
+            </div>
+            <details class="set-tools">
+                <summary tabindex="0" data-i18n="set_tools">棋谱与操作</summary>
+                <div id="btn-row"><button class="btn" id="btn-flip" data-i18n="btn_flip" aria-pressed="false">⇅ 翻转</button><button class="btn" id="btn-undo" data-i18n="btn_undo" data-i18n-title="undo_tip" title="↩ 悔棋 (快捷键 U)">↩ 悔棋</button><button class="btn" id="btn-restart" data-i18n="btn_reset">🔄 重新开始</button><button class="btn" id="btn-replay-watch" data-i18n="btn_watch_replay" data-i18n-title="btn_watch_replay_title" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" data-i18n="btn_fullscreen" data-i18n-title="btn_fullscreen_title" aria-pressed="false" title="全屏观战 (F 键)">⛶ 全屏</button></div>
+                <div id="archive-row">
+                    <button class="btn" id="btn-save" data-i18n="btn_save_short" data-i18n-title="btn_save" title="导出棋谱JSON" disabled>💾 存棋谱</button>
+                    <button class="btn" id="btn-load" data-i18n="btn_load" data-i18n-title="btn_load" title="导入棋谱JSON并重放">📂 载入棋谱</button>
+                </div>
+                <div id="move-log"></div>
+            </details>
             <div class="set-foot">
-                <div class="set-row" style="margin-bottom:8px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
-                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="ui-coords" checked> <span data-i18n="set_coords">棋盘坐标标</span></label>
-                    <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="ui-drag" checked> <span data-i18n="set_drag">拖拽走子</span></label>
-                    <label style="display:flex;align-items:center;gap:5px"><span data-i18n="set_vol">音量</span> <input type="range" id="ui-vol" min="0" max="100" value="90" style="width:90px"></label>
-                </div>
-                <div class="set-row" style="margin-bottom:8px;text-align:right">
-                    <button type="button" class="btn" id="ui-resetdata" data-i18n="reset_data" style="background:rgba(192,57,43,.25);font-size:11px">清空本地数据</button>
-                </div>
-                <div class="set-row" style="margin-bottom:8px"><label for="ui-lang" data-i18n="language_label">语言</label><select id="ui-lang"><option value="zh">中文</option><option value="en">English</option></select></div>
-                <div class="set-row" style="margin-bottom:8px"><label for="ui-pieces" data-i18n="pieces_label">棋子显示</label><select id="ui-pieces"><option value="cn" data-i18n="pieces_cn">汉字</option><option value="en" data-i18n="pieces_en">Letters</option></select></div>
+                <button type="button" class="btn" id="ui-resetdata" data-i18n="reset_data">清空本地数据</button>
                 <button class="btn" onclick="XQApp.closeAISettings()"><span data-i18n="btn_close">取消</span></button>
                 <button class="btn" onclick="XQApp.saveAISettings()"><span data-i18n="btn_save_settings">保存并开局</span></button>
             </div>
@@ -597,12 +620,6 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 <div id="sr-move" class="sr-only" aria-live="polite"></div>
 <div id="sr-cursor" class="sr-only" aria-live="polite"></div>   <!-- 第41轮 a11y: 键盘走子光标播报 (方向键移动时读屏才知落点与格上棋子; 独立于 #sr-move, 互不覆盖) -->
 <div id="sr-alert" class="sr-only" role="alert" aria-live="assertive"></div>   <!-- 第40轮 a11y: 错误/警告专属断言式播报区 — #ai-banner 思考中每秒 tick 会重写全局计时, 整体挂 aria-live 会每秒刷屏 -->
-<div id="btn-row"><button class="btn" id="btn-flip" data-i18n="btn_flip" aria-pressed="false">⇅ 翻转</button><button class="btn" id="btn-undo" data-i18n="btn_undo" data-i18n-title="undo_tip" title="↩ 悔棋 (快捷键 U)">↩ 悔棋</button><button class="btn" id="btn-restart" data-i18n="btn_reset">🔄 重新开始</button><button class="btn" id="btn-replay-watch" data-i18n="btn_watch_replay" data-i18n-title="btn_watch_replay_title" title="不调用LLM, 回放已保存棋谱">🎬 观看回放</button><button class="btn" id="btn-fullscreen" data-i18n="btn_fullscreen" data-i18n-title="btn_fullscreen_title" aria-pressed="false" title="全屏观战 (F 键)">⛶ 全屏</button></div>   <!-- 第44轮 a11y: 翻转/全屏是切换式按钮, 补 aria-pressed 初值 (JS 侧随状态同步) -->
-<div id="archive-row">
-    <button class="btn" id="btn-save" data-i18n="btn_save_short" data-i18n-title="btn_save" title="导出棋谱JSON" disabled>💾 存棋谱</button>
-    <button class="btn" id="btn-load" data-i18n="btn_load" data-i18n-title="btn_load" title="导入棋谱JSON并重放">📂 载入棋谱</button>
-</div>
-<div id="move-log"></div>
 
 <script src="core/piece.js"></script>
 <script src="core/move.js"></script>

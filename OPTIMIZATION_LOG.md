@@ -2102,3 +2102,14 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 定向: `node test/_logic_layer.js` ALL PASS (新增 3 项翻转输入回归); 修复前点击映射与拖拽起点断言均失败。
 - 语法/项目门禁: 两个修改后的 JS 均通过 `node --check`; `git diff --check` PASS; `npm run check` PASS (50 个 JS 文件语法、提示词长度/特殊符号与 dump 新鲜度)。
 - 完整测试: `npm test` 15/15 PASS。
+
+## 2026-09-26 14:56 第65轮 (codex — 按截图保留红线上方主画面)
+
+- 主画面收起状态条下的工具按钮、棋谱保存/载入与走法列表, 保留标题、双思考面板、棋盘、回合状态和必要的状态/错误提示。
+- 原有操作与记录 DOM 保留唯一 ID, 移入齿轮设置中的可折叠「棋谱与操作」; 新增文案同步中英字典。
+- 设置中的盘面动作与观看回放先关闭设置; 隐藏设置时工具按钮显式不可见, 防止终局 `.visible` 穿透父级隐藏态。
+- 设置偏好与底部按钮分行, 设置弹层按视口居中, 卡片限制高度并可滚动; 窄屏隐藏原本留下 200px 空白的面板分隔条。
+- 基线: HEAD `895e123`, 工作树干净; `node test/check_ui.js` PASS。
+- 定向: `node --check ui/app.js` / `ui/i18n.js` PASS; `node test/check_ui.js` PASS; `node test/i18n_check.js` 15/15 组、323 键 PASS。
+- 浏览器: 1920×1080 主画面下方常驻控件收起; 操作区鼠标展开、观看回放关闭设置、退出回放焦点回齿轮均通过。360×640 卡片滚动/无横向溢出、summary Tab 到翻转按钮、Escape 关闭并归还焦点通过。
+- 最终完整门禁: `npm test` 15/15 PASS; `npm run check` ALL PASS (50 个 JS 文件语法、提示词与 dump 检查); `git diff --check` PASS。
