@@ -116,12 +116,14 @@ function parseEval(s) {
     var eng = XQ.Engine.create({ ruleEnforce: false });   // v2.2: 回放忠实重放旧谱 (旧谱可能含 3 次重复/6 连将未终局, 规则开启会提前误终局)
     var idx = 0;
     var skipped = {};   // {手号: 拒绝原因} — 脏数据容错 (尽力重放, 与"载入棋谱"行为一致)
+    var applied = [];   // 按棋谱手号记录是否真的改动了引擎; 跳过非法手时不能调用 undoPly
     var risks = {};     // {手号: 静态风险分} — v1.7.6 疑误着法标注
     var marks = {};     // {手号: '将'|'杀'|'困'} — v1.7.9 一步效果标注
 
     function rebuild(n) {
       eng = XQ.Engine.create({ ruleEnforce: false });   // v2.2: 同上, 重建也关规则强制
       skipped = {};
+      applied = [];
       risks = {};
       marks = {};
       for (var i = 0; i < n; i++) {
@@ -133,10 +135,12 @@ function parseEval(s) {
        风险仍在首次访问某手时计算并 memo (risks/arks 结构不变, 调用方零适配) */
     function applyPly(i) {
       var m = moves[i];
-      if (!m || !m.from || !m.to) { skipped[i + 1] = 'missing_coord'; return; }
+      if (!m || !m.from || !m.to) { skipped[i + 1] = 'missing_coord'; applied[i] = false; return false; }
       var f = XQ.Move.parseSq(m.from), t = XQ.Move.parseSq(m.to);
       var res = eng.applyPlayerMove(f.x, f.y, t.x, t.y);
+      applied[i] = !!res.ok;
       if (!res.ok) skipped[i + 1] = res.reason || 'illegal';
+      return !!res.ok;
     }
     function ensurePly(n) {
       if (n > idx) {
@@ -181,14 +185,12 @@ function parseEval(s) {
     function next() {
       if (idx >= moves.length) return false;
       var m = moves[idx];
-      var res = { ok: false, reason: 'missing_coord' };
       if (m && m.from && m.to) {
         var f = XQ.Move.parseSq(m.from), t = XQ.Move.parseSq(m.to);
         risks[idx + 1] = moveRisk(eng, f, t, marks, idx + 1);
-        res = eng.applyPlayerMove(f.x, f.y, t.x, t.y);
       }
+      applyPly(idx);
       idx++;
-      if (!res.ok) skipped[idx] = res.reason || 'illegal';
       return true;
     }
 
@@ -223,7 +225,14 @@ function parseEval(s) {
       marks: function () { for (var p2 = 1; p2 <= idx; p2++) computeRisk(p2); return marks; },   // 第37轮: 懒计算 memo 同 risks
       RISK_MARK: function () { return RISK_MARK; },
       next: next,
-      prev: function () { if (idx <= 0) return false; idx--; eng.undoPly(); delete skipped[idx + 1]; return true; },   // 第37轮: O(1) 后退 (undoPly 撤单手; 风险 memo 保留)
+      prev: function () {
+        if (idx <= 0) return false;
+        idx--;
+        if (applied[idx]) eng.undoPly();   // 非法/缺失着法没有压入引擎历史, 不能撤销前一手合法着法
+        applied[idx] = false;
+        delete skipped[idx + 1];
+        return true;
+      },   // 第37轮: O(1) 后退 (undoPly 撤单手; 风险 memo 保留)
       goto: function (n) {
         if (typeof n !== 'number' || isNaN(n)) return false;   // 第37轮: NaN/非法防护 (n|0 会把 NaN 变 0 误跳起点)
         n = Math.max(0, Math.min(moves.length, n | 0));

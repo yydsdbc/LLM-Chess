@@ -718,7 +718,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     XQ.UI.thinkPanel(oppSide, decisionPanelOpts(oppSide));
     var Tw = XQ.I18N ? XQ.I18N.t : function (k) { return k; };   // 第26轮 i18n (思考中提示)
     var thinkCards = decisionLog[side] && decisionLog[side].length ? XQ.UI.decisionCards(decisionLog[side].slice(-4), decisionLog[side].length) : null;
-        if (thinkCards) thinkCards.push('<div class="dcard d-thinking">' + Tw('think_busy') + '</div>');   // v1.7.3: 保留决策卡+思考中提示; 第26轮 i18n
+    var committeeMode = holder.agent && holder.agent._mode;
+    if (committeeMode === 'council' || committeeMode === 'roundtable') {
+      if (!thinkCards) thinkCards = [];
+      thinkCards.push('<div class="dcard d-thinking"><span class="d-thinking-progress">' + Tw('think_busy') + '</span><span class="d-thinking-stream"></span></div>');
+    } else if (thinkCards) {
+      thinkCards.push('<div class="dcard d-thinking">' + Tw('think_busy') + '</div>');   // v1.7.3: 保留决策卡+思考中提示; 第26轮 i18n
+    }
         XQ.UI.thinkPanel(side, thinkCards
           ? { cards: thinkCards, active: true, info: infoHTML(side, holder, '') + ' <span class="info-thinking">' + Tw('think_busy') + '</span>' }
           : { text: Tw('think_busy'), active: true, info: infoHTML(side, holder, '') + ' <span class="info-thinking">' + Tw('think_busy') + '</span>' });
@@ -920,11 +926,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           if (tok && specs.indexOf(tok) < 0) specs.push(tok);
         });
         var multiMode = (['rotate', 'council', 'roundtable'].indexOf(v.multi) >= 0) && specs.length > 1 ? v.multi : 'off';
-        var onThink = function (s2, text) { if (aiBusy && s2 === side) showThinking(s2, text); };
+        var onThink = function (s2, text) {
+          if (!aiBusy || s2 !== side) return;
+          var stream = document.querySelector('#think-' + side + '-body .d-thinking-stream');
+          if (stream) stream.textContent = cleanReason(text) || '…';
+          else showThinking(s2, text);
+        };
         var onRetry2 = function (info) { view.aiRetries = view.aiRetries || {}; view.aiRetries[side] = info.attempt; view.aiRetryWait = info.waitMs || 0; };   // 第38轮: 等待量可见   // v2.5: 重试实时可见 (状态条 重试N次)
         var onProg = function (p) {   // 第31轮: 会诊进度实时上卡 (⚡ 思考中卡片文字替换)
           if (!aiBusy || p.side !== side) return;
-          var dc = document.querySelector('#think-' + side + '-body .dcard.d-thinking');
+          var dc = document.querySelector('#think-' + side + '-body .d-thinking-progress');
           var key = p.phase === 'proposal' ? 'roundtable_proposal_progress' : (p.phase === 'final' ? 'roundtable_final_progress' : 'council_progress');
           var fallback = p.phase === 'proposal' ? '🗣 圆桌提案 (' : (p.phase === 'final' ? '🗳 圆桌终判 (' : '⚡ 会诊中 (');
           if (dc) dc.textContent = XQ.I18N ? XQ.I18N.tArgs(key, { a: p.answered, t: p.total }) : fallback + p.answered + '/' + p.total + ' 已应答)…';
@@ -1386,7 +1397,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         rpPaintEval(rpSession.state());
         rpPaintInfo(rpSession.state());
         rpPaintMoveList();
-        rpOnPlayState(rpCtrl && rpCtrl.playing ? rpCtrl.playing() : false);
+        rpOnPlayState(rpCtrl && rpCtrl.isPlaying ? rpCtrl.isPlaying() : false);
       }
       /* 第47轮 a11y: 全屏按钮名称随态 (全屏中为「退出全屏」), 而 apply() 刚把它重写成静态键 → 此处按当前
          全屏态重算 (单出口, 与 fullscreenchange 共用), 否则全屏中切语言后名称与动作相反。 */
@@ -1417,6 +1428,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       }
     });
     document.getElementById('gear-toggle').onclick = openAISettings;
+    var closeSettingsBtn = document.getElementById('btn-settings-close');
+    if (closeSettingsBtn) closeSettingsBtn.onclick = closeAISettings;
+    var saveSettingsBtn = document.getElementById('btn-settings-save');
+    if (saveSettingsBtn) saveSettingsBtn.onclick = saveAISettings;
+    var endRestartBtn = document.getElementById('btn-end-restart');
+    if (endRestartBtn) endRestartBtn.onclick = restartGame;
     document.getElementById('btn-restart').onclick = settingsTool(userRestart);   // v1.0.daily 确认入口
     var bfEl = document.getElementById('btn-flip');   // 第34轮: 视角翻转
     if (bfEl) bfEl.onclick = settingsTool(function () { flipOn = !flipOn; applyFlip(); });
@@ -2232,7 +2249,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     /* 第43轮: 播放/暂停按钮同样需要首绘 — rpOnPlayState 原先只在「播放态变化」与语言热切时被调用,
        而首次打开回放时没有任何播放态变化 → 按钮停在模板里的初始文案 (EN 界面下就是硬编码中文「▶ 播放」),
        要等用户按一次播放才可能变。与第42轮「回放层首绘缺失」同类: 依赖对端条件性通知的路径必须自补首帧。 */
-    rpOnPlayState(rpCtrl.playing ? rpCtrl.playing() : false);
+    rpOnPlayState(rpCtrl.isPlaying ? rpCtrl.isPlaying() : false);
     var pos = 0;
     try { pos = parseInt(localStorage.getItem('xq_replay_pos_' + record.id) || '0', 10); } catch (e) {}
     if (pos < 0 || pos > rpSession.total()) pos = 0;
@@ -2722,7 +2739,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     }
     if (flip) {
       var rc = document.getElementById('rp-col-labels'), rr = document.getElementById('rp-row-labels');
-      if (rc) 'a,b,c,d,e,f,g,h,i'.split(',').forEach(function (ch, i2) { if (rc.children[i2]) rc.children[i2].textContent = 'abcdefghi'[7 - i2]; });
+      if (rc) 'a,b,c,d,e,f,g,h,i'.split(',').forEach(function (ch, i2) { if (rc.children[i2]) rc.children[i2].textContent = 'abcdefghi'[8 - i2]; });
       if (rr) '10,9,8,7,6,5,4,3,2,1'.split(',').forEach(function (ch, i2) { if (rr.children[i2]) rr.children[i2].textContent = String(i2 + 1); });
     } else {
       var rc2 = document.getElementById('rp-col-labels'), rr2 = document.getElementById('rp-row-labels');
@@ -2774,7 +2791,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           + '<tr style="color:#c4a56e"><th scope="col" style="' + vth + '">' + T('votes_model') + '</th><th scope="col" style="' + vth + '">' + T('votes_to') + '</th><th scope="col" style="' + vth + '">' + T('votes_conf') + '</th></tr>';
         e.votes.forEach(function (v) {
           html += v.ok
-            ? '<tr><td style="padding:2px 6px">' + esc2(v.model) + (v.changed ? ' ↩' : '') + '</td><td style="padding:2px 6px;color:#f0d9a0">' + (v.from ? esc2(v.from) + '→' : '') + esc2(v.to) + '</td><td style="padding:2px 6px">' + (v.conf != null ? v.conf : '—') + '</td></tr>'
+            ? '<tr><td style="padding:2px 6px">' + esc2(v.model) + (v.changed ? ' ↩' : '') + '</td><td style="padding:2px 6px;color:#f0d9a0">' + (v.from ? esc2(v.from) + '→' : '') + esc2(v.to) + '</td><td style="padding:2px 6px">' + esc2(v.conf != null ? v.conf : '—') + '</td></tr>'
             : '<tr><td style="padding:2px 6px">' + esc2(v.model) + '</td><td colspan="2" style="padding:2px 6px;color:#ff8a7a">' + T('votes_fail') + '</td></tr>';
         });
         html += '</table>';

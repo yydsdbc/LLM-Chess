@@ -455,11 +455,26 @@ function create(opts) {
         var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
             if (_liveCtrlRef) _liveCtrlRef.ctrl = ctrl;   // 第49轮: abort 句柄暴露 (委员会 fastMajority 早期弃权用)
         var extSig = (typeof opts.signal === 'function' ? opts.signal() : opts.signal) || null;   // v3.9a: 外部中断 (对局取消/页面关闭) — 与内部看门狗共用 ctrl, 上抛时按 aborted 归因; 第39轮: signal 支持取值函数形态 (app 侧对局世代换代, 固化实例会被下一局的 abort 误伤)
-        if (extSig && extSig.aborted) { reject(new Error('外部中止: 对局已取消')); return; }
-        if (extSig && ctrl && typeof extSig.addEventListener === 'function') {
-          extSig.addEventListener('abort', function () { try { ctrl.abort(); } catch (eA) {} });
+        var settled = false, externalAbortHandler = null, timer = null;
+        function cleanup() {
+          if (timer) { clearTimeout(timer); timer = null; }
+          if (extSig && externalAbortHandler && typeof extSig.removeEventListener === 'function') extSig.removeEventListener('abort', externalAbortHandler);
+          externalAbortHandler = null;
         }
-        var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, timeoutMs) : null;
+        function finishResolve(value) {
+          if (settled) return;
+          settled = true; cleanup(); resolve(value);
+        }
+        function finishReject(err) {
+          if (settled) return;
+          settled = true; cleanup(); reject(err);
+        }
+        if (extSig && extSig.aborted) { finishReject(new Error('外部中止: 对局已取消')); return; }
+        if (extSig && ctrl && typeof extSig.addEventListener === 'function') {
+          externalAbortHandler = function () { try { ctrl.abort(); } catch (eA) {} };
+          extSig.addEventListener('abort', externalAbortHandler, { once: true });
+        }
+        timer = ctrl ? setTimeout(function () { ctrl.abort(); }, timeoutMs) : null;
         var _lastThinkEmit = 0;   // 第37轮: 面板流节流状态
         var onDelta = opts.onThinking ? function (kind, full) {
           if (Date.now() - _lastThinkEmit < 80) return;   // 第37轮: 面板流节流 80ms (extractCN 长思考全量重跑 O(n²) 缓解; 最终 meta.reasoning 仍全量提取)
@@ -483,7 +498,7 @@ function create(opts) {
           }),
           signal: ctrl ? ctrl.signal : undefined
         }).then(function (res) {
-          if (timer) clearTimeout(timer);
+          if (timer) { clearTimeout(timer); timer = null; }
           if (!res.ok) {
             var retryAfterHdr = null;   // 第38轮: 捕获上游 Retry-After (秒或 HTTP-date 秒差), 退避取地板
             try {
@@ -496,7 +511,7 @@ function create(opts) {
             } catch (eRA) {}
             res.json().catch(function () { return {}; }).then(function (e) {
               var detail = e.error && e.error.message ? e.error.message : (e.error || e.message || e.code || '');   // v1.5.9: DeepSeek 等上游 error 是 {message,...} 对象, 直接 [object Object] 会丢失详情
-              reject(new Error('HTTP ' + res.status + ' ' + detail + (retryAfterHdr ? ' [Retry-After ' + Math.round(retryAfterHdr) + 's]' : '')));
+              finishReject(new Error('HTTP ' + res.status + ' ' + detail + (retryAfterHdr ? ' [Retry-After ' + Math.round(retryAfterHdr) + 's]' : '')));
             });
             return;
           }
@@ -510,14 +525,14 @@ function create(opts) {
             var hard = setTimeout(function () { clearInterval(watch); try { ctrl.abort(); } catch (e2) {} }, streamHardMs);
             readStream(res, onDelta, function () { lastAct = Date.now(); }).then(function (out) {
               clearInterval(watch); clearTimeout(hard);
-              if (!out) { resolve(null); return; }
+              if (!out) { finishResolve(null); return; }
               var txt = out.answer || out.reasoning;
               if (opts.onRawResponse) { try { opts.onRawResponse(side, txt); } catch (e3) {} }
-              if (txt) resolve({ answer: out.answer || '', reasoning: out.reasoning || '' });
-              else reject(new Error('流式返回为空'));
+              if (txt) finishResolve({ answer: out.answer || '', reasoning: out.reasoning || '' });
+              else finishReject(new Error('流式返回为空'));
             }).catch(function (e) {
               clearInterval(watch); clearTimeout(hard);
-              reject(new Error('流读取失败: ' + (e && e.message || e)));
+              finishReject(new Error('流读取失败: ' + (e && e.message || e)));
             });
           } else {
             res.json().then(function (data) {
@@ -529,14 +544,13 @@ function create(opts) {
               if (!txt && reasoning) txt = reasoning;
               if (onDelta) onDelta('reason', extractCN(reasoning) || '思考中…');
               if (opts.onRawResponse) { try { opts.onRawResponse(side, txt); } catch (e3) {} }
-              if (!txt) reject(new Error('接口返回为空')); else resolve({ answer: txt, reasoning: reasoning });
-            }).catch(function (e) { reject(new Error('响应解析失败: ' + (e && e.message || e))); });
+              if (!txt) finishReject(new Error('接口返回为空')); else finishResolve({ answer: txt, reasoning: reasoning });
+            }).catch(function (e) { finishReject(new Error('响应解析失败: ' + (e && e.message || e))); });
           }
         }).catch(function (err) {
-          if (timer) clearTimeout(timer);
-          if (err && err.name === 'AbortError') reject(new Error(extSig && extSig.aborted ? '外部中止: 对局已取消' : '请求超时(' + (timeoutMs / 1000) + 's)'));   // v3.9a: 外部中止不误报为超时
-          else if (/failed to fetch|networkerror|load failed/i.test(err && err.message || '')) reject(new Error('无法连接本地服务 — 请用 node server.js 启动后再试'));
-          else reject(err);
+          if (err && err.name === 'AbortError') finishReject(new Error(extSig && extSig.aborted ? '外部中止: 对局已取消' : '请求超时(' + (timeoutMs / 1000) + 's)'));   // v3.9a: 外部中止不误报为超时
+          else if (/failed to fetch|networkerror|load failed/i.test(err && err.message || '')) finishReject(new Error('无法连接本地服务 — 请用 node server.js 启动后再试'));
+          else finishReject(err);
         });
       });
     }
@@ -683,13 +697,46 @@ function create(opts) {
       kind: 'llm',
       next: function (engine, history, roundtableNote) {   // 第50轮: 第三参圆桌讨论注记 (committee 互看同侪建议用)
         if (!model) return Promise.reject(new Error('模型名为空 — 请在设置中填写模型名'));   // 第38轮: 空模型早退 (免一次必然 400 的中继往返)
-        var callState = { cancelled: false };
+        var callState = { cancelled: false, retryTimer: null, retryReject: null };
         _liveCtrlRef.state = callState;
         var attempt = 0, lastBad = null;
         var rejectedMoves = [];   // 第60轮: 已被系统拒的着法 (重试时避免重复建议)
         var lastMv = null;   // 第60轮: 最近一次解析出的着法 (跨 then/catch 作用域)
         var tagCache = {};   // v3.7: 本手合法列表标注缓存 (重试复用, 引擎状态单次 next() 内不变 → 安全)
+        function currentSignal() { return (typeof opts.signal === 'function' ? opts.signal() : opts.signal) || null; }
+        function waitRetry(wait) {
+          return new Promise(function (resolve, reject) {
+            var finished = false;
+            var extSig = currentSignal();
+            var abortError = function (external) {
+              var e = new Error(external ? '外部中止: 对局已取消' : '请求已中止');
+              if (external) e.name = 'AbortError';
+              return e;
+            };
+            var onExternalAbort = function () { finish(abortError(true)); };
+            function finish(err) {
+              if (finished) return;
+              finished = true;
+              if (callState.retryTimer) clearTimeout(callState.retryTimer);
+              callState.retryTimer = null;
+              callState.retryReject = null;
+              if (extSig && typeof extSig.removeEventListener === 'function') extSig.removeEventListener('abort', onExternalAbort);
+              if (err) reject(err); else resolve();
+            }
+            callState.retryReject = function () { finish(abortError(false)); };
+            if (callState.cancelled) { finish(abortError(false)); return; }
+            if (extSig && extSig.aborted) { finish(abortError(true)); return; }
+            if (extSig && typeof extSig.addEventListener === 'function') extSig.addEventListener('abort', onExternalAbort, { once: true });
+            callState.retryTimer = setTimeout(function () { finish(null); }, wait);
+          }).then(function () {
+            if (callState.cancelled) throw new Error('请求已中止');
+            return loop();
+          });
+        }
         function loop() {
+          if (callState.cancelled) return Promise.reject(new Error('请求已中止'));
+          var preSignal = currentSignal();
+          if (preSignal && preSignal.aborted) return Promise.reject(new Error('外部中止: 对局已取消'));
           attempt++;
           usage.attempts = (usage.attempts || 0) + 1;   // v3.9a: LLM 调用总次数 (含重试; usage.requests 只计拿到上游 usage 的)
           var legal = engine.generateLegalMoves(side);
@@ -793,7 +840,8 @@ function create(opts) {
             }
             // v1.5.9: 永久性错误 (鉴权/余额/模型名) 重试无意义 → 立即抛出, 快速暴露配置问题 (如 deepseek 未配 key)
             if (/HTTP 40[123]|not exist|Invalid API key|insufficient balance|认证失败/i.test(msg)) throw err;
-            if (opts.signal && opts.signal.aborted) throw err;   // 第60轮: 重试前检查中止 (原只在 next 开头检查)
+            var retrySignal = currentSignal();
+            if (retrySignal && retrySignal.aborted) throw err;   // 第60轮: 重试前检查中止 (原只在 next 开头检查)
             if (attempt < 3) {
               lastBad = msg;
               if (lastMv) rejectedMoves.push(XQ.Move.sqName(lastMv.from) + '-' + XQ.Move.sqName(lastMv.to));
@@ -803,7 +851,7 @@ function create(opts) {
               if (raM) wait = Math.max(wait, Math.min(30000, parseInt(raM[1], 10) * 1000));
               if (opts.jitter) wait = Math.round(wait * (0.85 + Math.random() * 0.3));   // 第38轮: 抖动 ±15% (opt-in; 防多发起步同步撞限流窗口)
               if (onRetryCb) { try { onRetryCb({ attempt: attempt, reason: msg.slice(0, 120), waitMs: wait }); } catch (eHk) {} }   // v2.5/v38: 重试实时可见 + 等待量
-              return new Promise(function (r) { setTimeout(r, wait); }).then(loop);
+              return waitRetry(wait);   // 第67轮: 中止可立即清掉退避计时器, loop 再入口也检查取消状态
             }
             throw err;
           });
@@ -815,7 +863,10 @@ function create(opts) {
       },
       usage: function () { return usage; },
       abort: function () {
-        if (_liveCtrlRef.state) _liveCtrlRef.state.cancelled = true;
+        if (_liveCtrlRef.state) {
+          _liveCtrlRef.state.cancelled = true;
+          if (_liveCtrlRef.state.retryReject) _liveCtrlRef.state.retryReject();
+        }
         if (_liveCtrlRef.ctrl) { try { _liveCtrlRef.ctrl.abort(); } catch (eA) {} }
       },   // 第49轮: 中止在飞请求并阻止该手重试 (委员会预算/快速多数用)
       reset: function () { convo.length = 0; },

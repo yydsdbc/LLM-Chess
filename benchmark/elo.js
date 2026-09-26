@@ -53,6 +53,8 @@
   function applyResult(redName, blackName, winner, k) {
     ensure(redName); ensure(blackName);
     var ra = ratingOf(redName), rb = ratingOf(blackName);
+    // 同一模型自战没有可比较的对手，保持评分与战绩不变。
+    if (redName === blackName) return { red: ra, black: rb };
     var scoreA = winner === 'red' ? 1 : winner === 'black' ? 0 : 0.5;
     var next = update({ ra: ra, rb: rb, scoreA: scoreA, k: k });
     var t = table();
@@ -75,7 +77,11 @@
         if (t['stats:' + n]) { e.games = t['stats:' + n].games || 0; e.win = t['stats:' + n].win || 0; e.draw = t['stats:' + n].draw || 0; e.loss = t['stats:' + n].loss || 0; }
         return e;
       })
-      .sort(function (a, b) { return b.rating - a.rating || a.name < b.name ? -1 : 1; });
+      .sort(function (a, b) {
+        var ratingDelta = Number(b.rating) - Number(a.rating);
+        if (ratingDelta) return ratingDelta;
+        return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+      });
   }
   function resetAll() { saveTable({}); }
 

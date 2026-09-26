@@ -125,7 +125,7 @@
     if (d.pieceEl && d.pieceEl.parentNode) d.pieceEl.classList.remove('drag-src');
     if (d.overCell) d.overCell.classList.remove('drag-over');
     if (d.moved && d.view && d.view.onCancelSelect) d.view.onCancelSelect();
-    suppress();
+    if (d.moved) suppress();
   }
   function dragMove(ev) {
     if (!_drag) return;
@@ -151,8 +151,8 @@
     if (d.ghost) d.ghost.remove();
     if (d.pieceEl.parentNode) d.pieceEl.classList.remove('drag-src');
     if (d.overCell) d.overCell.classList.remove('drag-over');
-    suppress();
     if (!d.moved) return;   // 未拖动 → 交给原生 click (选中语义)
+    suppress();
     var c = cellAtPoint(ev.clientX, ev.clientY);
     if (c) {
       var tx = +c.dataset.x, ty = +c.dataset.y;

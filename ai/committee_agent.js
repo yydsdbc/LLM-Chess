@@ -128,13 +128,12 @@
       return mv;
     }
 
-    /* 并行问询 (错峰+分批), 每选民预算/进度/流缓冲; note 为圆桌注记 (第二轮传入) */
+    /* 并行问询 (有界 worker), 每选民预算/进度/流缓冲; note 为圆桌注记 (第二轮传入) */
     function askAll(engine, history, note, phase, eligibleIndexes) {
       var budget = typeof opts.voterBudgetMs === 'number' ? opts.voterBudgetMs : 60000;
-      var maxP = typeof opts.maxParallel === 'number' && opts.maxParallel > 0 ? opts.maxParallel : agents.length;
+      var maxP = typeof opts.maxParallel === 'number' && opts.maxParallel > 0 ? Math.max(1, Math.floor(opts.maxParallel)) : agents.length;
       var eligible = agents.map(function (_, idx) { return !eligibleIndexes || eligibleIndexes.indexOf(idx) >= 0; });
       var activeCount = eligible.filter(Boolean).length;
-      var activeOrdinal = 0;
       var answered = 0;
       var votes = [];
       var t0 = Date.now();
@@ -144,71 +143,99 @@
         votes.forEach(function (v) { if (v.ok) { var k = v.from + '-' + v.to; t[k] = Math.round(((t[k] || 0) + weightOf(v.model)) * 100) / 100; } });
         return t;
       }
+      function rawWeightTally() {
+        var t = {};
+        votes.forEach(function (v) { if (v.ok) { var k = v.from + '-' + v.to; t[k] = (t[k] || 0) + weightOf(v.model); } });
+        return t;
+      }
       var settleFns = [];
       var fastMajorityFired = false;
+      var stopped = false;
+      var queue = [];
+      var queueAt = 0;
+      var active = {};
+      var callResolvers = [];
+      var settledCalls = [];
+      var budgetTimers = [];
       function abortAgent(a) { try { if (a.agent.abort) a.agent.abort(); } catch (eA) {} }
-      var calls = agents.map(function (a, idx) {
-        if (!eligible[idx]) return Promise.resolve({ err: new Error('round1 failed'), name: a.name, index: idx });
-        var launchOrder = activeOrdinal++;
-        var batch = Math.floor(launchOrder / maxP);
-        return new Promise(function (res) {
-          var settled = false;
-          var launchTimer = null;
-          var budgetTimer = null;
-          var done = function (v) {
-            if (settled) return;
-            settled = true;
-            if (launchTimer) clearTimeout(launchTimer);
-            if (budgetTimer) clearTimeout(budgetTimer);
-            answered++;
-            vstate[idx] = v.mv ? 'ok' : 'fail';
-            votes.push(v.mv
-              ? { model: a.name, from: XQ.Move.sqName(v.mv.from), to: XQ.Move.sqName(v.mv.to), conf: confOf(v.mv), ms: Date.now() - t0, ok: true, weight: weightOf(a.name) }
-              : { model: a.name, fail: String((v.err && v.err.message) || v.err || 'failed').slice(0, 60), ok: false });
-            if (opts.onProgress) {
-              try {
-                opts.onProgress({ side: side, answered: answered, total: activeCount, voter: a.name, ok: !!v.mv, phase: phase || null,
-                  voters: agents.map(function (a2, j2) { return { name: a2.name, state: vstate[j2] }; }), tally: liveTally() });
-              } catch (eP) {}
-            }
-            /* 第52轮: fastMajority — 领先票权重 > 全部未决权重之和 → 未决选民 abort+弃权 */
-            if (opts.fastMajority && !fastMajorityFired) {
-              var lt2 = liveTally();
-              var lk = Object.keys(lt2);
-              if (lk.length) {
-                var leadW = Math.max.apply(null, lk.map(function (k) { return lt2[k]; }));
-                var pendW = 0;
-                agents.forEach(function (a2, j2) { if (vstate[j2] === 'pending') pendW += weightOf(a2.name); });
-                if (leadW > pendW) {
-                  fastMajorityFired = true;
-                  agents.forEach(function (a3, j3) {
-                    if (vstate[j3] === 'pending') {
-                      abortAgent(a3);
-                      if (settleFns[j3]) settleFns[j3]({ err: new Error('fastMajority'), name: a3.name });
-                    }
-                  });
-                }
-              }
-            }
-            res({ mv: v.mv, err: v.err, name: v.name || a.name, index: idx, timeout: !!v.timeout, ms: Date.now() - t0 });
-          };
-          settleFns[idx] = done;
-          launchTimer = setTimeout(function () {
-            launchTimer = null;
-            if (settled) return;
-            if (budget > 0) budgetTimer = setTimeout(function () {
-              abortAgent(a);
-              done({ err: new Error('voter budget ' + budget + 'ms exceeded'), name: a.name, timeout: true });
-            }, budget);
-            var voterNote = typeof note === 'function' ? note(a, idx) : note;
-            try {
-              Promise.resolve(a.agent.next(engine, history, voterNote))
-                .then(function (mv) { done({ mv: mv, name: a.name }); })
-                .catch(function (err) { done({ err: err, name: a.name }); });
-            } catch (err) { done({ err: err, name: a.name }); }
-          }, batch * 300 + (launchOrder % maxP) * 60);
+      function pendingWeight() {
+        var sum = 0;
+        agents.forEach(function (a, idx) { if (vstate[idx] === 'pending') sum += weightOf(a.name); });
+        return sum;
+      }
+      function maybeFastMajority() {
+        if (!opts.fastMajority || fastMajorityFired) return;
+        var tally = rawWeightTally();
+        var keys = Object.keys(tally);
+        if (!keys.length) return;
+        /* The current leader must stay strictly ahead even if every pending voter backs its strongest rival.
+           Strict inequality preserves finalize's confidence tie-break whenever vote weights can tie. */
+        var leaderKey = null;
+        keys.forEach(function (key) {
+          if (leaderKey === null || tally[key] > tally[leaderKey]) leaderKey = key;
+        });
+        var rivalW = 0;
+        keys.forEach(function (key) { if (key !== leaderKey && tally[key] > rivalW) rivalW = tally[key]; });
+        if (tally[leaderKey] <= rivalW + pendingWeight() + 1e-9) return;
+        fastMajorityFired = true;
+        stopped = true;
+        agents.forEach(function (a, idx) {
+          if (vstate[idx] !== 'pending') return;
+          if (active[idx]) abortAgent(a);
+          if (settleFns[idx]) settleFns[idx]({ err: new Error('fastMajority'), name: a.name });
+        });
+      }
+      function pump() {
+        while (!stopped && Object.keys(active).length < maxP && queueAt < queue.length) {
+          var idx = queue[queueAt++];
+          active[idx] = true;
+          startVoter(idx);
+        }
+      }
+      function settleVoter(idx, v) {
+        if (settledCalls[idx]) return;
+        settledCalls[idx] = true;
+        if (budgetTimers[idx]) clearTimeout(budgetTimers[idx]);
+        delete active[idx];
+        var a = agents[idx];
+        answered++;
+        vstate[idx] = v.mv ? 'ok' : 'fail';
+        votes.push(v.mv
+          ? { model: a.name, from: XQ.Move.sqName(v.mv.from), to: XQ.Move.sqName(v.mv.to), conf: confOf(v.mv), ms: Date.now() - t0, ok: true, weight: weightOf(a.name) }
+          : { model: a.name, fail: String((v.err && v.err.message) || v.err || 'failed').slice(0, 60), ok: false });
+        if (opts.onProgress) {
+          try {
+            opts.onProgress({ side: side, answered: answered, total: activeCount, voter: a.name, ok: !!v.mv, phase: phase || null,
+              voters: agents.map(function (a2, j2) { return { name: a2.name, state: vstate[j2] }; }), tally: liveTally() });
+          } catch (eP) {}
+        }
+        maybeFastMajority();
+        callResolvers[idx]({ mv: v.mv, err: v.err, name: v.name || a.name, index: idx, timeout: !!v.timeout, ms: Date.now() - t0 });
+        pump();
+      }
+      function startVoter(idx) {
+        var a = agents[idx];
+        if (budget > 0) budgetTimers[idx] = setTimeout(function () {
+          abortAgent(a);
+          settleFns[idx]({ err: new Error('voter budget ' + budget + 'ms exceeded'), name: a.name, timeout: true });
+        }, budget);
+        var voterNote;
+        try {
+          voterNote = typeof note === 'function' ? note(a, idx) : note;
+          Promise.resolve(a.agent.next(engine, history, voterNote))
+            .then(function (mv) { settleFns[idx]({ mv: mv, name: a.name }); })
+            .catch(function (err) { settleFns[idx]({ err: err, name: a.name }); });
+        } catch (err) { settleFns[idx]({ err: err, name: a.name }); }
+      }
+      var calls = agents.map(function (_, idx) {
+        if (eligible[idx]) queue.push(idx);
+        return new Promise(function (resolve) {
+          callResolvers[idx] = resolve;
+          settleFns[idx] = function (v) { settleVoter(idx, v); };
+          if (!eligible[idx]) { settledCalls[idx] = true; resolve({ err: new Error('round1 failed'), name: agents[idx].name, index: idx }); }
         });
       });
+      pump();
       return Promise.all(calls);
     }
 

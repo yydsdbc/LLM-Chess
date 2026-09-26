@@ -360,6 +360,57 @@ function resetStub(script) { callN = 0; scripted = script; }
     ok(phaseProgress.indexOf('proposal') >= 0 && phaseProgress.indexOf('final') >= 0, 'C24 进度明确区分提案与终判阶段');
   }
 
+  // C25 fastMajority 必须给当前第二名保留全部未决权重, 否则会提前取消可凭信心平票胜出的票。
+  {
+    const priorFetch = globalThis.fetch;
+    globalThis.fetch = function (url, opts) {
+      const model = JSON.parse(opts.body).model;
+      const rows = {
+        'fm-a': { f: 'h3', t: 'e3', c: 0.1, delay: 20 },
+        'fm-b': { f: 'h3', t: 'g3', c: 0.2, delay: 50 },
+        'fm-c': { f: 'h3', t: 'e3', c: 0.1, delay: 80 },
+        'fm-d': { f: 'h3', t: 'g3', c: 1.0, delay: 120 }
+      };
+      const row = rows[model];
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          resolve({ ok: true, headers: { get: function () { return 'application/json'; } },
+            json: async function () { return { choices: [{ message: { content: JSON.stringify({ from: row.f, to: row.t, summary: 'c25', confidence: row.c }) } }] }; } });
+        }, row.delay);
+      });
+    };
+    try {
+      const cFM2 = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['fm-a', 'fm-b', 'fm-c', 'fm-d'], mode: 'council', fastMajority: true, safetyCheck: 'off' });
+      const mvFM2 = await cFM2.next(XQ.Engine.create());
+      ok(XQ.Move.sqName(mvFM2.to) === 'g3' && mvFM2.meta.votes.filter(function (v) { return v.ok; }).length === 4,
+        'C25 fastMajority 不取消可改变信心决胜的未决票 (同权2比2由 g3 胜出)');
+    } finally { globalThis.fetch = priorFetch; }
+  }
+
+  // C26 maxParallel 是实际同时请求上限; 一名选民结束后再启动队列中的下一名。
+  {
+    const priorFetch = globalThis.fetch;
+    var activeFetches = 0;
+    var peakFetches = 0;
+    globalThis.fetch = function (url, opts) {
+      const body = JSON.parse(opts.body);
+      activeFetches++;
+      peakFetches = Math.max(peakFetches, activeFetches);
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          activeFetches--;
+          resolve({ ok: true, headers: { get: function () { return 'application/json'; } },
+            json: async function () { return { choices: [{ message: { content: JSON.stringify({ from: 'h3', to: 'e3', summary: 'c26', confidence: 0.5 }) } }] }; } });
+        }, 350);
+      });
+    };
+    try {
+      const cBounded = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['cap-a', 'cap-b', 'cap-c'], mode: 'council', maxParallel: 1, voterBudgetMs: 3000, safetyCheck: 'off' });
+      const mvBounded = await cBounded.next(XQ.Engine.create());
+      ok(!!mvBounded && peakFetches === 1, 'C26 maxParallel=1 时实际请求并发峰值为 1 (得 ' + peakFetches + ')');
+    } finally { globalThis.fetch = priorFetch; }
+  }
+
   console.log(failed ? '_committee_agent: ' + failed + ' FAIL' : '_committee_agent: ALL PASS');
   process.exit(failed ? 1 : 0);
 })().catch(function (e) { console.error('suite crashed:', e); process.exit(1); });

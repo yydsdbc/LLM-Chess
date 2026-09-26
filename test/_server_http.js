@@ -21,6 +21,7 @@ const ROOT = path.join(__dirname, '..');
 
 let server = null;
 let server2 = null;   // 第48轮: 第二实例 (独立限流表, 见文末第48轮块)
+let server3 = null;   // 可信代理与 Anthropic 延迟心跳覆盖
 const results = [];
 let failed = 0;
 function ok(cond, name) {
@@ -28,7 +29,7 @@ function ok(cond, name) {
   if (!cond) failed++;
 }
 
-function reqTo(base, method, urlPath, body, headers) {
+function reqTo(base, method, urlPath, body, headers, timeoutMs) {
   return new Promise(function (resolve) {
     const r = http.request(base + urlPath, { method: method, headers: headers || {} }, function (res) {
       const chunks = [];
@@ -36,7 +37,7 @@ function reqTo(base, method, urlPath, body, headers) {
       res.on('end', function () { resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString('utf8') }); });
     });
     r.on('error', function (e) { resolve({ status: 0, headers: {}, body: String(e) }); });
-    r.setTimeout(5000, function () { r.destroy(new Error('client timeout')); });
+    r.setTimeout(timeoutMs || 5000, function () { r.destroy(new Error('client timeout')); });
     if (body) r.write(body);
     r.end();
   });
@@ -69,6 +70,13 @@ async function main() {
       if (jb.model === 'stub-err') {   // anthropic 错误映射路径 (type:error → 客户端 JSON error)
         uRes.writeHead(400, { 'Content-Type': 'application/json' });
         return uRes.end(JSON.stringify({ type: 'error', error: { message: 'boom-claude' } }));
+      }
+      if (jb.model === 'stub-ant-delayed') {
+        uRes.writeHead(200, { 'Content-Type': 'application/json' });
+        setTimeout(function () {
+          uRes.end(JSON.stringify({ content: [{ type: 'text', text: '{"from":"h3","to":"e3","summary":"delayed-ok","confidence":0.8}' }], usage: { input_tokens: 12, output_tokens: 6 } }));
+        }, 15300);  // 超过 15s SSE 心跳, 覆盖心跳之后的正常响应收尾
+        return;
       }
       /* 第46轮: 上游非 200 透传 — 放在 stream 分支之前, 使同一条 stub 同时覆盖流式/非流式两条路径
          (server.js 的 `res.writeHead(upRes.statusCode || 502, …)` 若被改成 200, llm_agent 会把错误体
@@ -133,7 +141,7 @@ async function main() {
      钉住一个拼接产物而非真实口径)。 */
   fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1/', apiKey: 'test-key', models: ['m-a', 'm-b'] }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort, protocol: 'anthropic', apiKey: 'anthropic-test-key' }, stubantdead: { name: 'StubAntDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', protocol: 'anthropic', apiKey: 'dead-ant-key' }, stubnokey: { name: 'StubNoKey', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: '' }, stubheaders: { name: 'StubHdr', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key', headers: { 'X-Custom-Auth': 'hdr-ok' } }, stubglm: { name: 'StubGLM', baseUrl: 'http://127.0.0.1:' + upPort + '/tokenrhythm/v1', chatPath: '/v2/chat', apiKey: 'glm-key' }, stubdead: { name: 'StubDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', apiKey: 'dead-key' }, stubreset: { name: 'StubReset', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'reset-key' }, stubresetant: { name: 'StubResetA', baseUrl: 'http://127.0.0.1:' + upPort, protocol: 'anthropic', apiKey: 'reset-ant-key' }, stubhuge: { name: 'StubHuge', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'huge-key' } } }));   // 第48轮: 后三个供「中途断连 / 超大响应体」断言 (另起实例跑, 见文末第48轮块)
 
-  server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile }) });
+  server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile, LLMCHESS_TRUSTED_PROXIES: '' }) });
   const up = await waitHealth(40);   // ~6s 上限
   ok(up, '服务启动 + GET /api/health → 200');
 
@@ -493,7 +501,7 @@ async function main() {
      新进程的限流表是空的, 因此本块既不受预算约束, 也不干扰既有断言。 */
   const PORT2 = 18000 + Math.floor(Math.random() * 20000);
   const BASE2 = 'http://127.0.0.1:' + PORT2;
-  server2 = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT2)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile }) });
+  server2 = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT2)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile, LLMCHESS_TRUSTED_PROXIES: '' }) });
   let up2 = false;
   for (let i = 0; i < 40 && !up2; i++) { up2 = (await reqTo(BASE2, 'GET', '/api/health')).status === 200; if (!up2) await new Promise(function (r) { setTimeout(r, 150); }); }
   ok(up2, '第48轮: 第二实例启动 (独立限流表, 供本轮新增断言使用)');
@@ -532,7 +540,38 @@ async function main() {
   const aliveAfterHuge = await reqTo(BASE2, 'GET', '/api/health');
   ok(aliveAfterHuge.status === 200, '超大响应被截断后服务仍存活 (只丢弃该次响应, 不影响后续请求)');
 
+  // X-Forwarded-For 默认不可信: 伪造不同地址仍共享真实 TCP 对端的 8/s 限额。
+  await new Promise(function (r) { setTimeout(r, 1050 - (Date.now() % 1000)); });
+  const xffPayload = JSON.stringify({ provider: 'missing', model: 'm', messages: [{ role: 'user', content: 'x' }] });
+  const untrustedXff = await Promise.all(Array.from({ length: 9 }, function (_, i) {
+    return reqTo(BASE2, 'POST', '/api/chat', xffPayload, { 'Content-Type': 'application/json', 'X-Forwarded-For': '203.0.113.' + (10 + i) });
+  }));
+  ok(untrustedXff.some(function (r) { return r.status === 429; }),
+    '默认忽略 X-Forwarded-For: 变换伪造地址仍触发同一 TCP 对端的 8/s 限额');
+
+  // 显式信任 127.0.0.1 作为直连代理; 代理链中右侧真实客户端地址固定, 左侧伪造前缀不能换限流桶。
+  const PORT3 = 18000 + Math.floor(Math.random() * 20000);
+  const BASE3 = 'http://127.0.0.1:' + PORT3;
+  server3 = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT3)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile, LLMCHESS_TRUSTED_PROXIES: '127.0.0.1' }) });
+  let up3 = false;
+  for (let i = 0; i < 40 && !up3; i++) { up3 = (await reqTo(BASE3, 'GET', '/api/health')).status === 200; if (!up3) await new Promise(function (r) { setTimeout(r, 150); }); }
+  ok(up3, '可信代理测试实例启动');
+  await new Promise(function (r) { setTimeout(r, 1050 - (Date.now() % 1000)); });
+  const trustedXff = await Promise.all(Array.from({ length: 9 }, function (_, i) {
+    return reqTo(BASE3, 'POST', '/api/chat', xffPayload, { 'Content-Type': 'application/json', 'X-Forwarded-For': '203.0.113.' + (30 + i) + ', 192.0.2.45' });
+  }));
+  ok(trustedXff.some(function (r) { return r.status === 429; }),
+    '显式可信代理按右侧首个非可信地址限流, 不受 X-Forwarded-For 伪造前缀影响');
+
+  // Anthropic 上游延迟超过心跳间隔后正常完成: 响应仍为完整 SSE, 服务进程不因重复 writeHead 退出。
+  const delayedAnt = await reqTo(BASE3, 'POST', '/api/chat', JSON.stringify({ provider: 'stubanthropic', model: 'stub-ant-delayed', messages: [{ role: 'user', content: 'x' }] }), { 'Content-Type': 'application/json' }, 30000);
+  ok(delayedAnt.status === 200 && /text\/event-stream/.test(delayedAnt.headers['content-type'] || '') && /: ping/.test(delayedAnt.body) && /delayed-ok/.test(delayedAnt.body) && /\[DONE\]/.test(delayedAnt.body),
+    'Anthropic 心跳后上游完成 → 200 SSE 含心跳、完整回复与 [DONE] (不重复写响应头)');
+  const aliveAfterBeat = await reqTo(BASE3, 'GET', '/api/health');
+  ok(aliveAfterBeat.status === 200, 'Anthropic 心跳后完成不导致服务进程崩溃');
+
   try { server2.kill(); } catch (eK2b) {}
+  try { server3.kill(); } catch (eK3b) {}
 
   finish();
 }
@@ -540,6 +579,7 @@ async function main() {
 function finish() {
   try { if (server) server.kill(); } catch (e) {}
   try { if (server2) server2.kill(); } catch (eS2) {}
+  try { if (server3) server3.kill(); } catch (eS3) {}
   try { upstream.close(); } catch (eU) {}
   try { fs.rmSync(keysFile, { force: true }); } catch (eK) {}
   try { fs.rmSync(path.join(ROOT, 'temp', 'guard-static-' + process.pid + '.txt'), { force: true }); } catch (eK2) {}   // 第43轮: 静态缓存测试的临时文件兜底清理

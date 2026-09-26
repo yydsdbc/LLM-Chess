@@ -56,18 +56,27 @@ ok(recE.moves.length === 1 && recE.moves[0].timeMs === 1234, 'L2 addMove 记录 
 ok(XQ.Record.summarize(recE).indexOf('1手') >= 0, 'L2 summarize 空谱后 1 手不炸');
 var recEmpty = XQ.Record.blank({});
 ok(XQ.Record.summarize(recEmpty).indexOf('0手') >= 0, 'L2 summarize 全空谱不炸');
-var importPool = [];
-function fakeSave(r) { importPool.push(r); }
-// saveImported 语义验证: id 前缀 + 只留 2
-XQ.Record.saveImported = function (rec) {
-  var r2 = JSON.parse(JSON.stringify(rec));
-  r2.id = 'import-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  fakeSave(r2);
-  return r2;
-};
-var i1 = XQ.Record.saveImported({ moves: [{ n: 1 }] });
+// 直接验证生产 saveImported，而不是替换成测试自造实现。
+var importedMove = { from: 'a4', to: 'a5', side: 'red', piece: 'pawn' };
+var i1 = XQ.Record.saveImported({ moves: [importedMove] });
 ok(/^import-/.test(i1.id), 'L2 saveImported id 前缀 import-');
 ok(typeof i1.id === 'string' && i1.id.length > 8, 'L2 saveImported id 唯一且非空');
+ok(XQ.Record.get(i1.id) && XQ.Record.get(i1.id).moves.length === 1, 'L2 saveImported 返回的深链 id 确实落库');
+var i2 = XQ.Record.saveImported({ moves: [importedMove], red: { name: '实验模型二' } });
+ok(i2.id !== i1.id && XQ.Record.get(i2.id), 'L2 不同导入记录分别可按 id 查回');
+var i3 = XQ.Record.saveImported({ moves: [importedMove], red: { name: '实验模型三' } });
+ok(!XQ.Record.get(i1.id) && XQ.Record.get(i2.id) && XQ.Record.get(i3.id), 'L2 导入棋谱仍只保留最近两条');
+
+// 同样着法但模型/结论不同的是独立实验，不应被同谱去重吞掉。
+var research1 = XQ.Record.blank({ redName: '研究A', blackName: '研究对手' });
+var research2 = XQ.Record.blank({ redName: '研究B', blackName: '研究对手' });
+research1.moves = [importedMove, importedMove, importedMove, importedMove, importedMove];
+research2.moves = research1.moves.slice();
+research1.result = 'checkmate'; research1.winner = 'red';
+research2.result = 'resign'; research2.winner = 'black';
+XQ.Record.save(research1);
+XQ.Record.save(research2);
+ok(XQ.Record.get(research1.id) && XQ.Record.get(research2.id), 'L2 同谱不同模型/结果保留为独立实验记录');
 
 // L4 replayController 空/单/双手全操作不炸
 function ctrlFor(moves) {
@@ -116,6 +125,15 @@ var lb = E.leaderboard();
 var w = lb.filter(function (x) { return x.name === 'L8-W'; })[0];
 ok(w && w.games === 2 && w.win === 1 && w.draw === 1 && w.loss === 0, 'L8 战绩计数 2局1胜1和 (得 ' + JSON.stringify(w) + ')');
 ok(lb.every(function (x) { return x.name.indexOf('stats:') !== 0; }), 'L8 leaderboard 不泄漏 stats 内部键');
+E.applyResult('L8-Solo', 'L8-Solo', 'red');
+var soloTable = JSON.parse(sandbox.localStorage.getItem('xq_elo_v1'));
+ok(soloTable['L8-Solo'] === 1500 && !soloTable['stats:L8-Solo'], 'L8 同名模型自战不改分也不记两局');
+sandbox.localStorage.setItem('xq_elo_v1', JSON.stringify({ EloA: 1600, EloC: 1500, EloB: 1400, TieZ: 1500, TieA: 1500 }));
+var sortedA = E.leaderboard().map(function (e) { return e.name; }).join(',');
+ok(sortedA === 'EloA,EloC,TieA,TieZ,EloB', 'L8 排行榜按 rating 降序，同分按名字稳定升序: ' + sortedA);
+sandbox.localStorage.setItem('xq_elo_v1', JSON.stringify({ EloB: 1400, TieA: 1500, EloC: 1500, EloA: 1600, TieZ: 1500 }));
+var sortedB = E.leaderboard().map(function (e) { return e.name; }).join(',');
+ok(sortedB === sortedA, 'L8 排行榜排序不依赖输入属性顺序');
 
 // L9 第39轮: engine legalTargets/dangerTargets memo (同盘面同格 → 同数组引用; 走子/undo 换代即重算)
 var engM = XQ.Engine.create();

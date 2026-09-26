@@ -2123,3 +2123,13 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 回归: `_committee_agent` 增加共识元数据、落谱完整票型、progress side、同落点异起点票型与圆桌第二阶段永久挂起/abort/不重试/阶段进度覆盖。
 - 定向: 修改的 JS `node --check` PASS; `node test/_committee_agent.js` ALL PASS; `node test/check_ui.js` PASS; `node test/i18n_check.js` 15/15 组、325 键 PASS。
 - 最终完整门禁: `npm test` 15/15 PASS; `npm run check` ALL PASS (50 个 JS 文件语法、提示词与 dump 检查); `git diff --check` PASS。
+
+## 2026-09-26 16:04 第67轮 (codex + 协作 agent — 全面测试后修复正确性问题)
+
+- CSP 下设置取消/开局与重开按钮恢复可用；默认拖拽时普通点击选子不再被吞，委员会直播进度节点与流式思考内容分离。
+- 修复会诊快速多数提前取消可能改变胜负的票、maxParallel 仅错峰未限并发、LLM 退避等待期间 abort 仍重试；每手请求结束后清理外部 signal 监听。
+- Anthropic 心跳提交合法 SSE 响应头并在结束/断开时清理；默认忽略不可信 X-Forwarded-For，仅按配置的可信代理链解析限流地址。
+- 修复 Elo 排行榜排序与同名自战扣分；存档不再按相同着法吞并独立研究记录，导入返回可实际读取的已保存 ID。
+- 修复回放跳过手撤销、吃子跳转索引、翻转列标签与播放态读取；棋谱投票信心值写入 HTML 前转义。
+- 回归测试覆盖相关取消时序、并发峰值、投票胜出、服务端代理边界、回放索引、Elo 稳定排序及生产棋谱导入落库。
+- 最终门禁: 定向测试通过；`npm test` 15/15 PASS; `npm run check` 50 个 JS 语法及提示词门禁 PASS; `check_ui` PASS; `_server_http` 125/125 PASS; `git diff --check` PASS。

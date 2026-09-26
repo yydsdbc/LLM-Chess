@@ -389,7 +389,7 @@ while ((mB = btnTRe.exec(rpEnsureBody)) !== null) {
 }
 // (b) 播放态首绘: rpStart 内必须显式调用一次 rpOnPlayState (条件性回调不会在首次打开时到达)
 var rpStartBody = (appCode.match(/function rpStart\(record\) \{[\s\S]*?\n  \}/) || [''])[0];
-if (!/rpOnPlayState\(rpCtrl\.playing/.test(rpStartBody)) wire43.push('rpStart 缺播放态首绘 (首次打开回放时 ▶播放 按钮停在模板文案, EN 下即中文)');
+if (!/rpOnPlayState\(rpCtrl\.isPlaying/.test(rpStartBody)) wire43.push('rpStart 缺播放态首绘 (首次打开回放时 ▶播放 按钮停在模板文案, EN 下即中文)');
 // (c) Elo 天梯浮层: 对话语义 + 唯一关闭出口 + 快捷键闸门 + 键盘可达排序入口
 if (!/id="rp-elo-overlay" role="dialog" aria-modal="true" aria-labelledby="rp-elo-title"/.test(appCode)) wire43.push('Elo 天梯浮层缺对话语义 (role=dialog/aria-modal/labelledby)');
 if (!/function rpEloClose\(\)/.test(appCode)) wire43.push('Elo 天梯浮层缺唯一关闭出口 rpEloClose (Esc/✕/遮罩三处必须同一出口并归还焦点)');
@@ -788,3 +788,24 @@ else if (!/_rpActiveLi\.setAttribute\('aria-current', 'true'\)/.test(appCode)) w
 if (!/_rpActiveLi = rpEl\.movelist\.querySelector\('li\.active'\);/.test(appCode)) wire48.push('整块重建后未刷新活动项引用 (旧节点已脱离文档)');
 console.log('第22节 规范化判黑名单/路由/中继收尾/隐藏禁用保焦点/语言热切守卫:', wire48.length ? wire48.join(' | ') : 'OK (规范化后逐段黑名单 + pathname 路由 + 中继收尾单出口与响应体上限 + sw 缓存前缀 + 将杀将军判定与统计快照栈 + 隐藏/禁用保焦点 + 语言热切重绘 + 占位符走 tArgs + 轻路径 aria-current)');
 if (wire48.length) process.exit(1);
+
+// 第23节: CSP 下的按钮绑定、拖拽点击语义、直播进度卡与回放边界守卫
+const wire49 = [];
+if (/\sonclick\s*=/.test(html)) wire49.push('静态 HTML 仍包含内联 onclick (CSP script-src self 会屏蔽设置/终局按钮)');
+for (const [id, fn] of [['btn-settings-close', 'closeAISettings'], ['btn-settings-save', 'saveAISettings'], ['btn-end-restart', 'restartGame']]) {
+  if (!html.includes('id="' + id + '"') || !new RegExp("getElementById\\('" + id + "'\\)[\\s\\S]{0,100}?\\.onclick = " + fn).test(appCode)) {
+    wire49.push(id + ' 缺静态 ID 或 CSP 兼容的事件绑定');
+  }
+}
+const dragEndBody = (renCode.match(/function dragEnd\(ev\) \{[\s\S]*?\n  \}/) || [''])[0];
+if (!dragEndBody || !/if \(!d\.moved\) return;[\s\S]{0,80}?suppress\(\);/.test(dragEndBody)) wire49.push('未拖动的 pointerup 仍抑制原生 click (默认拖拽设置下无法点击选子)');
+if (!/if \(d\.moved\) suppress\(\);/.test(renCode)) wire49.push('取消拖拽的 click 抑制未按是否真正移动判定');
+if (!/\.d-thinking-stream/.test(appCode) || !/\.d-thinking-progress/.test(appCode) || !/committeeMode === 'roundtable'/.test(appCode)) {
+  wire49.push('会诊/圆桌思考流没有与进度状态分离并共存的卡片出口');
+}
+if (!/\.d-thinking-stream\{/.test(html)) wire49.push('直播思考流卡片缺布局限制 (长推理撑满面板)');
+if (/\[7 - i2\]/.test(appCode) || !/\[8 - i2\]/.test(appCode)) wire49.push('回放翻转视角列标签未按 8-i 映射');
+if ((appCode.match(/rpCtrl\.playing\(/g) || []).length || (appCode.match(/rpCtrl\.isPlaying\(/g) || []).length < 2) wire49.push('回放语言热切/首绘没有读取控制器 isPlaying 状态');
+if (!/esc2\(v\.conf != null \? v\.conf : '—'\)/.test(appCode)) wire49.push('导入投票信心值未 HTML 转义');
+console.log('第23节 CSP/拖拽/直播/回放边界守卫:', wire49.length ? wire49.join(' | ') : 'OK (无静态内联事件 + 按钮绑定 + 点击拖拽语义 + 独立直播进度/推理区 + 翻转列标 + 播放态 + 投票值转义)');
+if (wire49.length) process.exit(1);

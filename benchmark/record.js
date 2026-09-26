@@ -66,29 +66,23 @@
    * (QuotaExceeded → 逐级裁剪重试: 留30 → 留15 → 只存当前局, 保证刚下的这局永不丢) */
   var MAX_RECORDS = 60;
   var _listCache = null, _listRaw = null;   // 第37轮: list() 解析缓存 (raw 串校验 — 外部写入/跨标签自愈)
-  function movesHash(record) {   // 第58轮: 走法序列指纹 (同谱去重)
-    return record.moves.map(function (m) { return m.from + m.to; }).join('|');
-  }
   function save(record) {
     var all = list();
-    var hash = movesHash(record);
-    var dup = all.find(function (r) { return r.id !== record.id && movesHash(r) === hash && r.moves.length === record.moves.length; });
-    if (dup && record.moves.length > 4) { console.log('[Record] 同谱去重: 跳过 ' + record.id + ' (与 ' + dup.id + ' 相同)'); return dup; }
     var i = all.findIndex(function (r) { return r.id === record.id; });
     if (i >= 0) { all.splice(i, 1); }   // 更新也视为最近活动: 移到末尾再截断, 上限裁剪按活跃度
     all.push(record);
     if (all.length > MAX_RECORDS) all = all.slice(all.length - MAX_RECORDS);
-    _listCache = all;
     try {
       var _rawSave = JSON.stringify(all);
       localStorage.setItem(LS_KEY, _rawSave);
+      _listCache = all;
       _listRaw = _rawSave;
     } catch (e) {
       var tryKeep = [30, 15];
       for (var t = 0; t < tryKeep.length; t++) {
-        try { localStorage.setItem(LS_KEY, JSON.stringify(all.slice(-tryKeep[t]))); return record; } catch (e2) {}
+        try { writeList(all.slice(-tryKeep[t])); return record; } catch (e2) {}
       }
-      try { localStorage.setItem(LS_KEY, JSON.stringify([record])); } catch (e3) {}   // 最后兑底: 只保当前局
+      try { writeList([record]); } catch (e3) {}   // 最后兑底: 只保当前局
     }
     return record;
   }
@@ -111,6 +105,12 @@
   }
   function get(id) {
     return list().find(function (r) { return r.id === id; }) || null;
+  }
+  function writeList(records) {
+    var raw = JSON.stringify(records);
+    localStorage.setItem(LS_KEY, raw);
+    _listCache = records;
+    _listRaw = raw;
   }
   function remove(id) {
     var all = list().filter(function (r) { return r.id !== id; });
@@ -171,10 +171,12 @@
     var r2 = JSON.parse(JSON.stringify(rec));
     r2.id = IMPORT_PREFIX + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     save(r2);
+    var stored = get(r2.id);
+    if (!stored) throw new Error('Imported game could not be saved. Local storage may be full or unavailable.');
     var all = list();
     var imps = all.filter(function (r) { return r && typeof r.id === 'string' && r.id.indexOf(IMPORT_PREFIX) === 0; });
     for (var i = 0; i < imps.length - IMPORT_KEEP; i++) remove(imps[i].id);   // 超出保留数的旧导入清掉 (list 为旧→新序)
-    return r2;
+    return stored;
   }
 
   /* ── v3.9 一行战绩汇总 (红胜/黑胜/和 + 总手数+吃子+用时): cli / match_headless / 回放统一口径 ── */

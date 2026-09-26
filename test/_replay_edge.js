@@ -47,6 +47,21 @@ ok(dirty.state().skippedCount === 1, 'E2 goto(2) 后 skipped=1 (缺坐标手)');
 dirty.goto(4);
 ok(dirty.state().skippedCount === 3, 'E2 goto(4) 后 skipped=3 (+非法着法 + 空条目)');
 ok(dirty.idx() === 4, 'E2 脏棋谱 goto 末尾不炸');
+var dirtyBeforeUndo = XQ.Replay.create({
+  id: 'edge-dirty',
+  moves: [
+    { n: 1, side: 'red', piece: 'cannon', from: 'b3', to: 'e3' },
+    { n: 2, side: 'black' },
+    { n: 3, side: 'red', piece: 'pawn', from: 'e4', to: 'e9' },
+    null
+  ]
+});
+dirtyBeforeUndo.goto(3);
+var dirtyExpectedCells = JSON.stringify(dirtyBeforeUndo.engine().snapshot().cells);
+dirty.prev();
+ok(JSON.stringify(dirty.engine().snapshot().cells) === dirtyExpectedCells,
+  'E2 prev 跳过空/非法手时不撤销之前的合法手');
+ok(dirty.state().skippedCount === 2, 'E2 prev 回退空手后保留之前跳过手的计数');
 
 // E3 toggleBookmark 纯逻辑
 var tb = XQ.Replay.toggleBookmark;
@@ -91,6 +106,16 @@ ok(XQ.Replay.bookmarkKey() === 'xq_replay:bm:unknown', 'E4 缺 id 回落 unknown
 var ctrl = XQ.ReplayController.create(empty, { onState: function () {}, onPlayState: function () {} });
 ctrl.play(); ctrl.stepNext(); ctrl.stepPrevCapture(); ctrl.toEnd(); ctrl.pause(); ctrl.dispose();
 ok(true, 'E5 空棋谱控制器全操作不炸');
+
+// E7 吃子导航必须检查当前 idx 对应的下一手 (idx=0 时即 moves[0])
+var firstCaptureSession = XQ.Replay.create({ id: 'first-capture', moves: [
+  { n: 1, captured: 'pawn' },
+  { n: 2, captured: null }
+] });
+var firstCaptureCtrl = XQ.ReplayController.create(firstCaptureSession, { onState: function () {}, onPlayState: function () {} });
+firstCaptureCtrl.stepNextCapture();
+ok(firstCaptureSession.idx() === 1, 'E7 从开局跳到第一手吃子 (不跳过 moves[0])');
+firstCaptureCtrl.dispose();
 
 console.log(fails.length ? 'replay_edge: ' + fails.length + ' FAIL' : 'replay_edge: ALL PASS');
 process.exit(fails.length ? 1 : 0);

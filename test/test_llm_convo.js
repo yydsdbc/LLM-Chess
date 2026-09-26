@@ -6,6 +6,7 @@
 const path = require('path');
 const fs = require('fs');
 const vm = require('vm');
+const { getEventListeners } = require('events');
 
 const ROOT = path.join(__dirname, '..');
 for (const f of ['core/piece.js', 'core/move.js', 'core/board.js', 'core/rules.js',
@@ -639,6 +640,38 @@ function ok(cond, name) {
     acCur.c = new AbortController();      // 新代控制器 (等价 gameAbort 换代)
     const mvFn = await agentFn2.next(XQ.Engine.create(), null);
     ok(mvFn && mvFn.from.x === 1 && mvFn.to.x === 4, 'signal 取值函数换代后请求正常 (旧代 abort 不误伤新代, 第39轮)');
+  }
+  {
+    // 第67轮: 委员会在 429 退避期间取消后, 计时器须立即结束本手且不能启动下一次请求。
+    const oldFetchRetryAbort = globalThis.fetch;
+    let retryAbortCalls = 0;
+    let retryAbortWait = 0;
+    globalThis.fetch = async function () {
+      retryAbortCalls++;
+      return { ok: false, status: 429, headers: { get: () => null }, json: async () => ({ error: { message: 'rate limited' } }) };
+    };
+    const retryAbortAgent = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'mock-retry-abort', onRetry: function (ev) { retryAbortWait = ev.waitMs; } });
+    const retryAbortResult = retryAbortAgent.next(XQ.Engine.create()).then(() => null, e => e);
+    await new Promise(resolve => setTimeout(resolve, 25));
+    retryAbortAgent.abort();
+    const retryAbortErr = await Promise.race([retryAbortResult, new Promise(resolve => setTimeout(() => resolve('still waiting'), 300))]);
+    globalThis.fetch = oldFetchRetryAbort;
+    ok(retryAbortWait >= 2500 && retryAbortErr instanceof Error && retryAbortCalls === 1 && retryAbortAgent.usage().attempts === 1,
+      'abort 在退避中清除计时器并阻止第二次请求 (wait=' + retryAbortWait + 'ms, calls=' + retryAbortCalls + ')');
+  }
+  {
+    // 第67轮: 每手请求结束都移除 external signal 监听，避免整局对局累积已完成请求闭包。
+    const priorFetchSignalCleanup = globalThis.fetch;
+    const externalSignal = new AbortController();
+    globalThis.fetch = async function () {
+      return { ok: true, headers: { get: k => k.toLowerCase() === 'content-type' ? 'application/json' : null },
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({ from: 'b3', to: 'e3', summary: 'signal cleanup', confidence: 0.5 }) } }] }) };
+    };
+    const cleanupAgent = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'mock-signal-cleanup', signal: externalSignal.signal });
+    for (let i = 0; i < 3; i++) await cleanupAgent.next(XQ.Engine.create());
+    const remainingListeners = getEventListeners(externalSignal.signal, 'abort').length;
+    globalThis.fetch = priorFetchSignalCleanup;
+    ok(remainingListeners === 0, '连续成功请求清理 external signal 监听 (残留 ' + remainingListeners + ')');
   }
 
   // ── 开局硬保护回归: 炮吃马被代码拦截 (v2.3 修复: 引擎类型是 knight/bishop, 原 horse/elephant 永不命中 → 拦截失效) ──

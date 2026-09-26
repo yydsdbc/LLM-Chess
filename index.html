@@ -371,6 +371,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 /* K6 ⚡思考中卡片脉冲柔化: 缩放脉冲 → 金色微光呼吸 */
 @keyframes dThink{50%{box-shadow:0 0 10px rgba(255,213,74,.22)}}
 .dcard.d-thinking{border-color:rgba(241,196,15,.45);animation:dThink 2s ease-in-out infinite;text-shadow:0 0 8px rgba(255,213,74,.35)}
+.d-thinking-stream{display:block;max-height:48px;overflow:hidden;margin-top:3px;font-size:9px;line-height:1.35;opacity:.72;white-space:pre-wrap;text-align:left}
 /* K7 面板/走法记录滚动条统一 (Chromium): 6px 暗金圆角 */
 .think-body::-webkit-scrollbar,#move-log::-webkit-scrollbar{width:6px}
 .think-body::-webkit-scrollbar-thumb,#move-log::-webkit-scrollbar-thumb{background:rgba(240,217,160,.22);border-radius:3px}
@@ -580,8 +581,8 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
             </details>
             <div class="set-foot">
                 <button type="button" class="btn" id="ui-resetdata" data-i18n="reset_data">清空本地数据</button>
-                <button class="btn" onclick="XQApp.closeAISettings()"><span data-i18n="btn_close">取消</span></button>
-                <button class="btn" onclick="XQApp.saveAISettings()"><span data-i18n="btn_save_settings">保存并开局</span></button>
+                <button class="btn" id="btn-settings-close"><span data-i18n="btn_close">取消</span></button>
+                <button class="btn" id="btn-settings-save"><span data-i18n="btn_save_settings">保存并开局</span></button>
             </div>
         </div>
     </div>
@@ -591,7 +592,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
             <div class="eo-title" id="eo-title"></div>
             <div class="eo-sub" id="eo-sub"></div>
 <div class="eo-stats" id="eo-stats"></div>
-            <button class="btn eo-btn" onclick="XQApp.restart()" data-i18n="btn_again">🔁 再来一局</button>
+            <button class="btn eo-btn" id="btn-end-restart" data-i18n="btn_again">🔁 再来一局</button>
             <button class="btn eo-btn" id="eo-export" data-i18n="eo_export_btn" style="margin-left:8px">💾 导出本局</button>
         </div>
     </div>

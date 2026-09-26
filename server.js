@@ -11,6 +11,7 @@
 'use strict';
 const http = require('http');
 const https = require('https');
+const net = require('net');
 const fs = require('fs');
 const path = require('path');
 
@@ -241,6 +242,12 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
     messages: merged,
     stream: false   // 上游固定非流式, 中继侧合成 SSE (省去 Anthropic 事件流转换)
   });
+  const sseHeaders = { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': req_origin_safe(req) };
+  let beat = null;
+  const writeSseError = msg => {
+    try { res.write('data: ' + JSON.stringify({ error: { message: msg } }) + '\n\n'); res.write('data: [DONE]\n\n'); } catch (eS) {}
+    try { res.end(); } catch (eE) {}
+  };
   const upReq = mod.request({
     hostname: url.hostname,
     port: url.port || (url.protocol === 'https:' ? 443 : 80),
@@ -263,8 +270,11 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
     const failUp = msg => {
       if (settled) return;
       settled = true;
-      if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
-      try { res.end(JSON.stringify({ error: 'relay upstream error: ' + msg })); } catch (eR) {}
+      clearInterval(beat);
+      if (!res.headersSent) {
+        res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+        try { res.end(JSON.stringify({ error: 'relay upstream error: ' + msg })); } catch (eR) {}
+      } else writeSseError('relay upstream error: ' + msg);
     };
     upRes.on('data', c => {
       got += c.length;
@@ -274,6 +284,7 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
     upRes.on('end', () => {
       if (settled) return;
       settled = true;
+      clearInterval(beat);
       let text = '', usage = null, httpErr = null;
       try {
         const jr = JSON.parse(Buffer.concat(out).toString('utf8'));
@@ -285,10 +296,11 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
         }
       } catch (eP) { httpErr = 'anthropic 响应解析失败'; }
       if (httpErr) {
+        if (res.headersSent) return writeSseError(httpErr);
         res.writeHead(upRes.statusCode || 502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });   // v1.0.daily: 同上, anthropic 错误响应带 ACAO
         return res.end(JSON.stringify({ error: httpErr }));
       }
-      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      if (!res.headersSent) res.writeHead(200, sseHeaders);
       const frame = o2 => res.write('data: ' + JSON.stringify(o2) + '\n\n');
       frame({ choices: [{ delta: { content: text }, finish_reason: 'stop' }], usage });
       frame({ choices: [], usage });
@@ -298,9 +310,9 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
     upRes.on('error', eU => failUp((eU && eU.message) || 'response error'));   // 有监听才不会变成 unhandled 'error'
     upRes.on('close', () => { if (!settled && !upRes.complete) failUp('upstream closed before response completed'); });
   });
-  const beat = setInterval(() => { try { res.write(': ping\n\n'); } catch (eB) {} }, 15000);   // v3.5: SSE 心跳防 streamIdle 误杀
+  beat = setInterval(() => { try { if (!res.headersSent) res.writeHead(200, sseHeaders); res.write(': ping\n\n'); } catch (eB) {} }, 15000);   // v3.5: SSE 心跳防 streamIdle 误杀; 提前提交合法 SSE 头
   upReq.on('timeout', () => upReq.destroy(new Error('anthropic timeout(180s)')));
-  upReq.on('error', e3 => { clearInterval(beat); if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) }); res.end(JSON.stringify({ error: 'relay upstream error: ' + e3.message })); });   // 第46轮: 补 ACAO — openai 路径的同类错误分支一直带 (file:// 调试/异源页要读到错误明细), 本分支漏了
+  upReq.on('error', e3 => { clearInterval(beat); const msg = 'relay upstream error: ' + e3.message; if (!res.headersSent) { res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) }); res.end(JSON.stringify({ error: msg })); } else writeSseError(msg); });   // 第46轮: 补 ACAO; 心跳已提交时用 SSE 错误帧收尾
   res.on('close', () => { clearInterval(beat); try { upReq.destroy(new Error('client closed')); } catch (e4) {} });
   upReq.write(body);
   upReq.end();
@@ -317,11 +329,31 @@ function req_origin_safe(req) {
   return '*';
 }
 
+// LLMCHESS_TRUSTED_PROXIES: 配置直接连接本服务的可信代理精确 IP (不支持 CIDR), 多个 IP 用逗号分隔; 默认空表示忽略所有 X-Forwarded-For。
+// 代理必须覆盖或追加客户端地址到 X-Forwarded-For; 应用从右向左跳过可信代理, 取第一个非可信地址作为限流键。
+function normalizeIp(value) {
+  const ip = String(value || '').trim().toLowerCase();
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(ip);
+  if (mapped && net.isIP(mapped[1]) === 4) return mapped[1];
+  return net.isIP(ip) ? ip : null;
+}
+const TRUSTED_PROXY_IPS = new Set(String(process.env.LLMCHESS_TRUSTED_PROXIES || '').split(',').map(normalizeIp).filter(Boolean));
+
 // v1.0.3: /api/chat 轻量限流 (每 IP 30 次/分 + 8 次/秒 双窗, 内存滑动, 零依赖)
 // v1.0.daily: 补秒窗 — 原仅分钟窗, 脚本可单秒连击打空整分钟预算再等下一窗; 人机/双 agent 每手 ≤2 请求远低于秒窗上限
 const _rlMap = new Map();
 function chatRateLimit(req) {
-  const ip = req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : (req.socket && req.socket.remoteAddress) || 'unknown';   // 第60轮: 反向代理后取 real IP
+  const remoteIp = normalizeIp(req.socket && req.socket.remoteAddress) || (req.socket && req.socket.remoteAddress) || 'unknown';
+  let ip = remoteIp;
+  const forwarded = req.headers && req.headers['x-forwarded-for'];
+  if (TRUSTED_PROXY_IPS.has(normalizeIp(remoteIp)) && typeof forwarded === 'string' && forwarded.trim()) {
+    const hops = forwarded.split(',').map(normalizeIp);
+    if (hops.every(Boolean)) {
+      let hop = remoteIp;
+      for (let i = hops.length - 1; i >= 0 && TRUSTED_PROXY_IPS.has(normalizeIp(hop)); i--) hop = hops[i];
+      ip = hop;
+    }
+  }
   const now = Date.now();
   const sec = Math.floor(now / 1000);
   let entry = _rlMap.get(ip);
