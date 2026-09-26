@@ -13,6 +13,7 @@ const SUITES = [   // 第18轮 +_replay_edge / 第19轮 +_logic_layer / 第23轮
   'run_tests.js',
   'test_evaluation.js',
   'test_record_edges.js',
+  'test_engine_cache.js',
   'test_llm_convo.js',
   'replay_smoke.js',
   '_clean_reason_check.js',

@@ -45,14 +45,32 @@
     var _dgrCache = null;   // 第39轮: dangerTargets memo (选中格每帧重算静态交换 → 记忆化)
     var _chkCache = null;   // 第43轮: inCheck memo (渲染一帧内 render 逐格判定 + renderStatus 各调一次 → 全盘攻击图扫描减半)
     var _snapCache = null;  // 第47轮: snapshot memo — 每帧 90 个 {color,type,id} 对象分配是渲染路径最大单笔分配 (键同 _stateVer)
+    var _legalCache = null; // 第71轮: 每状态按颜色缓存完整合法着法, 提示/评价/落子校验/终局判断共享
     var _stateVer = 0;      // 第39轮: 盘面变更版本 — memo 键用它 (原用 history.length: undo 后换着法重演回同一手数会过期命中)
-    function bumpVer() { _stateVer++; _tgtCache = null; _dgrCache = null; _chkCache = null; _snapCache = null; }
+    function bumpVer() { _stateVer++; _tgtCache = null; _dgrCache = null; _chkCache = null; _snapCache = null; _legalCache = null; }
     var over = false, result = 'normal', winner = null;
     var listeners = [];
     var posCounts = {};      // v1.7.7 重复局面计数: key=盘面文本|执子方 — 三次重复判和/长将检测基础
     var checkStreaks = { red: 0, black: 0 };   // v1.7.8 长将追踪: 各方"最近连续将军手数" (每手都将军则累加, 不将军则清零)
     var naturalCap = typeof opts.naturalCap === 'number' ? opts.naturalCap : 120;   // v3.8 自然限着: 连续 120 半回合 (60 回合) 无吃子判和 (0=关闭); 亚洲棋规 60 回合自然限着
     var naturalClock = 0;    // v3.8: 当前连续无吃子半回合数 (吃子即清零)
+    function legalMovesFor(color) {
+      var c = color || turn;
+      if (c !== 'red' && c !== 'black') return Generator.generateLegalMoves(board, c);
+      if (!_legalCache || _legalCache.ver !== _stateVer) _legalCache = { ver: _stateVer, red: null, black: null };
+      if (!_legalCache[c]) _legalCache[c] = Generator.generateLegalMoves(board, c);
+      return _legalCache[c];
+    }
+    function copyLegalMoves(moves) {
+      return moves.map(function (m) {
+        return {
+          from: { x: m.from.x, y: m.from.y },
+          to: { x: m.to.x, y: m.to.y },
+          piece: Piece.create(m.piece.color, m.piece.type, m.piece.id),
+          captured: m.captured ? Piece.create(m.captured.color, m.captured.type, m.captured.id) : null
+        };
+      });
+    }
     /* 第43轮: 盘面文本 memo (键 = _stateVer) — snapshot 每帧都要 posCounts[posKey()], 原先每帧重建一次
        90 格文本; _stateVer 覆盖全部盘面/执子方变更 (apply/undo/newGame 均 bumpVer), 故同版本内结果恒定。 */
     var _pkCache = null;
@@ -72,7 +90,7 @@
     }
 
     function refreshStatus() {
-      var st = Judge.status(board, turn);
+      var st = Judge.status(board, turn, legalMovesFor(turn));
       over = st.over; result = st.result; winner = st.winner;
       return st;
     }
@@ -121,7 +139,7 @@
 
       /** ── 走法 ── */
       generateLegalMoves: function (color) {
-        return Generator.generateLegalMoves(board, color || turn);
+        return copyLegalMoves(legalMovesFor(color));
       },
       legalTargets: function (x, y) {
         var p = board.get(x, y);
@@ -147,7 +165,7 @@
         var p = board.get(fx, fy);
         if (!p) return { ok: false, reason: 'empty_square' };
         if (p.color !== turn) return { ok: false, reason: 'not_your_turn' };
-        var legal = Generator.generateLegalMoves(board, turn);
+        var legal = legalMovesFor(turn);
         var m = null;
         for (var i = 0; i < legal.length; i++) {
           if (Move.matchesCoord(legal[i], fx, fy, tx, ty)) { m = legal[i]; break; }

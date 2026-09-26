@@ -2162,3 +2162,13 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 总备份对损坏 JSON 安全降级；恢复支持空 replace、验证模式与记录形状、按 ID 去重、按两类保留池裁剪，并在记录无法落库时明确报错。
 - 文件导入按实际字节数提前限额、处理读取中止，并拒绝非法根类型。
 - 新增 `test_record_edges.js` 23 项边界回归；`test_evaluation.js` 新增同手数换分支阶段缓存回归。`npm test` 16/16 PASS; `npm run check` PASS (51 个 JS 文件、提示词门禁); `git diff --check` PASS。
+
+## 2026-09-26 17:52 第71轮 (codex — 引擎状态索引与合法着法缓存)
+
+- 将 Board 将帅位置改为随 `set/applyMove/undoMove` 增量维护的索引；合法着法安全检查不再为每个候选着法扫描 90 格找将帅。
+- Engine 按盘面版本与颜色缓存完整合法着法；`applyPlayerMove`、`Judge.status`、评价与 agent 查询共享结果，任何走子/悔棋/新局由状态版本统一失效。
+- 公共 `generateLegalMoves` 返回棋子对象独立副本，调用方修改数组、坐标或棋子不会污染缓存或盘面。
+- 新增 `test_engine_cache.js` 覆盖将帅索引 set/apply/undo/capture/clone 生命周期、按颜色复用、走子与悔棋失效及外部修改隔离。
+- 微基准: 同进程 300,000 次将帅查询中位数，90 格扫描 88.51 ms，索引查询 6.19 ms (约 14.3 倍；仅代表该查找微基准)。
+- 定向: `node test/test_engine_cache.js` 3/3 PASS; `node test/run_tests.js` 50/50 PASS; `_logic_layer` 与 `_committee_agent` ALL PASS。
+- 完整门禁: `npm test` 17/17 PASS; `npm run check` 52 个 JS 文件及提示词门禁 PASS; `git diff --check` PASS。

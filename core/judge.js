@@ -12,8 +12,8 @@
    *   { over:false, result:'normal'|'check', winner:null }
    *   { over:true,  result:'checkmate'|'stalemate', winner:'red'|'black' }
    */
-  function status(b, colorToMove) {
-    var moves = Generator.generateLegalMoves(b, colorToMove);
+  function status(b, colorToMove, movesPre) {
+    var moves = movesPre || Generator.generateLegalMoves(b, colorToMove);
     var check = Rules.inCheck(b, colorToMove);
     if (moves.length === 0) {
       return {
