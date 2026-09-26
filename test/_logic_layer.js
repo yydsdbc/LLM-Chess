@@ -473,6 +473,8 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
 }).then(function () {
   l21Round64();               // 第64轮: 池化棋盘翻转后 click / 拖拽仍按当前视角映射
 }).then(function () {
+  l22Round72();               // 第72轮: 回放自动播放取消与主盘连续复盘恢复
+}).then(function () {
   // L9 PGN 导入 (第36轮新增解析器的守护): 标签/多标签/着法/非法报错
 var pgnOk = ['[Event "x"]', '[Red "红"] [RedModel "glm-a"]', '[Black "黑"] [BlackModel "glm-c"]', '[Result "1-0"]', '', '1. h3-e3 b10-c8 2. b3-c3'].join(String.fromCharCode(10));
 var recP = XQ.Record.importFromPGN(pgnOk);
@@ -1070,4 +1072,69 @@ function l21Round64() {
   }
   sandbox.document.addEventListener = realDocAdd;
   sandbox.document.removeEventListener = realDocRemove;
+}
+
+/* ═══ L22 第72轮: 使用生产 app 函数与控制器，确定性验证延迟回调与复盘栈生命周期 ═══ */
+function l22Round72() {
+  var appSource = fs.readFileSync(path.join(ROOT, 'ui/app.js'), 'utf8');
+  function appPart(start, end) {
+    var a = appSource.indexOf(start), b = appSource.indexOf(end, a);
+    if (a < 0 || b < 0) throw new Error('app 测试函数边界缺失: ' + start);
+    return appSource.slice(a, b);
+  }
+  var timers = {}, timerId = 0;
+  var ctx = {
+    console: console, XQ: { Replay: XQ.Replay }, Date: Date,
+    setTimeout: function (fn, ms) { var id = ++timerId; timers[id] = { fn: fn, ms: ms }; return id; },
+    clearTimeout: function (id) { delete timers[id]; },
+    rpCtrl: null, rpSession: null, rpLastIdx: -1, rpAutoplayTimer: null,
+    rpEl: { ov: { style: { display: 'block' } }, info: {} }, rpOpener: null,
+    localStorage: { getItem: function () { return null; } },
+    rpGetSetting: function (k) { return k === 'autoplay' ? '1' : null; },
+    rpOnState: function () {}, rpOnPlayState: function () {}, rpBookmarkLoad: function () {},
+    rpPaintSpeeds: function () {}, rpPaintLoop: function () {}, rpPaintHead: function () {}, rpPaintMoveList: function () {},
+    rpLockScroll: function () {}, refresh: function () {}, history: { replaceState: function () {} },
+    location: { pathname: '/', search: '' }, document: { activeElement: null }
+  };
+  ctx.globalThis = ctx;
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'replay/replay_controller.js'), 'utf8'), ctx);
+  vm.runInNewContext(appPart('  function rpStart(record) {', '  var _rpHeavyTick'), ctx);
+  vm.runInNewContext(appPart('  function rpClose() {', '\n  // 暴露调试句柄'), ctx);
+  var record = { id: 'autoplay-test', moves: [{ n: 1, side: 'red', piece: 'cannon', from: 'b3', to: 'e3' }] };
+  function pendingAutoplay() {
+    var ids = Object.keys(timers).filter(function (id) { return timers[id].ms === 300; });
+    return ids.length ? timers[ids[ids.length - 1]].fn : null;
+  }
+  ctx.rpStart(record);
+  var closedCallback = pendingAutoplay();
+  ctx.rpClose();
+  ok(Object.keys(timers).length === 0, 'L22 关闭回放清除尚未启动的 300ms 自动播放');
+  closedCallback();   // 已经进入事件队列的旧回调仍须失效。
+  ok(!ctx.rpCtrl.isPlaying() && Object.keys(timers).length === 0,
+    'L22 关闭后已排队的自动播放回调不能复活隐藏回放');
+  ctx.rpEl.ov.style.display = 'block';
+  ctx.rpStart(record);
+  var oldCallback = pendingAutoplay();
+  ctx.rpStart({ id: 'next-record', moves: record.moves });
+  var currentCallback = pendingAutoplay();
+  oldCallback();
+  ok(!ctx.rpCtrl.isPlaying(), 'L22 切谱后旧棋谱的自动播放回调不能启动新棋谱');
+  currentCallback();
+  ok(ctx.rpCtrl.isPlaying(), 'L22 当前棋谱的自动播放仍能按时启动');
+  ctx.rpClose();
+
+  var engine = XQ.Engine.create();
+  for (var n = 0; n < 4; n++) {
+    var m = engine.generateLegalMoves(engine.turn())[0];
+    engine.applyPlayerMove(m.from.x, m.from.y, m.to.x, m.to.y);
+  }
+  var expected = engine.snapshot().cells;
+  var mainCtx = { engine: engine, XQ: {}, replayStack: [], aiBusy: false,
+    bannerClear: function () {}, refresh: function () {}, warnBanner: function () {}, paintReplayBar: function () {},
+    document: { getElementById: function () { return null; } } };
+  vm.runInNewContext(appPart('  function replayTo(ply) {', '  function paintReplayBar() {'), mainCtx);
+  mainCtx.replayTo(2); mainCtx.replayTo(1); mainCtx.replayRestore();
+  ok(engine.ply() === 4 && JSON.stringify(engine.snapshot().cells) === JSON.stringify(expected),
+    'L22 主盘 4→2→1 连续复盘后还原回原始 4 手盘面');
+  ok(mainCtx.replayStack.length === 0, 'L22 还原后清空复盘栈');
 }

@@ -14,7 +14,7 @@
   }
 
   function clone(m) {
-    return create(m.from, m.to, m.piece, m.captured);
+    return create(m.from, m.to, XQ.Piece.clone(m.piece), XQ.Piece.clone(m.captured));
   }
 
   function same(a, b) {

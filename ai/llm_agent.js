@@ -449,20 +449,35 @@ function create(opts) {
         pump();
       });
     }
-    function chat(messages, tempOverride) {
+    function chat(messages, tempOverride, extSig, callState) {
       usage.httpCalls = (usage.httpCalls || 0) + 1;   // 第38轮: HTTP 调用级计数 (独立于 requests: 后者仅计上报 usage 的应答, 本项含未上报上游)
       return new Promise(function (resolve, reject) {
         var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
             if (_liveCtrlRef) _liveCtrlRef.ctrl = ctrl;   // 第49轮: abort 句柄暴露 (委员会 fastMajority 早期弃权用)
-        var extSig = (typeof opts.signal === 'function' ? opts.signal() : opts.signal) || null;   // v3.9a: 外部中断 (对局取消/页面关闭) — 与内部看门狗共用 ctrl, 上抛时按 aborted 归因; 第39轮: signal 支持取值函数形态 (app 侧对局世代换代, 固化实例会被下一局的 abort 误伤)
-        var settled = false, externalAbortHandler = null, timer = null;
+        // 第72轮: extSig 是 next 发起时的对局信号，旧局失败不能重新求值 getter 并接入新局。
+        var settled = false, externalAbortHandler = null, transportAbortHandler = null, timer = null, watch = null, hard = null;
+        function cancelledError() {
+          if (extSig && extSig.aborted) return new Error('外部中止: 对局已取消');
+          if (callState.cancelled) return new Error('请求已中止');
+          if (ctrl && ctrl.signal.aborted) return new Error('请求超时(' + (timeoutMs / 1000) + 's)');
+          return null;
+        }
+        function stopIfCancelled() {
+          var err = cancelledError();
+          if (err) { finishReject(err); return true; }
+          return false;
+        }
         function cleanup() {
           if (timer) { clearTimeout(timer); timer = null; }
+          if (watch) { clearInterval(watch); watch = null; }
+          if (hard) { clearTimeout(hard); hard = null; }
           if (extSig && externalAbortHandler && typeof extSig.removeEventListener === 'function') extSig.removeEventListener('abort', externalAbortHandler);
+          if (ctrl && transportAbortHandler) ctrl.signal.removeEventListener('abort', transportAbortHandler);
           externalAbortHandler = null;
+          transportAbortHandler = null;
         }
         function finishResolve(value) {
-          if (settled) return;
+          if (settled || stopIfCancelled()) return;
           settled = true; cleanup(); resolve(value);
         }
         function finishReject(err) {
@@ -470,6 +485,10 @@ function create(opts) {
           settled = true; cleanup(); reject(err);
         }
         if (extSig && extSig.aborted) { finishReject(new Error('外部中止: 对局已取消')); return; }
+        if (ctrl) {
+          transportAbortHandler = function () { finishReject(cancelledError() || new Error('请求已中止')); };
+          ctrl.signal.addEventListener('abort', transportAbortHandler, { once: true });
+        }
         if (extSig && ctrl && typeof extSig.addEventListener === 'function') {
           externalAbortHandler = function () { try { ctrl.abort(); } catch (eA) {} };
           extSig.addEventListener('abort', externalAbortHandler, { once: true });
@@ -477,6 +496,7 @@ function create(opts) {
         timer = ctrl ? setTimeout(function () { ctrl.abort(); }, timeoutMs) : null;
         var _lastThinkEmit = 0;   // 第37轮: 面板流节流状态
         var onDelta = opts.onThinking ? function (kind, full) {
+          if (settled || stopIfCancelled()) return;
           if (Date.now() - _lastThinkEmit < 80) return;   // 第37轮: 面板流节流 80ms (extractCN 长思考全量重跑 O(n²) 缓解; 最终 meta.reasoning 仍全量提取)
           _lastThinkEmit = Date.now();
           try { opts.onThinking(side, full); } catch (e) {}
@@ -498,6 +518,7 @@ function create(opts) {
           }),
           signal: ctrl ? ctrl.signal : undefined
         }).then(function (res) {
+          if (settled || stopIfCancelled()) return;
           if (timer) { clearTimeout(timer); timer = null; }
           if (!res.ok) {
             var retryAfterHdr = null;   // 第38轮: 捕获上游 Retry-After (秒或 HTTP-date 秒差), 退避取地板
@@ -519,12 +540,13 @@ function create(opts) {
           if (ct.indexOf('event-stream') >= 0) {
             // 流式看门狗: 收到头之后若长时间无数据/总时长超限 → abort 触发重试 (修复半开连接卡死)
             var lastAct = Date.now();
-            var watch = setInterval(function () {
+            watch = setInterval(function () {
               if (Date.now() - lastAct > streamIdleMs) { clearInterval(watch); clearTimeout(hard); try { ctrl.abort(); } catch (e2) {} }
             }, 5000);
-            var hard = setTimeout(function () { clearInterval(watch); try { ctrl.abort(); } catch (e2) {} }, streamHardMs);
+            hard = setTimeout(function () { clearInterval(watch); try { ctrl.abort(); } catch (e2) {} }, streamHardMs);
             readStream(res, onDelta, function () { lastAct = Date.now(); }).then(function (out) {
               clearInterval(watch); clearTimeout(hard);
+              if (settled || stopIfCancelled()) return;
               if (!out) { finishResolve(null); return; }
               var txt = out.answer || out.reasoning;
               if (opts.onRawResponse) { try { opts.onRawResponse(side, txt); } catch (e3) {} }
@@ -536,6 +558,7 @@ function create(opts) {
             });
           } else {
             res.json().then(function (data) {
+              if (settled || stopIfCancelled()) return;
               countUsage(data.usage);
               var first = data.choices && data.choices[0] || {};
               var msg = first.message || {};
@@ -703,7 +726,8 @@ function create(opts) {
         var rejectedMoves = [];   // 第60轮: 已被系统拒的着法 (重试时避免重复建议)
         var lastMv = null;   // 第60轮: 最近一次解析出的着法 (跨 then/catch 作用域)
         var tagCache = {};   // v3.7: 本手合法列表标注缓存 (重试复用, 引擎状态单次 next() 内不变 → 安全)
-        function currentSignal() { return (typeof opts.signal === 'function' ? opts.signal() : opts.signal) || null; }
+        var callSignal = (typeof opts.signal === 'function' ? opts.signal() : opts.signal) || null;
+        function currentSignal() { return callSignal; }   // 每手固定对局信号，下一手再读取动态 getter。
         function waitRetry(wait) {
           return new Promise(function (resolve, reject) {
             var finished = false;
@@ -746,7 +770,9 @@ function create(opts) {
           }
           if (roundtableNote) msgs[msgs.length - 1].content += '\n' + roundtableNote;   // 第50轮: 圆桌注记并入 user 本体 — 存档对与发送字节一致, append-only 严格保持 (重试每次重建, 幂等)
           var userMsgStr = msgs[msgs.length - 1].content;   // v2.7: 本请求 user 原样存档 — 下一请求作为历史对前缀 (字节级一致 → 缓存复用)
-          return chat(msgs, attempt > 1 ? Math.min(temperature, 0.1) : temperature).then(function (out) {
+          return chat(msgs, attempt > 1 ? Math.min(temperature, 0.1) : temperature, callSignal, callState).then(function (out) {
+            if (callState.cancelled) throw new Error('请求已中止');
+            if (callSignal && callSignal.aborted) throw new Error('外部中止: 对局已取消');
             var txt = out.answer || out.reasoning;
             var mv = parseMove(txt, attempt >= 3, legal);   // 前 2 次严格 JSON; 第 3 次才允许坐标兑底(带合法过滤)
             if (!mv && out.reasoning && out.reasoning !== txt) {
@@ -830,7 +856,7 @@ function create(opts) {
             return mv;
           }).catch(function (err) {
             var msg = String(err && err.message || err);
-            var _extAbort = typeof opts.signal === 'function' ? opts.signal() : opts.signal;   // 第39轮: 取值函数形态同 chat
+            var _extAbort = currentSignal();
             if (callState.cancelled) throw err;   // 委员会预算/快速多数已取消本手, 内部 abort 不得触发下一轮重试
             if (_extAbort && _extAbort.aborted) throw err;   // v3.9a: 外部中止 — 调用方已放弃, 立即上抛不烧重试
             if (/开局保护|送吃守卫/.test(msg)) usage.blocked = (usage.blocked || 0) + 1;   // v2.9: 代码级拦截计数 (match_headless 统计行用)

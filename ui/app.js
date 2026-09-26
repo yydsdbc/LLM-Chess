@@ -621,7 +621,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var cur = hist.length;
     if (ply < 0 || ply > cur) return;
     if (ply === cur) return;   // 点击最新手不做任何事
-    replayStack = [];
+    // 连续回看更早的手数时保留已撤销的尾段, 还原按同一个栈完整重放。
     while (engine.ply() > ply) {
       var last = engine.lastMove();
       replayStack.push(last);
@@ -1824,6 +1824,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   /* ══════ v1.6 回放模式 (Replay): 读已保存棋谱重驱动棋盘, 不调用 LLM ══════ */
   var rpEl = null;
   var rpSession = null, rpCtrl = null, rpFileRecord = null, rpImportRecord = null;   // v2.4: rpImportRecord 回放层导入棋谱
+  var rpAutoplayTimer = null;
   var rpLastIdx = -1;
   var rpOpener = null;   // 第27轮 a11y: 打开回放时的焦点宿主, 关闭后归还 (Tab 不落回已隐藏的层)
   var RP_LAST_KEY = 'xq_replay_last_pick';
@@ -2230,6 +2231,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
   }
   function rpStart(record) {
+    if (rpAutoplayTimer !== null) { clearTimeout(rpAutoplayTimer); rpAutoplayTimer = null; }
     if (!record || !record.moves) {
       rpEl.info.innerHTML = '<span style="color:#e67e22">' + (XQ.I18N ? XQ.I18N.t('rp_no_record') : '⚠ 没有可回放的棋谱数据') + '</span>'; return;
     }
@@ -2259,7 +2261,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
        于是盘面 90 格 / 信息面板 / 时长与评值图 / 进度条上限 全部停在初始空白, 直到用户点一次上/下一步。
        显式补一次首绘: 回放层不得以空白开场 (有位移时这次重绘是幂等的, 且不再触发落子动画)。 */
     rpOnState(rpSession.state());
-    if (rpGetSetting('autoplay') === '1') setTimeout(function () { rpCtrl && rpCtrl.play(); }, 300);
+    if (rpGetSetting('autoplay') === '1') {
+      var autoplayCtrl = rpCtrl;
+      var autoplayTimer = setTimeout(function () {
+        if (rpAutoplayTimer !== autoplayTimer || rpCtrl !== autoplayCtrl || rpEl.ov.style.display === 'none') return;
+        rpAutoplayTimer = null;
+        autoplayCtrl.play();
+      }, 300);
+      rpAutoplayTimer = autoplayTimer;
+    }
   }
   var _rpHeavyTick = 0;   // 第30轮 (第28轮该编辑曾随脚本中断丢失, 本轮落地)
   var _rpActiveLi = null;   // 第48轮: 高倍速轻路径跟踪的「当前手」条目引用 (O(1) 迁移高亮, 见 rpOnState)
@@ -2998,6 +3008,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
   }
   function rpClose() {
+    if (rpAutoplayTimer !== null) { clearTimeout(rpAutoplayTimer); rpAutoplayTimer = null; }
     if (rpCtrl) rpCtrl.dispose();
     rpEl.ov.style.display = 'none';
     rpLockScroll(false);

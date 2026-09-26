@@ -1,4 +1,4 @@
-/* 象棋引擎 v1.0 — 棋子对象 (纯值对象, 不可变) */
+/* 象棋引擎 v1.0 — 棋子对象 (纯值对象) */
 (function (root) {
   'use strict';
   var XQ = root.XQ = root.XQ || {};
@@ -24,6 +24,10 @@
     return { color: color, type: type, id: id || (color + '-' + type) };
   }
 
+  function clone(piece) {
+    return piece ? { color: piece.color, type: piece.type, id: piece.id } : piece;
+  }
+
   function char(piece) { return CHARS[piece.color][piece.type]; }
   function opponent(color) { return color === COLORS.RED ? COLORS.BLACK : COLORS.RED; }
   function isKing(piece) { return !!piece && piece.type === TYPES.KING; }
@@ -31,7 +35,7 @@
 
   XQ.Piece = {
     COLORS: COLORS, TYPES: TYPES, CHARS: CHARS, LETTERS: LETTERS,
-    create: create, char: char, opponent: opponent, isKing: isKing, same: same,
+    create: create, clone: clone, char: char, opponent: opponent, isKing: isKing, same: same,
     initialLayout: function () {
       // 32子标准开局, id 稳定唯一 (同色同类型按序号)
       var layout = [];

@@ -62,14 +62,7 @@
       return _legalCache[c];
     }
     function copyLegalMoves(moves) {
-      return moves.map(function (m) {
-        return {
-          from: { x: m.from.x, y: m.from.y },
-          to: { x: m.to.x, y: m.to.y },
-          piece: Piece.create(m.piece.color, m.piece.type, m.piece.id),
-          captured: m.captured ? Piece.create(m.captured.color, m.captured.type, m.captured.id) : null
-        };
-      });
+      return moves.map(Move.clone);
     }
     /* 第43轮: 盘面文本 memo (键 = _stateVer) — snapshot 每帧都要 posCounts[posKey()], 原先每帧重建一次
        90 格文本; _stateVer 覆盖全部盘面/执子方变更 (apply/undo/newGame 均 bumpVer), 故同版本内结果恒定。 */
@@ -113,7 +106,7 @@
         _chkCache = { color: c, ver: _stateVer, val: v };
         return v;
       },
-      pieceAt: function (x, y) { return board.get(x, y) || null; },
+      pieceAt: function (x, y) { return Piece.clone(board.get(x, y)) || null; },
       kingPos: function (color) { return board.kingPos(color); },
 
       /** UI 渲染快照: cells[y][x] = {color,type,id}|null

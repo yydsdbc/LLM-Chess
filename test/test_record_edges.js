@@ -21,6 +21,38 @@ function test(name, fn) {
 function setRaw(key, value) { memory[key] = value; }
 function rec(id) { return { id, moves: [], date: new Date().toISOString() }; }
 
+test('评分读取只接受有限数字，损坏评分回退到初始分', () => {
+  const invalid = ['oops', '1500', false, {}, [], null];
+  for (const value of invalid) {
+    setRaw('xq_elo_v1', JSON.stringify({ A: value, Zero: 0 }));
+    assert.strictEqual(E.ratingOf('A'), 1500);
+    assert.strictEqual(E.ratingOf('Zero'), 0);
+  }
+  setRaw('xq_elo_v1', '{"A":1e309}');
+  assert.strictEqual(E.ratingOf('A'), 1500);
+});
+
+test('损坏评分参与对局会恢复初始分，不污染正常对手', () => {
+  const invalid = ['oops', '1500', false, {}, [], null];
+  for (const value of invalid) {
+    setRaw('xq_elo_v1', JSON.stringify({ A: value, B: 1500 }));
+    assert.deepStrictEqual(E.applyResult('A', 'B', 'red'), { red: 1516, black: 1484 });
+    const saved = JSON.parse(localStorage.getItem('xq_elo_v1'));
+    assert.strictEqual(saved.A, 1516);
+    assert.strictEqual(saved.B, 1484);
+  }
+  setRaw('xq_elo_v1', '{"A":1e309,"B":1500}');
+  assert.deepStrictEqual(E.applyResult('A', 'B', 'red'), { red: 1516, black: 1484 });
+});
+
+test('损坏评分的同名自战会修复评分，且不累计战绩', () => {
+  setRaw('xq_elo_v1', JSON.stringify({ A: '1500' }));
+  assert.deepStrictEqual(E.applyResult('A', 'A', 'red'), { red: 1500, black: 1500 });
+  const saved = JSON.parse(localStorage.getItem('xq_elo_v1'));
+  assert.strictEqual(saved.A, 1500);
+  assert.strictEqual(saved['stats:A'], undefined);
+});
+
 test('K=0 是合法的零变分，而不是回退到默认 K', () => {
   const next = E.update({ ra: 1500, rb: 1500, scoreA: 1, k: 0 });
   assert.strictEqual(next.ra, 1500);

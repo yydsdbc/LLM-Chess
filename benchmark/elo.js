@@ -42,13 +42,14 @@
       _tCache = t; _tRaw = raw;
     } catch (e) { _tCache = null; _tRaw = null; }
   }
+  function validRating(value) { return typeof value === 'number' && Number.isFinite(value); }
   function ratingOf(name) {
     var t = table();
-    return t[name] != null ? t[name] : BASE;
+    return validRating(t[name]) ? t[name] : BASE;
   }
   function ensure(name) {
     var t = table();
-    if (t[name] == null) { t[name] = BASE; saveTable(t); }
+    if (!validRating(t[name])) { t[name] = BASE; saveTable(t); }
     return t[name];
   }
   /** 记录一场结果: winner 'red'|'black'|null(和); 第30轮: 附带战绩计数 (局/胜/和/负) */

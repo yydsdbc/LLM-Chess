@@ -68,8 +68,8 @@
         addKingAt(m.piece, from);
         addKingAt(m.captured, to);
       },
-      /** 浅拷贝棋盘: 棋子为不可变值对象, 共享引用安全 */
-      clone: function () { return makeFromGrid(grid.slice()); },
+      /** 独立复制棋盘及棋子, 搜索盘面的修改不会影响原盘面 */
+      clone: function () { return makeFromGrid(grid.map(Piece.clone)); },
 
       kingPos: function (color) {
         var cells = kingCells[color];
@@ -100,7 +100,9 @@
       /** 全量一致性比较 (测试用) */
       equals: function (other) {
         for (var i = 0; i < N; i++) {
-          if (!Piece.same(grid[i], other.grid[i])) return false;
+          var a = grid[i], b = other.grid[i];
+          if (!a && !b) continue;
+          if (!Piece.same(a, b)) return false;
         }
         return true;
       }

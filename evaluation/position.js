@@ -281,14 +281,15 @@
     var bcM = bottomCannon(snap, side), bcT = bottomCannon(snap, opp);   // v3.9 沉底炮 (仅提醒不评分)
     var atkM = attackHorse(snap, side), atkT = attackHorse(snap, opp);   // v3.9.2 槽心马/挂角马 (仅提醒不评分)
     var taskCannon = ownCannonCentered(snap, side), taskHome = homeKnights(snap, side);   // v3.2 开局任务进度
-    var kingSafety = 0;   // 第59轮: 王城安全度 (帅将周围护卫密度)
+    var kingSafety = null;   // 第59轮: 王城安全度 (帅将周围护卫密度; 缺将帅时不适用)
     (function () {
       var kx = -1, ky = -1;
-      for (var sy = 0; sy < 10; sy++) for (var sx = 0; sx < 9; sx++) {
+      kingSearch: for (var sy = 0; sy < 10; sy++) for (var sx = 0; sx < 9; sx++) {
         var kp = snap.cells[sy][sx];
-        if (kp && kp.color === side && kp.type === 'king') { kx = sx; ky = sy; return; }
+        if (kp && kp.color === side && kp.type === 'king') { kx = sx; ky = sy; break kingSearch; }
       }
       if (kx >= 0) {
+        kingSafety = 0;
         for (var oy = Math.max(0, ky - 1); oy <= Math.min(9, ky + 1); oy++)
           for (var ox = Math.max(0, kx - 1); ox <= Math.min(8, kx + 1); ox++) {
             if (ox === kx && oy === ky) continue;
@@ -383,7 +384,7 @@
     }
     if (e.lastRankMine >= 1) risk.push('己方底线兵已成老兵 (只能横移), 勿再拱, 换其他子助攻');   // v2.3 底线老兵 (零噪音: 有底线兵才点名)
     if (e.kingSafety >= 4) adv.push('王城护卫充足');   // 第59轮
-    else if (e.kingSafety <= 1 && e.phase !== 'opening') risk.push('王城护卫薄弱, 谨防偷袭');
+    else if (e.kingSafety !== null && e.kingSafety <= 1 && e.phase !== 'opening') risk.push('王城护卫薄弱, 谨防偷袭');
         if (e.deepPalaceMine >= 1) adv.push('己方兵卒已逼入对方九宫区域, 威胁九宫, 配合车马可成杀势');   // v3.8 兵临九宫 (零噪音: 有深入兵才点名)
     if (e.deepPalaceTheirs >= 1) risk.push('对方兵卒已逼入你方九宫区域, 优先驱赶或兑走, 勿任其发揮');   // v3.8
     if (!adv.length) adv.push('局面大体均衡, 稳步发展');

@@ -308,6 +308,73 @@ function stubEngine(cells, ply) {
     ok(atk2.length === 0, 'x=4 宫心位不被槽心马检测 (与 v2.5 窝心马互斥, v3.9.2)');
   }
 
+  console.log('== 王城邻近护卫 ==');
+  {
+    // 使用真实棋盘和规则层; 对称布子消除其他风险, 让摘要门限可被直接观察。
+    function guardedEngine(count, phase) {
+      const board = XQ.Board.create();
+      for (const side of ['red', 'black']) {
+        const homeY = side === 'red' ? 9 : 0;
+        const kingY = side === 'red' ? 8 : 1;
+        const frontY = side === 'red' ? 7 : 2;
+        const riverY = side === 'red' ? 5 : 4;
+        for (const [fx, fy, tx, ty] of [
+          [4, homeY, 4, kingY], [2, homeY, 4, frontY],
+          [6, homeY, 2, riverY], [1, homeY, 3, kingY],
+          [7, homeY, 6, frontY], [1, frontY, 2, homeY],
+          [7, frontY, 6, homeY]
+        ]) {
+          const piece = board.get(fx, fy);
+          board.set(fx, fy, null);
+          board.set(tx, ty, piece);
+        }
+        if (count < 4) {
+          const knight = board.get(3, kingY);
+          board.set(3, kingY, null);
+          board.set(1, homeY, knight);
+        }
+        if (count < 3) {
+          const bishop = board.get(4, frontY);
+          board.set(4, frontY, null);
+          board.set(4, riverY, bishop);
+        }
+        if (count < 2) board.set(5, homeY, null);
+        if (count < 1) board.set(3, homeY, null);
+        if (phase === 'endgame') {
+          for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) {
+            const piece = board.get(x, y);
+            if (piece && piece.color === side && (piece.type === 'rook' || piece.type === 'cannon'
+              || (piece.type === 'knight' && x !== 3))) board.set(x, y, null);
+          }
+        }
+      }
+      const engine = XQ.Engine.create({ startBoard: board });
+      return Object.assign({}, engine, { ply: () => phase === 'opening' ? 0 : phase === 'middlegame' ? 20 : 40 });
+    }
+    for (const side of ['red', 'black']) {
+      ok(PE.evaluate(XQ.Engine.create(), side).kingSafety === 2, side + ' 初始将帅在底线, 邻近两仕且不计将帅自身');
+      for (const phase of ['opening', 'middlegame', 'endgame']) {
+        for (const count of [0, 1, 2, 3, 4]) {
+          const engine = guardedEngine(count, phase);
+          const value = PE.evaluate(engine, side);
+          const summary = PE.summarize(engine, side);
+          ok(value.phase === phase && value.kingSafety === count, side + ' ' + phase + ' 实际邻近护卫=' + count);
+          ok(/王城护卫充足/.test(summary.text) === (count >= 4), side + ' ' + phase + ' 充足提示门限=' + count);
+          ok(/王城护卫薄弱/.test(summary.text) === (count <= 1 && phase !== 'opening'), side + ' ' + phase + ' 薄弱提示门限=' + count);
+        }
+      }
+      const board = guardedEngine(4, 'middlegame').cloneBoard();
+      const king = board.kingPos(side);
+      board.set(king.x, king.y, null);
+      const missing = Object.assign({}, XQ.Engine.create({ startBoard: board }), { ply: () => 20 });
+      ok(PE.evaluate(missing, side).kingSafety === null, side + ' 缺将帅时护卫计数不适用');
+      ok(!/王城护卫/.test(PE.summarize(missing, side).text), side + ' 缺将帅不输出王城提示');
+      board.set(king.x, king.y, XQ.Piece.create(side, 'king'));
+      board.set(5, king.y, XQ.Piece.create(XQ.Piece.opponent(side), 'pawn'));
+      ok(PE.evaluate(XQ.Engine.create({ startBoard: board }), side).kingSafety === 4, side + ' 邻近敌子不计为己方护卫');
+    }
+  }
+
   console.log('== llm_agent prompt 注入 ==');
   {
     // 确认 systemPrompt 含评价原则(压缩行内联), user 含阶段摘要

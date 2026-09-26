@@ -2172,3 +2172,20 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 微基准: 同进程 300,000 次将帅查询中位数，90 格扫描 88.51 ms，索引查询 6.19 ms (约 14.3 倍；仅代表该查找微基准)。
 - 定向: `node test/test_engine_cache.js` 3/3 PASS; `node test/run_tests.js` 50/50 PASS; `_logic_layer` 与 `_committee_agent` ALL PASS。
 - 完整门禁: `npm test` 17/17 PASS; `npm run check` 52 个 JS 文件及提示词门禁 PASS; `git diff --check` PASS。
+
+## 2026-09-26 18:43 第72轮 (codex + 协作 agent — 审计后修复对局与回放边界)
+
+- 基线: 工作树干净, HEAD `dd8721a`, 最新轮次为71；`npm test` 17/17 PASS。按用户此前要求未执行任何远程同步。各协作 agent 分别负责评价、Elo、请求/回放审计, 文件范围明确；未覆盖其他 agent 未提交工作。
+1. 引擎查询泄漏可变棋子引用: `pieceAt/history/lastMove/落子结果/事件/cloneBoard` 的返回值或自定义初始盘面能间接修改真实盘面, 并使状态版本缓存失真。统一棋子复制, Move 克隆同时复制走子和被吃子, Board 克隆隔离棋子, 公共查询不再共享内部棋子引用。
+2. 棋盘相等比较把两边都为空的格子判为不等: 修正空格比较, 覆盖空盘/标准盘/不同棋子 ID。
+3. 王城安全度永远为零: 找到将帅后 `return` 提前退出整个计算函数, 改为仅结束搜索后继续统计邻近己方护卫；缺将帅使用不适用值, 避免终局误报薄弱。红黑两方、护卫0至4、三个阶段与摘要门限全部覆盖。
+4. 损坏 Elo 评分通过字符串拼接或 NaN 污染双方评分: `ratingOf/ensure` 统一有限数字校验, 非法值恢复初始分, 保留有效0分及同名自战规则。
+5. 旧局请求取消后重新读取 signal getter, 接入新局控制器并重试: 每次 `next` 开始读取一次动态 getter, 整手请求/退避/重试固定该信号, 下一手重新读取；覆盖旧局 abort 后无重试且同一 agent 新局仍可请求, 并检查取消后迟到 body 不产生着法/思考/会话。
+6. 回放关闭或切谱后遗留300ms自动播放回调: 保存并清除计时器, 回调同时校验计时器与控制器身份及层可见性, 已进入事件队列的旧回调也无效。
+7. 主盘连续复盘清空之前撤销的尾段: 保留同一个还原栈, `4→2→1→还原` 恢复完整原始盘面, 保留原有焦点/ARIA行为。
+
+- 定向已验证: `test_engine_cache` 7/7、`run_tests` 50/50 (perft 44/1920/79666)、`test_evaluation` 188/188、`test_record_edges` 26/26、`_logic_layer` ALL PASS、`check_ui` PASS。引擎引用与回放用例已在旧实现上跑红后修复；Elo agent 同样记录先红后绿。
+- 请求取消定向: `test_llm_convo` 158/158、`_committee_agent` ALL PASS；迟到 JSON 用例先有2项失败, 修复后不返回旧着法、不调用思考/原始响应钩子、不写旧会话。传输 abort 立即结束该手 Promise 并清理超时/流看门狗与信号监听, 不再只依赖 fetch 自己抛错。
+- 评价守卫反证: 在独立进程仅注入 HEAD 的旧 `position.js` (工作树未改), 新用例有50项失败；当前实现188项全绿。
+- 最终门禁: 修改的 JS 均通过 `node --check`；`npm run check` 52个 JS 及提示词/dump 门禁 ALL PASS；`git diff --check` PASS；完整 `npm test` 17/17 PASS (含 `_server_http` 和既有 UI/i18n/回放行为守卫)。协作 agent 中途达到额度上限, 主 agent 接手复核及收尾。服务端、提示词正文和新功能未改。提交前 HEAD 仍为 `dd8721a`, 无外部并行修改冲突。
+- 后续已发现但本轮未扩展: Elo 的 `stats:` 模型名与统计键冲突需要有版本的数据迁移；备份恢复的 Elo/设置写入失败仍被吞；保存池自动淘汰未清关联进度/书签；试连旧请求结果可覆盖新请求状态。

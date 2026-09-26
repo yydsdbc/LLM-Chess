@@ -642,6 +642,71 @@ function ok(cond, name) {
     ok(mvFn && mvFn.from.x === 1 && mvFn.to.x === 4, 'signal 取值函数换代后请求正常 (旧代 abort 不误伤新代, 第39轮)');
   }
   {
+    // 第72轮: 在飞请求属于发起它的那局，换代后的 getter 不能把旧请求重试接到新局。
+    const priorFetchGameSwap = globalThis.fetch;
+    const oldGame = new AbortController();
+    let gameController = oldGame;
+    let swapCalls = 0, swapRetries = 0, signalReads = 0;
+    globalThis.fetch = function (url, opts) {
+      swapCalls++;
+      if (swapCalls === 1) return new Promise(function (resolve, reject) {
+        opts.signal.addEventListener('abort', function () {
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          reject(err);
+        }, { once: true });
+      });
+      return Promise.resolve({ ok: true, headers: { get: () => 'application/json' },
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({ from: 'b3', to: 'e3', summary: '新局正常', confidence: 0.8 }) } }] }) });
+    };
+    const swapAgent = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'mock-live-swap',
+      signal: function () { signalReads++; return gameController.signal; }, onRetry: function () { swapRetries++; } });
+    const oldRequest = swapAgent.next(XQ.Engine.create()).then(() => null, e => e);
+    oldGame.abort();
+    gameController = new AbortController();
+    const oldError = await oldRequest;
+    ok(oldError instanceof Error && /外部中止/.test(oldError.message) && swapCalls === 1 && swapRetries === 0,
+      '在飞旧局 abort 后换代不重试、不发旧局请求 (calls=' + swapCalls + ', retries=' + swapRetries + ')');
+    ok(signalReads === 1, '每手只读取一次 signal getter，整手重试使用同一对局信号 (reads=' + signalReads + ')');
+    swapAgent.reset();
+    const newMove = await swapAgent.next(XQ.Engine.create());
+    ok(newMove && newMove.from.x === 1 && newMove.to.x === 4 && signalReads === 2 && swapCalls === 2,
+      '同一 agent 在新局重新读取 getter 并正常请求 (calls=' + swapCalls + ', reads=' + signalReads + ')');
+    globalThis.fetch = priorFetchGameSwap;
+  }
+  {
+    // 第72轮: 响应头已到但 body 迟到，即便传输层忽略 abort，也不能返回旧局着法/思考流。
+    const priorFetchLateBody = globalThis.fetch;
+    const oldController = new AbortController();
+    let activeController = oldController;
+    let finishBody, lateThinking = 0, lateRaw = 0;
+    const requestBodies = [];
+    globalThis.fetch = async function (url, opts) {
+      requestBodies.push(JSON.parse(opts.body));
+      return { ok: true, headers: { get: () => 'application/json' }, json: function () {
+        return new Promise(resolve => { finishBody = resolve; });
+      } };
+    };
+    const lateAgent = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'mock-late-body',
+      signal: () => activeController.signal, onThinking: () => { lateThinking++; }, onRawResponse: () => { lateRaw++; } });
+    const lateRequest = lateAgent.next(XQ.Engine.create()).then(() => null, e => e);
+    await Promise.resolve(); await Promise.resolve();
+    oldController.abort();
+    activeController = new AbortController();
+    finishBody({ choices: [{ message: { content: JSON.stringify({ from: 'b3', to: 'e3', summary: '过期响应', confidence: 0.8 }), reasoning_content: '旧局思考' } }] });
+    const lateError = await lateRequest;
+    ok(lateError instanceof Error && /外部中止/.test(lateError.message) && lateThinking === 0 && lateRaw === 0,
+      '取消后迟到 JSON 不能返回着法或调用思考/原始响应钩子 (thinking=' + lateThinking + ', raw=' + lateRaw + ')');
+    globalThis.fetch = async function (url, opts) {
+      requestBodies.push(JSON.parse(opts.body));
+      return { ok: true, headers: { get: () => 'application/json' },
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({ from: 'b3', to: 'e3', summary: '新局首手', confidence: 0.8 }) } }] }) };
+    };
+    await lateAgent.next(XQ.Engine.create());
+    ok(requestBodies[1].messages.length === 2, '迟到旧局响应不写入会话，新局首手保持 system+user');
+    globalThis.fetch = priorFetchLateBody;
+  }
+  {
     // 第67轮: 委员会在 429 退避期间取消后, 计时器须立即结束本手且不能启动下一次请求。
     const oldFetchRetryAbort = globalThis.fetch;
     let retryAbortCalls = 0;

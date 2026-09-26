@@ -73,4 +73,65 @@ test('合法着法按盘面版本和颜色只生成一次，并在走子/悔棋�
   } finally { XQ.Generator.generateLegalMoves = original; }
 });
 
+test('pieceAt 和搜索棋盘的棋子修改不会污染引擎或合法着法缓存', () => {
+  for (const getPiece of [e => e.pieceAt(0, 6), e => e.cloneBoard().get(0, 6)]) {
+    const engine = XQ.Engine.create();
+    const before = engine.boardText();
+    const legal = engine.legalMoveStrings();
+    const piece = getPiece(engine);
+    piece.type = 'king';
+    piece.color = 'black';
+    assert.strictEqual(engine.boardText(), before);
+    assert.strictEqual(engine.pieceAt(0, 6).type, 'pawn');
+    assert.strictEqual(engine.legalMoveStrings(), legal);
+    assert.strictEqual(engine.applyPlayerMove(0, 6, 0, 5).ok, true);
+  }
+});
+
+test('自定义初始棋盘与引擎内棋子引用隔离', () => {
+  const start = XQ.Board.create();
+  const engine = XQ.Engine.create({ startBoard: start });
+  start.get(4, 9).type = 'pawn';
+  assert.strictEqual(engine.pieceAt(4, 9).type, 'king');
+  assert.deepStrictEqual(engine.kingPos('red'), { x: 4, y: 9 });
+});
+
+test('历史、末着、落子返回值与事件中的棋子修改不改变盘面或悔棋结果', () => {
+  for (const exposure of ['history', 'lastMove', 'result', 'event']) {
+    const b = XQ.Board.makeFromGrid(new Array(90).fill(null));
+    b.set(4, 9, XQ.Piece.create('red', 'king', 'rk'));
+    b.set(3, 0, XQ.Piece.create('black', 'king', 'bk'));
+    b.set(0, 5, XQ.Piece.create('red', 'rook', 'rr'));
+    b.set(0, 4, XQ.Piece.create('black', 'knight', 'bn'));
+    const engine = XQ.Engine.create({ startBoard: b });
+    let eventMove;
+    engine.onChange((type, data) => { if (type === 'move') eventMove = data.move; });
+    const played = engine.applyPlayerMove(0, 5, 0, 4);
+    assert.strictEqual(played.ok, true);
+    const m = exposure === 'history' ? engine.history()[0]
+      : exposure === 'lastMove' ? engine.lastMove() : exposure === 'result' ? played.move : eventMove;
+    m.piece.type = 'pawn';
+    m.piece.color = 'black';
+    m.captured.type = 'cannon';
+    assert.strictEqual(engine.pieceAt(0, 4).type, 'rook', exposure);
+    assert.strictEqual(engine.lastMove().captured.type, 'knight', exposure);
+    assert.strictEqual(engine.undoPly(), true);
+    assert.strictEqual(engine.turn(), 'red', exposure);
+    assert.strictEqual(engine.pieceAt(0, 5).type, 'rook', exposure);
+    assert.strictEqual(engine.pieceAt(0, 4).type, 'knight', exposure);
+  }
+});
+
+test('棋盘相等比较正确处理空格、同盘面与不同棋子', () => {
+  const empty = XQ.Board.makeFromGrid(new Array(90).fill(null));
+  assert.strictEqual(empty.equals(empty.clone()), true);
+  const b = XQ.Board.create();
+  const copy = b.clone();
+  assert.strictEqual(b.equals(copy), true);
+  copy.set(0, 6, null);
+  assert.strictEqual(b.equals(copy), false);
+  copy.set(0, 6, XQ.Piece.create('red', 'pawn', 'different-id'));
+  assert.strictEqual(b.equals(copy), false);
+});
+
 console.log('test_engine_cache: ' + passed + ' PASS');
