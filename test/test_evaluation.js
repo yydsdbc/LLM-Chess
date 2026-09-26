@@ -42,6 +42,18 @@ function stubEngine(cells, ply) {
   const e0 = XQ.Engine.create();
   ok(K.detectPhase(e0) === 'opening', '初始局面 → opening');
   {
+    const cells = cellsFrom(XQ.Engine.create());
+    let snap = { cells, turn: () => 'red', lastMove: null };
+    const branch = Object.assign(stubEngine(cells, 12), { snapshot: () => snap });
+    ok(K.detectPhase(branch) === 'opening', '同一引擎实例首次阶段缓存为 opening');
+    for (let y = 0; y < 10; y++) for (let x = 0; x < 9; x++) {
+      const p = cells[y][x];
+      if (p && p.type !== 'king' && p.type !== 'pawn') cells[y][x] = null;
+    }
+    snap = { cells, turn: () => 'red', lastMove: null };
+    ok(K.detectPhase(branch) === 'endgame', '同一手数但不同回放分支的棋盘不复用旧阶段缓存');
+  }
+  {
     const c = cellsFrom(XQ.Engine.create());
     removePiece(c, 0, 9); removePiece(c, 8, 0);   // 双方各丢一车 (大子交换1次→10)
     ok(K.detectPhase(stubEngine(c, 5)) === 'opening', '第5回合+大子交换1次 → 仍 opening');

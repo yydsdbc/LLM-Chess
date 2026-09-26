@@ -2151,3 +2151,14 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 定向: `node --check replay/replay.js` / `node --check test/_replay_edge.js` PASS; `_replay_edge` 与 `replay_smoke` ALL PASS。
 - 追加验证: `node test/replay_risk_check.js` ALL PASS (包含 goto/prev 后风险/将杀 memo 的既有行为守卫)。
 - 完整门禁: `npm test` 15/15 PASS; `npm run check` 50 个 JS 语法、提示词与 dump 新鲜度检查 ALL PASS。
+
+## 2026-09-26 17:39 第70轮 (codex — 持续优化记录、Elo 与阶段缓存)
+
+- 基线: 工作树干净, HEAD `7ecfef1`; `npm test` 15/15 PASS; 未执行远程同步。
+- 修复阶段缓存只按引擎+手数命中导致的分支串值；改为校验引擎提供的快照对象身份，同手数换盘面时重新计算。
+- Elo 修正显式 `K=0`、损坏/非对象存储根、非有限评分、异常战绩计数和 `__proto__` 模型名处理。
+- 棋谱列表验证存储形状并返回独立数组；保存/删除失败不污染内存缓存。导入棋谱与真实对局改用独立 2/60 条上限，避免导入挤掉真实对局。
+- `finish` 保留显式零时长；CSV 增加字段转义、公式前缀保护、评分/计数校验并保留 0 分。
+- 总备份对损坏 JSON 安全降级；恢复支持空 replace、验证模式与记录形状、按 ID 去重、按两类保留池裁剪，并在记录无法落库时明确报错。
+- 文件导入按实际字节数提前限额、处理读取中止，并拒绝非法根类型。
+- 新增 `test_record_edges.js` 23 项边界回归；`test_evaluation.js` 新增同手数换分支阶段缓存回归。`npm test` 16/16 PASS; `npm run check` PASS (51 个 JS 文件、提示词门禁); `git diff --check` PASS。

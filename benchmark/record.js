@@ -57,7 +57,8 @@
   function finish(record, engineResult, durationMs) {
     record.result = engineResult.result;
     record.winner = engineResult.winner;
-    record.durationMs = durationMs || (Date.now() - new Date(record.date).getTime());
+    record.durationMs = typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0
+      ? durationMs : (Date.now() - new Date(record.date).getTime());
     return record;
   }
 
@@ -65,25 +66,34 @@
    * v1.7.6: 上限 MAX_RECORDS=60 (防 localStorage 无限膨胀) + 配额兑底
    * (QuotaExceeded → 逐级裁剪重试: 留30 → 留15 → 只存当前局, 保证刚下的这局永不丢) */
   var MAX_RECORDS = 60;
+  function isImported(record) { return !!(record && typeof record.id === 'string' && record.id.indexOf('import-') === 0); }
+  function capPools(records, realLimit, importLimit) {
+    var real = 0, imported = 0, kept = [];
+    for (var i = records.length - 1; i >= 0; i--) {
+      var record = records[i];
+      if (!record || typeof record !== 'object' || typeof record.id !== 'string' || !Array.isArray(record.moves)) continue;
+      if (isImported(record)) { if (imported++ < importLimit) kept.push(record); }
+      else if (real++ < realLimit) kept.push(record);
+    }
+    return kept.reverse();
+  }
+  function validImportedMove(mv) {
+    return !!(mv && typeof mv.from === 'string' && typeof mv.to === 'string'
+      && /^[a-i](10|[1-9])$/.test(mv.from) && /^[a-i](10|[1-9])$/.test(mv.to));
+  }
   var _listCache = null, _listRaw = null;   // 第37轮: list() 解析缓存 (raw 串校验 — 外部写入/跨标签自愈)
   function save(record) {
     var all = list();
     var i = all.findIndex(function (r) { return r.id === record.id; });
     if (i >= 0) { all.splice(i, 1); }   // 更新也视为最近活动: 移到末尾再截断, 上限裁剪按活跃度
     all.push(record);
-    if (all.length > MAX_RECORDS) all = all.slice(all.length - MAX_RECORDS);
-    try {
-      var _rawSave = JSON.stringify(all);
-      localStorage.setItem(LS_KEY, _rawSave);
-      _listCache = all;
-      _listRaw = _rawSave;
-    } catch (e) {
-      var tryKeep = [30, 15];
-      for (var t = 0; t < tryKeep.length; t++) {
-        try { writeList(all.slice(-tryKeep[t])); return record; } catch (e2) {}
-      }
-      try { writeList([record]); } catch (e3) {}   // 最后兑底: 只保当前局
+    all = capPools(all, MAX_RECORDS, IMPORT_KEEP);
+    try { writeList(all); return record; } catch (e) {}
+    var tryKeep = [30, 15];
+    for (var t = 0; t < tryKeep.length; t++) {
+      try { writeList(capPools(all, tryKeep[t], IMPORT_KEEP)); return record; } catch (e2) {}
     }
+    try { writeList([record]); } catch (e3) {}   // 最后兑底: 只保当前局
     return record;
   }
   function storageUsage() {   // 第59轮: 存储用量估算
@@ -98,10 +108,15 @@
   function list() {
     var raw = null;
     try { raw = localStorage.getItem(LS_KEY) || '[]'; } catch (eR) { raw = '[]'; }
-    if (_listCache && _listRaw === raw) return _listCache;   // 第37轮: 原始串未变才用 memo (外部写入自愈)
-    try { _listCache = JSON.parse(raw); } catch (e) { _listCache = []; }
+    if (_listCache && _listRaw === raw) return _listCache.slice();   // 第37轮: 原始串未变才用 memo (外部写入自愈)
+    try {
+      var parsed = JSON.parse(raw);
+      _listCache = Array.isArray(parsed) ? parsed.filter(function (r) {
+        return !!(r && typeof r === 'object' && !Array.isArray(r) && typeof r.id === 'string' && Array.isArray(r.moves));
+      }) : [];
+    } catch (e) { _listCache = []; }
     _listRaw = raw;
-    return _listCache;
+    return _listCache.slice();
   }
   function get(id) {
     return list().find(function (r) { return r.id === id; }) || null;
@@ -114,11 +129,11 @@
   }
   function remove(id) {
     var all = list().filter(function (r) { return r.id !== id; });
-    _listCache = all;
-    try { var _rawRm = JSON.stringify(all); localStorage.setItem(LS_KEY, _rawRm); _listRaw = _rawRm; } catch (e) {}
+    try { writeList(all); } catch (e) { return false; }
     // 第28轮: 孤儿键内聚清理 (回放进度/书签随棋谱删除; 原只 rpDeleteRecord 手工清, 其它调用方漏网)
     try { localStorage.removeItem('xq_replay_pos_' + id); } catch (e2) {}
     try { localStorage.removeItem('xq_replay:bm:' + id); } catch (e3) {}
+    return true;
   }
 
   /* ── 文件导入导出 (浏览器) ── */
@@ -137,6 +152,7 @@
   }
   function importFromFile(file) {
     return new Promise(function (resolve, reject) {
+      if (file && Number.isFinite(file.size) && file.size > 10 * 1024 * 1024) { reject(new Error('文件超过 10MB 上限')); return; }
       var fr = new FileReader();
       fr.onload = function () {
         try {
@@ -147,11 +163,10 @@
             if (/\[Event /.test(txt)) { r = importFromPGN(txt); }   // 第36轮: PGN 自动识别 (JSON 解析失败且含 [Event 头)
             else throw eJ;
           }
-          if (!r.moves || !Array.isArray(r.moves)) throw new Error('缺少 moves 字段');
+          if (!r || typeof r !== 'object' || Array.isArray(r) || !Array.isArray(r.moves)) throw new Error('文件根节点无效或缺少 moves 字段');
           for (var i = 0; i < r.moves.length; i++) {   // 第28轮: 逐手形状校验 (旧版只查数组, 坏手到回放才炸且难定位)
             var mv = r.moves[i];
-            if (!mv || typeof mv.from !== 'string' || typeof mv.to !== 'string'
-              || !/^[a-i](10|[1-9])$/.test(mv.from) || !/^[a-i](10|[1-9])$/.test(mv.to)) {
+            if (!validImportedMove(mv)) {
               throw new Error('第 ' + (i + 1) + ' 手坐标无效 (需 a1-i10 形如 e3/h10)');
             }
           }
@@ -159,6 +174,7 @@
         } catch (e) { reject(e); }
       };
       fr.onerror = function () { reject(new Error('读取失败')); };
+      fr.onabort = function () { reject(new Error('读取已中止')); };
       fr.readAsText(file);
     });
   }
@@ -173,9 +189,6 @@
     save(r2);
     var stored = get(r2.id);
     if (!stored) throw new Error('Imported game could not be saved. Local storage may be full or unavailable.');
-    var all = list();
-    var imps = all.filter(function (r) { return r && typeof r.id === 'string' && r.id.indexOf(IMPORT_PREFIX) === 0; });
-    for (var i = 0; i < imps.length - IMPORT_KEEP; i++) remove(imps[i].id);   // 超出保留数的旧导入清掉 (list 为旧→新序)
     return stored;
   }
 
@@ -244,55 +257,82 @@
   }
 
   /* 第55轮: CSV 导出 */
+  function csvCount(v) {
+    var n = Number(v);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  }
+  function csvCell(value) {
+    var s = String(value == null ? '' : value);
+    if (/^\s*[=+\-@]/.test(s)) s = "'" + s;
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
   function exportCSV() {
     var rows = [['name', 'rating', 'games', 'win', 'draw', 'loss']];
     try {
       var elo = JSON.parse(root.localStorage.getItem('xq_elo_v1') || '{}');
-      Object.keys(elo).filter(function (k) { return k.indexOf('stats:') !== 0; }).forEach(function (name) {
-        var st = elo['stats:' + name] || { games: 0, win: 0, draw: 0, loss: 0 };
-        rows.push([name, elo[name] || 1500, st.games, st.win, st.draw, st.loss]);
+      if (!elo || typeof elo !== 'object' || Array.isArray(elo)) elo = {};
+      Object.keys(elo).filter(function (k) { return k.indexOf('stats:') !== 0 && typeof elo[k] === 'number' && Number.isFinite(elo[k]); }).forEach(function (name) {
+        var st = elo['stats:' + name];
+        if (!st || typeof st !== 'object' || Array.isArray(st)) st = {};
+        rows.push([name, elo[name], csvCount(st.games), csvCount(st.win), csvCount(st.draw), csvCount(st.loss)]);
       });
     } catch (e) {}
-    return rows.map(function (r) { return r.join(','); }).join('\n');
+    return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
+  }
+  function parseStoredObject(key, fallback) {
+    try {
+      var raw = root.localStorage.getItem(key);
+      if (!raw) return fallback;
+      var parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
+    } catch (e) { return fallback; }
   }
   /* ── 第30轮 一键备份/恢复: records + Elo + 界面设置 打包为单 JSON ── */
   function exportAll() {
-    var elo = null, settings = null;
-    try { elo = root.localStorage.getItem('xq_elo_v1'); } catch (e1) {}
-    try { settings = root.localStorage.getItem('xq_v1_settings'); } catch (e2) {}
     return {
       kind: 'llm-chess-backup',
       version: 1,
       date: new Date().toISOString(),
       records: list(),
-      elo: elo ? JSON.parse(elo) : {},
-      settings: settings ? JSON.parse(settings) : null
+      elo: parseStoredObject('xq_elo_v1', {}),
+      settings: parseStoredObject('xq_v1_settings', null)
     };
   }
   function importAllBackup(bak, mode) {
     if (!bak || bak.kind !== 'llm-chess-backup' || !Array.isArray(bak.records)) throw new Error('备份格式无效 (需 llm-chess-backup 导出文件)');
-    var cur = list();
-    var added = 0, skipped = 0;
+    if (mode != null && mode !== 'merge' && mode !== 'replace') throw new Error('备份导入模式无效');
+    var cur = mode === 'replace' ? [] : list();
+    var seen = Object.create ? Object.create(null) : {};
+    cur.forEach(function (r) { seen['$' + r.id] = true; });
+    var incoming = Object.create ? Object.create(null) : {};
     bak.records.forEach(function (r) {
-      if (!r || !r.id) { skipped++; return; }
-      if (mode === 'replace' || !cur.some(function (c) { return c.id === r.id; })) { cur.push(r); added++; }
-      else skipped++;
+      if (!r || typeof r !== 'object' || Array.isArray(r) || typeof r.id !== 'string' || !Array.isArray(r.moves)
+        || r.moves.some(function (mv) { return !validImportedMove(mv); })) return;
+      var key = '$' + r.id;
+      if (seen[key]) return;
+      seen[key] = true; incoming[key] = true; cur.push(r);
     });
-    var i = cur.length - MAX_RECORDS - 1;
-    if (cur.length > MAX_RECORDS) cur = cur.slice(cur.length - MAX_RECORDS);
-    try { localStorage.setItem(LS_KEY, JSON.stringify(cur)); } catch (e) {
-      try { localStorage.setItem(LS_KEY, JSON.stringify(cur.slice(-30))); } catch (e2) {}
+    cur = capPools(cur, MAX_RECORDS, IMPORT_KEEP);
+    try { writeList(cur); } catch (e) {
+      var fallbackLimits = [30, 15];
+      var stored = false;
+      for (var fi = 0; fi < fallbackLimits.length; fi++) {
+        try { cur = capPools(cur, fallbackLimits[fi], IMPORT_KEEP); writeList(cur); stored = true; break; } catch (e2) {}
+      }
+      if (!stored) throw new Error('棋谱存储失败，请检查本地存储空间');
     }
     if (bak.elo && typeof bak.elo === 'object') {
-      var t = {};
-      try { t = JSON.parse(root.localStorage.getItem('xq_elo_v1') || '{}'); } catch (e3) {}
+      var t = Object.create ? Object.create(null) : {};
+      var currentElo = parseStoredObject('xq_elo_v1', {});
+      Object.keys(currentElo).forEach(function (k) { t[k] = currentElo[k]; });
       Object.keys(bak.elo).forEach(function (k) { t[k] = bak.elo[k]; });   // 合并 (同键以备份为准)
       try { root.localStorage.setItem('xq_elo_v1', JSON.stringify(t)); } catch (e4) {}
     }
     if (bak.settings && typeof bak.settings === 'object' && mode === 'replace') {
       try { root.localStorage.setItem('xq_v1_settings', JSON.stringify(bak.settings)); } catch (e5) {}
     }
-    return { added: added, skipped: skipped };
+    var added = cur.filter(function (r) { return incoming['$' + r.id]; }).length;
+    return { added: added, skipped: Math.max(0, bak.records.length - added) };
   }
 
   XQ.Record = {

@@ -26,13 +26,13 @@
   // 三信号: 已走回合数 / 剩余棋子数 / 大子交换 (大子=车马炮, 双方初始共12)
   var _phaseCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;   // 第37轮: 按引擎+手数 memo (每帧多处调用不再重复扫 90 格)
   function detectPhase(engine) {
+    var ply = engine.ply();
+    var snap = engine.snapshot();
     if (_phaseCache) {
       var hit = _phaseCache.get(engine);
-      if (hit && hit.ply === engine.ply()) return hit.phase;
+      if (hit && hit.ply === ply && hit.snapshot === snap) return hit.phase;
     }
-    var ply = engine.ply();
     var round = Math.ceil(ply / 2);
-    var snap = engine.snapshot();
     var big = 0, pieces = 0;
     for (var y = 0; y < 10; y++) {
       for (var x = 0; x < 9; x++) {
@@ -45,7 +45,7 @@
     var phase = (round <= 8 && big >= 10) ? 'opening'        // 早期且大子基本未交换
       : (big <= 4 || pieces <= 14) ? 'endgame'               // 大子枯竭或子力大减
       : 'middlegame';
-    if (_phaseCache && engine) { try { _phaseCache.set(engine, { ply: ply, phase: phase }); } catch (eC) {} }
+    if (_phaseCache && engine) { try { _phaseCache.set(engine, { ply: ply, snapshot: snap, phase: phase }); } catch (eC) {} }
     return phase;
   }
 
