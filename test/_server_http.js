@@ -148,6 +148,8 @@ async function main() {
   // 静态托管 + ETag/304
   const home = await req('GET', '/');
   ok(home.status === 200 && /<!DOCTYPE html>/i.test(home.body), 'GET / → 200 index.html');
+  ok(/^\d+ms$/.test(home.headers['x-response-time'] || ''),
+    'X-Response-Time 在提交响应头前写入, 返回可解析的耗时值');
   const etag = home.headers.etag;
   ok(!!etag, '静态响应带 ETag');
   const cached = await req('GET', '/', null, { 'If-None-Match': etag });
@@ -563,10 +565,34 @@ async function main() {
   ok(trustedXff.some(function (r) { return r.status === 429; }),
     '显式可信代理按右侧首个非可信地址限流, 不受 X-Forwarded-For 伪造前缀影响');
 
+  // 多个可信代理客户端不能令进程内限流桶无界增长; 已淘汰的旧桶在分钟窗内重新计数。
+  const capProbeIp = '198.18.0.1';
+  for (let batch = 0; batch < 4; batch++) {
+    await new Promise(function (r) { setTimeout(r, 1050 - (Date.now() % 1000)); });
+    const count = batch === 3 ? 6 : 8;
+    await Promise.all(Array.from({ length: count }, function () {
+      return reqTo(BASE3, 'POST', '/api/chat', xffPayload, { 'Content-Type': 'application/json', 'X-Forwarded-For': capProbeIp });
+    }));
+  }
+  const otherIps = [];
+  for (let i = 1; i <= 1000; i++) otherIps.push('198.19.' + Math.floor(i / 250) + '.' + (i % 250 + 1));
+  for (let i = 0; i < otherIps.length; i += 40) {
+    await Promise.all(otherIps.slice(i, i + 40).map(function (clientIp) {
+      return reqTo(BASE3, 'POST', '/api/chat', xffPayload, { 'Content-Type': 'application/json', 'X-Forwarded-For': clientIp });
+    }));
+  }
+  await new Promise(function (r) { setTimeout(r, 1050 - (Date.now() % 1000)); });
+  const capProbeAfterChurn = await reqTo(BASE3, 'POST', '/api/chat', xffPayload,
+    { 'Content-Type': 'application/json', 'X-Forwarded-For': capProbeIp });
+  ok(capProbeAfterChurn.status === 400,
+    '限流桶达到 1000 项后淘汰最旧桶, 多地址请求不能令 Map 无界增长');
+
   // Anthropic 上游延迟超过心跳间隔后正常完成: 响应仍为完整 SSE, 服务进程不因重复 writeHead 退出。
   const delayedAnt = await reqTo(BASE3, 'POST', '/api/chat', JSON.stringify({ provider: 'stubanthropic', model: 'stub-ant-delayed', messages: [{ role: 'user', content: 'x' }] }), { 'Content-Type': 'application/json' }, 30000);
   ok(delayedAnt.status === 200 && /text\/event-stream/.test(delayedAnt.headers['content-type'] || '') && /: ping/.test(delayedAnt.body) && /delayed-ok/.test(delayedAnt.body) && /\[DONE\]/.test(delayedAnt.body),
     'Anthropic 心跳后上游完成 → 200 SSE 含心跳、完整回复与 [DONE] (不重复写响应头)');
+  ok(Number.parseInt(delayedAnt.headers['x-response-time'], 10) >= 14000,
+    'X-Response-Time 在 SSE 首次提交响应头时取值, 包含等待上游首包的时间');
   const aliveAfterBeat = await reqTo(BASE3, 'GET', '/api/health');
   ok(aliveAfterBeat.status === 200, 'Anthropic 心跳后完成不导致服务进程崩溃');
 

@@ -342,6 +342,7 @@ const TRUSTED_PROXY_IPS = new Set(String(process.env.LLMCHESS_TRUSTED_PROXIES ||
 // v1.0.3: /api/chat 轻量限流 (每 IP 30 次/分 + 8 次/秒 双窗, 内存滑动, 零依赖)
 // v1.0.daily: 补秒窗 — 原仅分钟窗, 脚本可单秒连击打空整分钟预算再等下一窗; 人机/双 agent 每手 ≤2 请求远低于秒窗上限
 const _rlMap = new Map();
+const RL_MAX_BUCKETS = 1000;
 function chatRateLimit(req) {
   const remoteIp = normalizeIp(req.socket && req.socket.remoteAddress) || (req.socket && req.socket.remoteAddress) || 'unknown';
   let ip = remoteIp;
@@ -357,12 +358,19 @@ function chatRateLimit(req) {
   const now = Date.now();
   const sec = Math.floor(now / 1000);
   let entry = _rlMap.get(ip);
-  if (!entry || now - entry.start >= 60000) { entry = { start: now, count: 0, sec: sec, secCount: 0 }; _rlMap.set(ip, entry); }
+  if (!entry || now - entry.start >= 60000) {
+    if (!entry && _rlMap.size >= RL_MAX_BUCKETS) {
+      for (const [k, v] of _rlMap) { if (now - v.start >= 60000) _rlMap.delete(k); }
+      // Keep attacker-controlled/client-diverse keys bounded even when every bucket is active.
+      while (_rlMap.size >= RL_MAX_BUCKETS) _rlMap.delete(_rlMap.keys().next().value);
+    }
+    entry = { start: now, count: 0, sec: sec, secCount: 0 };
+    _rlMap.set(ip, entry);
+  }
   if (entry.sec !== sec) { entry.sec = sec; entry.secCount = 0; }
   entry.secCount++;
   entry.count++;
   if (entry.count > 30 || entry.secCount > 8) return false;
-  if (_rlMap.size > 1000) { for (const [k, v] of _rlMap) { if (now - v.start >= 60000) _rlMap.delete(k); } }
   return true;
 }
 
@@ -395,7 +403,11 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('Referrer-Policy', 'no-referrer');   // 第62轮: 全量安全头恢复 (r55-r61 三次被覆盖)
   const _t0 = Date.now();
-  res.on('finish', function () { try { res.setHeader('X-Response-Time', (Date.now() - _t0) + 'ms'); } catch (eT) {} });
+  const _writeHead = res.writeHead;
+  res.writeHead = function () {
+    if (!res.hasHeader('X-Response-Time')) res.setHeader('X-Response-Time', (Date.now() - _t0) + 'ms');
+    return _writeHead.apply(this, arguments);
+  };
   const u = (req.url || '/').split('?')[0];   // 第62轮: pathname only (query 不影响路由)
   /* 第48轮: 路由只认 pathname — 原实现拿裸 req.url 做精确比对, 于是任何带 query 的请求
      (`POST /api/chat?t=1` 这类缓存击穿/埋点参数, 或前端调试时随手加的查询串) 都匹配不上 API 分支,

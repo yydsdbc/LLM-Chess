@@ -2133,3 +2133,11 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 修复回放跳过手撤销、吃子跳转索引、翻转列标签与播放态读取；棋谱投票信心值写入 HTML 前转义。
 - 回归测试覆盖相关取消时序、并发峰值、投票胜出、服务端代理边界、回放索引、Elo 稳定排序及生产棋谱导入落库。
 - 最终门禁: 定向测试通过；`npm test` 15/15 PASS; `npm run check` 50 个 JS 语法及提示词门禁 PASS; `check_ui` PASS; `_server_http` 125/125 PASS; `git diff --check` PASS。
+
+## 2026-09-26 16:12 第68轮 (codex — 修复自审发现的服务端正确性遗漏)
+
+- 修复 `X-Response-Time` 在 `finish` 事件中写入过晚、已无法进入响应头的问题；改为响应提交时记录从请求进入到首个响应头的耗时，慢 SSE 也纳入等待上游首包的时间。
+- 修复限流 Map 仅清除过期桶、活跃多地址请求仍可令其无限增长的问题；新增 1000 桶硬上限，满载时清理过期项并按插入顺序淘汰旧桶。
+- 回归: 普通静态响应耗时头格式、延迟 Anthropic SSE 耗时值，以及跨 1000 个可信代理客户端地址后旧限流桶确实被淘汰。
+- 定向: `node --check server.js` / `node --check test/_server_http.js` PASS; `node test/check_ui.js` PASS; `node test/_server_http.js` 128/128 PASS。
+- 完整门禁: `npm test` 15/15 PASS; `npm run check` 50 个 JS 语法、提示词与 dump 新鲜度检查 ALL PASS。
