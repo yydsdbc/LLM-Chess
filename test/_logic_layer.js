@@ -373,9 +373,11 @@ ok(!!entryEl && entryEl.tabIndex === 0, 'L11 走法列表条目 tabIndex=0 (键�
 
 // L11-c 底部横幅错误/警告 → #sr-alert 断言式播报 (原无任何 ARIA 语义, 读屏完全感知不到失败)
 var alertEl = DOC_MAP['sr-alert'], bannerEl = DOC_MAP['ai-banner'];
-sandbox.XQ.UI.aiBanner('warn', '⚠ <b>上游限流</b> 429', 'red');
-ok(alertEl.textContent.indexOf('上游限流') >= 0 && alertEl.textContent.indexOf('<') < 0, 'L11 warn 横幅文本 (去标签) 进 #sr-alert');
+sandbox.XQ.UI.aiBanner('warn', '⚠ 上游限流 429', 'red');
+ok(alertEl.textContent === '⚠ 上游限流 429', 'L11 warn 横幅纯文本进 #sr-alert');
 ok(bannerEl.tabIndex === 0, 'L11 warn 横幅可聚焦 (键盘可关闭)');
+sandbox.XQ.UI.aiBanner('warn', '<img src=x onerror=alert(1)>', 'red');
+ok(bannerEl.textContent === '<img src=x onerror=alert(1)>' && bannerEl.innerHTML === '', 'L21 上游/导入错误中的 HTML 只显示为文本');
 sandbox.XQ.UI.aiBanner('busy', 'Elapsed 0:03', 'red');
 ok(alertEl.textContent.indexOf('Elapsed') < 0, 'L11 busy 每秒计时不进播报区 (防读屏每秒刷屏)');
 ok(bannerEl.tabIndex === -1, 'L11 busy 横幅不进 Tab 序');

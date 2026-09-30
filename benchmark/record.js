@@ -121,18 +121,25 @@
   function get(id) {
     return list().find(function (r) { return r.id === id; }) || null;
   }
+  function clearReplayState(id) {
+    try { localStorage.removeItem('xq_replay_pos_' + id); } catch (e2) {}
+    try { localStorage.removeItem('xq_replay:bm:' + id); } catch (e3) {}
+  }
   function writeList(records) {
+    var previous = list();
+    var kept = Object.create ? Object.create(null) : {};
+    records.forEach(function (record) { if (record && typeof record.id === 'string') kept['$' + record.id] = true; });
     var raw = JSON.stringify(records);
     localStorage.setItem(LS_KEY, raw);
     _listCache = records;
     _listRaw = raw;
+    previous.forEach(function (record) {
+      if (record && typeof record.id === 'string' && !kept['$' + record.id]) clearReplayState(record.id);
+    });
   }
   function remove(id) {
     var all = list().filter(function (r) { return r.id !== id; });
     try { writeList(all); } catch (e) { return false; }
-    // 第28轮: 孤儿键内聚清理 (回放进度/书签随棋谱删除; 原只 rpDeleteRecord 手工清, 其它调用方漏网)
-    try { localStorage.removeItem('xq_replay_pos_' + id); } catch (e2) {}
-    try { localStorage.removeItem('xq_replay:bm:' + id); } catch (e3) {}
     return true;
   }
 
@@ -321,18 +328,19 @@
       }
       if (!stored) throw new Error('棋谱存储失败，请检查本地存储空间');
     }
+    var failedParts = [];
     if (bak.elo && typeof bak.elo === 'object') {
       var t = Object.create ? Object.create(null) : {};
       var currentElo = parseStoredObject('xq_elo_v1', {});
       Object.keys(currentElo).forEach(function (k) { t[k] = currentElo[k]; });
       Object.keys(bak.elo).forEach(function (k) { t[k] = bak.elo[k]; });   // 合并 (同键以备份为准)
-      try { root.localStorage.setItem('xq_elo_v1', JSON.stringify(t)); } catch (e4) {}
+      try { root.localStorage.setItem('xq_elo_v1', JSON.stringify(t)); } catch (e4) { failedParts.push('elo'); }
     }
     if (bak.settings && typeof bak.settings === 'object' && mode === 'replace') {
-      try { root.localStorage.setItem('xq_v1_settings', JSON.stringify(bak.settings)); } catch (e5) {}
+      try { root.localStorage.setItem('xq_v1_settings', JSON.stringify(bak.settings)); } catch (e5) { failedParts.push('settings'); }
     }
     var added = cur.filter(function (r) { return incoming['$' + r.id]; }).length;
-    return { added: added, skipped: Math.max(0, bak.records.length - added) };
+    return { added: added, skipped: Math.max(0, bak.records.length - added), failedParts: failedParts };
   }
 
   XQ.Record = {

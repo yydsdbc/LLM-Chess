@@ -1,8 +1,8 @@
 > 📖 English documentation: [README.md](README.md)
 
-# 🦞 LLM-chess v1.0 · AI 对战直播平台
+# 🦞 LLM-chess v1.1 · AI 对战直播平台
 
-[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-15%20suites-brightgreen)
+[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-17%20suites-brightgreen)
 
 中国象棋 + LLM 对战平台。v1.5 决策卡片流/棋风对垒/观战动效；v1.6 回放系统（不调 LLM 快速重看对局）；v1.7 HUD 观战仪表盘（被吃托盘/中文记谱/评值走势/终局结算）；v2 赛博暗金主题。核心引擎可独立用于搜索算法（alpha-beta / MCTS）与 Agent 研发。
 
@@ -29,6 +29,7 @@ cd LLM-chess
 - `config/keys.json` 含密钥, 已被 `.gitignore` 排除, 永远不会被提交; 格式参考 `config/keys.example.json`
 - 密钥只保存在服务端, 前端经 `/api/chat` 中继调用, 浏览器永不见密钥
 - 服务默认只监听 127.0.0.1; 局域网对战设环境变量 `LLMCHESS_HOST=0.0.0.0` 后重启
+- 前端单独托管时, 可将 `LLMCHESS_CORS_ORIGINS` 设为逗号分隔的精确 `http://` 或 `https://` 来源列表 (含端口), 然后重启服务; 其他远端来源及 opaque `null` 来源默认拒绝
 - 运行产物目录 (logs/ temp/ screenshots/) 均不入库
 
 ## 目录结构
@@ -70,7 +71,7 @@ LLM-chess/
 ├── replay/
 │   ├── replay.js            # 回放数据层: 棋谱 → 引擎状态机 (next增量/prev/goto重建, 脏数据容错)
 │   └── replay_controller.js # 回放控制层: 播放/暂停/步进/跳转/倍速7档/循环
-├── test/               # 15 套件 (详见下方「测试」表): run_tests.js 50项(perft金标准+重复局面/长将追踪/moveTag杀标注/长将判负/三次重复判和/送吃守卫) · test_llm_convo.js 151项(提示词/重试/兑底安全阀/开局炮保护回归/对拉与长将警示/重复局面警示/合法列表杀标注/亏子标注/危子预标/全角容错/对手吃子标注/重试钩子/多轮缓存守护/HIST_CAP裁剪/reasoning打捞/信号取值函数) · replay_smoke.js 52项 · test_evaluation.js 88项(含士象完整性/底线老兵/空头炮/窝心马/中炮矄中卒/开局任务提醒/出车提醒) · _clean_reason_check.js 10项 · cn_notation_check.js 25项 · i18n_check.js 15组 · link_check.js 文档链接 · check_ui.js 语法+ID+HTML净化+PWA守护+生命周期守卫+接线/写入点守卫+展示值/时点守卫+a11y/i18n/热路径/PWA 守卫+敏感路径/模态收口/焦点与状态同步守卫+规范化/路由/中继收尾/焦点保留/语言热切守卫 · _replay_edge/_logic_layer/_prompt_level_smoke/replay_risk_check/_committee_agent/_server_http.js 边界/纯逻辑层与渲染热路径+PWA离线壳/分级注入/回放风险与懒补齐/委员会/服务端行为 · analyze_blunders.js 瞎走检测器(含错失必杀) · smoke_relay.js 真实中继单发 · smoke_ui.js UI冒烟14项 · match_headless.js 无头对局
+├── test/               # 17 套件 (详见下方「测试」表): run_tests.js 50项(perft金标准+规则闭环) · test_llm_convo.js 158项(提示词/重试/缓存/取消与会诊回归) · replay_smoke.js 52项 · test_evaluation.js 188项(局面阶段/子力价值/王城安全与摘要) · test_engine_cache.js 10项(缓存/自定义开局/快照隔离) · test_record_edges.js 29项(棋谱/Elo/备份边界) · _clean_reason_check.js · cn_notation_check.js · i18n_check.js · link_check.js · check_ui.js · _replay_edge.js · _logic_layer.js · _prompt_level_smoke.js · replay_risk_check.js · _committee_agent.js · _server_http.js (中继安全与 HTTP 行为)
 └── tools/              # npm 脚本入口 (Node 侧, 零依赖)
     ├── start.js        #   npm start — 后台启动 (端口 8788)
     ├── stop.js         #   npm stop  — 停止后台实例
@@ -193,7 +194,7 @@ LLM-chess/
 | `node test/_prompt_level_smoke.js` | 提示词分级注入守护 (每级长度恒定 + legacy 兼容 + 前缀缓存不变式) |
 | `node test/replay_risk_check.js` | 回放疑误着法检测 (含懒补齐路径: 跳转到某手必须与逐手走到该手得到相同的风险表与相同的 将/杀/困 标注) + 存档配额兜底 |
 | `node test/_committee_agent.js` | 同方多 LLM 委员会: 会诊投票/平票决胜/轮换/全灭/用量聚合 |
-| `node test/_server_http.js` | server.js HTTP 行为 119 项 (含注入 stub 上游的真实中继穿越) | (真实起服务: 健康形状+版本/静态+ETag/304含sw.js与`?query`形态/404/路径穿越403含兄弟同名前缀目录与反斜杠形态/畸形编码400/**静态敏感路径黑名单**(`/config/keys.json` 此前逐字返回真实密钥文件; `.git/`·`logs/`·点开头目录一律拒绝)/**空字节路径守卫**(`GET /%00` 此前使 fs.stat 同步抛出并终止进程, 其后复检进程存活)/OPTIONS含静态路径/非法JSON 400/空体400/超2MB中断/未知服务商400/未配Key 400/缺model字段400/**早期拒绝与 health·providers 补 ACAO**/providers形状+无密钥泄漏+hasKey+no-store/HEAD+ETag/manifest+icon+sw MIME/方法守卫/错ETag全量200/限流429+Retry-After+ACAO/OpenAI流式SSE直通/目录请求404/keys.json热加载+半写容错/**静态缓存失效判据**(改文件后不得回旧字节)/**上游请求构造口径**(自定义头合并/thinking 仅 GLM 系透传且对 GLM 系确实注入/尾斜杠去除与默认及自定义 chatPath/stream_options 仅流式/缺省值)/**上游连接失败 → 502**(该错误分支此前零覆盖, 回归会变成挂起而非快速失败; 两条协议路径都必须带 ACAO)/**上游非 200 状态透传**(401/429/500 不得被改写成 200/502 — 流式下错误体被当 SSE 解析, 最终只报「流式返回为空」)/**非对象 JSON 体 → 400**(字面量 null 请求体此前在 async 处理器里抛错并终止整个进程 — 一个 POST 即可远程打死中继)/providers name·baseUrl·models 透传/OPTIONS 预检头**值**/keys.json 被删(ENOENT)容错/静态 Cache-Control 指令值/`temperature: 0` 不被缺省覆盖/`Content-Length` 按**字节**长度(中文 prompt)/**上游中途断连 → 502**(非流式两条路径此前永久挂起 — 客户端只能自己超时, 实测 12s 无任何字节; Node 只在存在 `error` 监听时才 emit error, 故表现为挂起而非崩溃)/**非流式上游响应体 16MB 上限**(不再无界缓冲)/**黑名单改在规范化后逐段判定**(`/x/..%5cconfig/keys.json` 借 raw 首段绕过并返回密钥文件)/**路由只认 pathname**(`POST /api/chat?t=1` 此前落静态分支回 404)) |
+| `node test/_server_http.js` | server.js HTTP 行为 131 项 (含注入 stub 上游的真实中继穿越) | (真实起服务: 健康形状+版本/静态+ETag/304含sw.js与`?query`形态/404/路径穿越403含兄弟同名前缀目录与反斜杠形态/畸形编码400/**静态敏感路径黑名单**(`/config/keys.json` 此前逐字返回真实密钥文件; `.git/`·`logs/`·点开头目录一律拒绝)/**空字节路径守卫**(`GET /%00` 此前使 fs.stat 同步抛出并终止进程, 其后复检进程存活)/OPTIONS含静态路径/非法JSON 400/空体400/超2MB中断/未知服务商400/未配Key 400/缺model字段400/**CORS 精确来源白名单** (localhost 与配置来源放行, 其他远端和 null 拒绝) / **早期拒绝与 health·providers 补 ACAO**/providers形状+无密钥泄漏+hasKey+no-store/HEAD+ETag/manifest+icon+sw MIME/方法守卫/错ETag全量200/限流429+Retry-After+ACAO/OpenAI流式SSE直通/目录请求404/keys.json热加载+半写容错/**静态缓存失效判据**(改文件后不得回旧字节)/**上游请求构造口径**(自定义头合并/thinking 仅 GLM 系透传且对 GLM 系确实注入/尾斜杠去除与默认及自定义 chatPath/stream_options 仅流式/缺省值)/**上游连接失败 → 502**(该错误分支此前零覆盖, 回归会变成挂起而非快速失败; 两条协议路径都必须带 ACAO)/**上游非 200 状态透传**(401/429/500 不得被改写成 200/502 — 流式下错误体被当 SSE 解析, 最终只报「流式返回为空」)/**非对象 JSON 体 → 400**(字面量 null 请求体此前在 async 处理器里抛错并终止整个进程 — 一个 POST 即可远程打死中继)/providers name·baseUrl·models 透传/OPTIONS 预检头**值**/keys.json 被删(ENOENT)容错/静态 Cache-Control 指令值/`temperature: 0` 不被缺省覆盖/`Content-Length` 按**字节**长度(中文 prompt)/**上游中途断连 → 502**(非流式两条路径此前永久挂起 — 客户端只能自己超时, 实测 12s 无任何字节; Node 只在存在 `error` 监听时才 emit error, 故表现为挂起而非崩溃)/**非流式上游响应体 16MB 上限**(不再无界缓冲)/**黑名单改在规范化后逐段判定**(`/x/..%5cconfig/keys.json` 借 raw 首段绕过并返回密钥文件)/**路由只认 pathname**(`POST /api/chat?t=1` 此前落静态分支回 404)) |
 | `node test/analyze_blunders.js <log.json>` | 瞎走检测 (送吃/免费吃/漏吃/拉锯/错失必杀, 静态交换评估) |
 | `node test/smoke_relay.js` | 真实中继单发 (需 key) |
 | `node test/smoke_ui.js [model]` | 无头 Edge 冒烟 14 项 (自动开局/决策日志/分页哨兵/截图) |

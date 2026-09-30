@@ -620,7 +620,7 @@ else {
 // (a3) 上游错误分支: 两条协议路径都必须带 ACAO (openai 一直带, anthropic 的上游连接失败分支漏了)
 var antErr502 = (srvCode.match(/upReq\.on\('error', e3 => \{[\s\S]{0,260}?\}\)/) || [''])[0];
 if (!antErr502) wire46.push('未定位到 anthropic 上游错误分支 (守卫锚点失效)');
-else if (!/req_origin_safe\(req\)/.test(antErr502)) wire46.push('anthropic 上游连接失败 502 缺 ACAO (异源页只看到不透明的 CORS 失败)');
+else if (!/cors_headers\(req\)/.test(antErr502)) wire46.push('anthropic 上游连接失败 502 未走统一 CORS 策略');
 // (b) 回放层 Esc 必须穿过输入控件早退 (默认焦点是 #rp-pick <select>, 否则「打开回放后按 Esc」完全无反应)
 var inputGuard = (appCode.match(/if \(ev\.target && \/INPUT\|TEXTAREA\|SELECT\/\.test\(ev\.target\.tagName\)[^\n]*/) || [''])[0];
 if (!inputGuard) wire46.push('未定位到全局 keydown 的输入控件早退 (守卫锚点失效)');
@@ -684,12 +684,12 @@ else if (!/const relSegs = path\.relative\(ROOT, full\)\.split\(path\.sep\)\.fil
 if (!/DENY_DIRS\.has\(seg\.toLowerCase\(\)\)/.test(srvCode)) wire47.push('黑名单未对每一段生效 (守卫锚点失效)');
 if (!/seg\.charAt\(0\) === '\.'/.test(srvCode)) wire47.push('未拒绝点开头目录 (/.git/config 可取, 可能含远端凭据)');
 if (!/if \(p\.indexOf\('\\u0000'\) >= 0\)/.test(srvCode)) wire47.push('缺空字节路径守卫 (decodeURIComponent(\'/%00\') 使 fs.stat 同步抛出 → 进程终止)');
-// (a2) 早期拒绝分支与两条探测端点必须带 ACAO (与本文件其余分支同口径)
-if (!/if \(u === '\/api\/health'\) \{[\s\S]{0,140}?req_origin_safe\(req\)/.test(srvCode)) wire47.push('health 未带 ACAO (异源页的 relayAvailable 探测读到不透明 CORS 失败)');
-if (!/if \(u === '\/api\/providers'[\s\S]{0,600}?req_origin_safe\(req\)/.test(srvCode)) wire47.push('providers 未带 ACAO (异源页读不到服务商列表)');
-if (!/'Retry-After': '60', 'Access-Control-Allow-Origin': req_origin_safe\(req\)/.test(srvCode)) wire47.push('429 未带 ACAO');
-if (!/res\.writeHead\(415, \{[^}]*req_origin_safe\(req\)/.test(srvCode)) wire47.push('415 未带 ACAO');
-var n400 = (srvCode.match(/res\.writeHead\(400, \{[^}]*req_origin_safe\(req\)/g) || []).length;
+// (a2) 早期拒绝分支与两条探测端点必须走统一 CORS 策略 (允许来源获得 ACAO, 其他来源不放行)
+if (!/if \(u === '\/api\/health'\) \{[\s\S]{0,140}?cors_headers\(req\)/.test(srvCode)) wire47.push('health 未走统一 CORS 策略');
+if (!/if \(u === '\/api\/providers'[\s\S]{0,600}?cors_headers\(req\)/.test(srvCode)) wire47.push('providers 未走统一 CORS 策略');
+if (!/'Retry-After': '60', \.\.\.cors_headers\(req\)/.test(srvCode)) wire47.push('429 未走统一 CORS 策略');
+if (!/res\.writeHead\(415, \{[^}]*\.\.\.cors_headers\(req\)/.test(srvCode)) wire47.push('415 未走统一 CORS 策略');
+var n400 = (srvCode.match(/res\.writeHead\(400, \{[^}]*\.\.\.cors_headers\(req\)/g) || []).length;
 if (n400 < 6) wire47.push('400 系列带 ACAO 的分支数不足 (实测 ' + n400 + '/6 — 早期拒绝错误明细对异源页不可见)');
 // (a3) sw.js: 写缓存判据必须是 status === 200 (res.ok 对 206 也为真 → 部分字节被当完整资源缓存)
 if (!/res\.status === 200 && res\.type === 'basic'/.test(swCode)) wire47.push('sw.js 写缓存判据未收紧为 status===200 (206 部分响应会被缓存)');
@@ -807,5 +807,16 @@ if (!/\.d-thinking-stream\{/.test(html)) wire49.push('直播思考流卡片缺�
 if (/\[7 - i2\]/.test(appCode) || !/\[8 - i2\]/.test(appCode)) wire49.push('回放翻转视角列标签未按 8-i 映射');
 if ((appCode.match(/rpCtrl\.playing\(/g) || []).length || (appCode.match(/rpCtrl\.isPlaying\(/g) || []).length < 2) wire49.push('回放语言热切/首绘没有读取控制器 isPlaying 状态');
 if (!/esc2\(v\.conf != null \? v\.conf : '—'\)/.test(appCode)) wire49.push('导入投票信心值未 HTML 转义');
-console.log('第23节 CSP/拖拽/直播/回放边界守卫:', wire49.length ? wire49.join(' | ') : 'OK (无静态内联事件 + 按钮绑定 + 点击拖拽语义 + 独立直播进度/推理区 + 翻转列标 + 播放态 + 投票值转义)');
+if (!/b\.textContent = msg \|\| ''/.test(renCode)) wire49.push('AI 横幅仍把外部错误消息按 HTML 解析');
+const importErrorBody = (appCode.match(/\.catch\(function \(eImp\) \{([\s\S]*?)\n\s*\}\);/) || ['', ''])[1];
+if (!/rpEl\.info\.textContent\s*=/.test(importErrorBody) || /rpEl\.info\.innerHTML\s*=/.test(importErrorBody)) wire49.push('回放导入错误没有使用纯文本写入');
+const testConnStart = appCode.indexOf('var testState = tbtn._testState');
+const testConnEnd = appCode.indexOf("var buEl = document.getElementById('btn-undo')", testConnStart);
+const testConnCode = testConnStart >= 0 && testConnEnd > testConnStart ? appCode.slice(testConnStart, testConnEnd) : '';
+if (!/controller\.abort\(\)/.test(testConnCode) || !/requestId !== testState\.seq/.test(testConnCode)) wire49.push('服务商试连没有取消旧请求并隔离迟到结果');
+if (!/providerEl\.value !== prov/.test(testConnCode) || !/modelEl\.value \|\| 'test'\) !== mdl/.test(testConnCode)) wire49.push('服务商或模型变化后，旧试连结果仍可能覆盖新配置');
+if (!/providerEl\.addEventListener\('change', testState\.invalidate\)/.test(testConnCode) || !/modelEl\.addEventListener\('input', testState\.invalidate\)/.test(testConnCode)) wire49.push('修改服务商/模型后没有取消并清除旧试连状态');
+if (!/if \(!isCurrentTest\(\)\) return;[\s\S]{0,140}?res\.innerHTML/.test(testConnCode)) wire49.push('试连响应未在写入 UI 前验证请求世代');
+if (!/failedParts = r2\.failedParts \|\| \[\]/.test(appCode) || !/backup_partial/.test(appCode)) wire49.push('备份恢复未向用户报告 Elo/设置部分写入失败');
+console.log('第23节 CSP/拖拽/直播/回放/异步恢复边界守卫:', wire49.length ? wire49.join(' | ') : 'OK (无静态内联事件 + 按钮绑定 + 点击拖拽语义 + 独立直播进度/推理区 + 翻转列标 + 播放态 + 导入值转义 + 纯文本错误 + 试连世代守卫 + 备份部分失败反馈)');
 if (wire49.length) process.exit(1);

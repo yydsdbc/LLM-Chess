@@ -96,6 +96,45 @@ test('自定义初始棋盘与引擎内棋子引用隔离', () => {
   assert.deepStrictEqual(engine.kingPos('red'), { x: 4, y: 9 });
 });
 
+test('newGame 恢复自定义初始棋盘与起始行棋方', () => {
+  const start = XQ.Board.makeFromGrid(new Array(90).fill(null));
+  start.set(4, 9, XQ.Piece.create('red', 'king', 'rk'));
+  start.set(3, 0, XQ.Piece.create('black', 'king', 'bk'));
+  const expected = start.toText();
+  const engine = XQ.Engine.create({ startBoard: start, turn: 'black' });
+  assert.strictEqual(engine.applyPlayerMove(3, 0, 3, 1).ok, true);
+  engine.newGame();
+  assert.strictEqual(engine.boardText(), expected);
+  assert.strictEqual(engine.turn(), 'black');
+  assert.strictEqual(engine.ply(), 0);
+  assert.deepStrictEqual(engine.kingPos('black'), { x: 3, y: 0 });
+});
+
+test('目标缓存保持引用复用且目标数组与坐标只读', () => {
+  const engine = XQ.Engine.create();
+  const legal = engine.legalTargets(0, 6);
+  assert.deepStrictEqual(legal, [{ x: 0, y: 5, isCapture: false }]);
+  assert.strictEqual(engine.legalTargets(0, 6), legal, '同一盘面仍复用目标数组');
+  assert.throws(() => { legal[0].x = 8; }, TypeError);
+  assert.throws(() => { legal.push({ x: 4, y: 4 }); }, TypeError);
+
+  const danger = engine.dangerTargets(0, 6);
+  assert.strictEqual(engine.dangerTargets(0, 6), danger, '危险目标缓存也保持引用复用');
+  assert.throws(() => { danger.push({ x: 8, y: 8 }); }, TypeError);
+  assert.strictEqual(engine.applyPlayerMove(0, 6, 0, 5).ok, true);
+});
+
+test('snapshot 的记忆化快照保持深层只读', () => {
+  const engine = XQ.Engine.create();
+  const first = engine.snapshot();
+  assert.throws(() => { first.cells[6][0].type = 'king'; }, TypeError);
+  assert.throws(() => { first.cells[6].splice(0, 1); }, TypeError);
+  assert.throws(() => { first.turn = 'black'; }, TypeError);
+  assert.strictEqual(engine.snapshot(), first, '同状态仍复用快照');
+  assert.strictEqual(engine.snapshot().cells[6][0].type, 'pawn');
+  assert.strictEqual(engine.turn(), 'red');
+});
+
 test('历史、末着、落子返回值与事件中的棋子修改不改变盘面或悔棋结果', () => {
   for (const exposure of ['history', 'lastMove', 'result', 'event']) {
     const b = XQ.Board.makeFromGrid(new Array(90).fill(null));

@@ -169,13 +169,13 @@ function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 
         if (settled) return;
         settled = true;
         if (bad) {
-          if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+          if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
           try { res.end(JSON.stringify({ error: 'relay upstream error: ' + bad })); } catch (eR) {}
           return;
         }
         res.writeHead(upRes.statusCode || 502, {
           'Content-Type': upRes.headers['content-type'] || 'application/json',
-          'Access-Control-Allow-Origin': req_origin_safe(req)
+          ...cors_headers(req)
         });
         res.end(buf);
       };
@@ -192,7 +192,7 @@ function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 
       res.writeHead(upRes.statusCode || 502, {
         'Content-Type': upRes.headers['content-type'] || 'text/event-stream',
         'Cache-Control': 'no-store',
-        'Access-Control-Allow-Origin': req_origin_safe(req)
+        ...cors_headers(req)
       });
       upRes.on('data', c => res.write(c));
       upRes.on('end', () => res.end());
@@ -203,7 +203,7 @@ function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 
   res.on('close', () => { try { upReq.destroy(new Error('client closed')); } catch (e2) {} });   // v3.4: 浏览器断开即销毁上游请求 (免浪费 token)
   upReq.on('error', e => {
     if (!res.headersSent) {
-      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });   // v1.0.daily: 错误响应也带 ACAO — file:// 调试/异源页才能读到错误明细
+      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
     }
     res.end(JSON.stringify({ error: 'relay upstream error: ' + e.message }));
   });
@@ -242,7 +242,7 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
     messages: merged,
     stream: false   // 上游固定非流式, 中继侧合成 SSE (省去 Anthropic 事件流转换)
   });
-  const sseHeaders = { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': req_origin_safe(req) };
+  const sseHeaders = { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', ...cors_headers(req) };
   let beat = null;
   const writeSseError = msg => {
     try { res.write('data: ' + JSON.stringify({ error: { message: msg } }) + '\n\n'); res.write('data: [DONE]\n\n'); } catch (eS) {}
@@ -272,7 +272,7 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
       settled = true;
       clearInterval(beat);
       if (!res.headersSent) {
-        res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+        res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
         try { res.end(JSON.stringify({ error: 'relay upstream error: ' + msg })); } catch (eR) {}
       } else writeSseError('relay upstream error: ' + msg);
     };
@@ -297,7 +297,7 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
       } catch (eP) { httpErr = 'anthropic 响应解析失败'; }
       if (httpErr) {
         if (res.headersSent) return writeSseError(httpErr);
-        res.writeHead(upRes.statusCode || 502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });   // v1.0.daily: 同上, anthropic 错误响应带 ACAO
+        res.writeHead(upRes.statusCode || 502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
         return res.end(JSON.stringify({ error: httpErr }));
       }
       if (!res.headersSent) res.writeHead(200, sseHeaders);
@@ -312,21 +312,33 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
   });
   beat = setInterval(() => { try { if (!res.headersSent) res.writeHead(200, sseHeaders); res.write(': ping\n\n'); } catch (eB) {} }, 15000);   // v3.5: SSE 心跳防 streamIdle 误杀; 提前提交合法 SSE 头
   upReq.on('timeout', () => upReq.destroy(new Error('anthropic timeout(180s)')));
-  upReq.on('error', e3 => { clearInterval(beat); const msg = 'relay upstream error: ' + e3.message; if (!res.headersSent) { res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) }); res.end(JSON.stringify({ error: msg })); } else writeSseError(msg); });   // 第46轮: 补 ACAO; 心跳已提交时用 SSE 错误帧收尾
+  upReq.on('error', e3 => { clearInterval(beat); const msg = 'relay upstream error: ' + e3.message; if (!res.headersSent) { res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) }); res.end(JSON.stringify({ error: msg })); } else writeSseError(msg); });   // 第46轮: 补 ACAO; 心跳已提交时用 SSE 错误帧收尾
   res.on('close', () => { clearInterval(beat); try { upReq.destroy(new Error('client closed')); } catch (e4) {} });
   upReq.write(body);
   upReq.end();
 }
-// 同源部署无需 CORS; 回显同源 Origin (防任意网页盗用用户浏览器打 LLM 烧 key); file:// 调试友好 (Origin 为空时回退 *)
+// 同源部署无需 CORS; 放行 localhost 开发前端和 LLMCHESS_CORS_ORIGINS 中的精确来源。缺 Origin 的非浏览器客户端不受 CORS 约束。
+const CONFIGURED_CORS_ORIGINS = new Set(String(process.env.LLMCHESS_CORS_ORIGINS || '').split(',').map(value => value.trim()).filter(origin => {
+  try {
+    const url = new URL(origin);
+    return url.origin === origin && (url.protocol === 'http:' || url.protocol === 'https:');
+  } catch (e) { return false; }
+}));
 function req_origin_safe(req) {
   const o = req && req.headers && req.headers.origin;
   if (!o) return '*';
   try {
     const u = new URL(o);
-    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '0.0.0.0') return o;
-    if (u.origin === 'null') return '*';
+    if (u.origin !== o || (u.protocol !== 'http:' && u.protocol !== 'https:')) return '';
+    const host = u.hostname.replace(/^\[|\]$/g, '');
+    if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1') return o;
+    if (CONFIGURED_CORS_ORIGINS.has(o)) return o;
   } catch (e) {}
-  return '*';
+  return '';
+}
+function cors_headers(req) {
+  const origin = req_origin_safe(req);
+  return origin ? { 'Access-Control-Allow-Origin': origin } : {};
 }
 
 // LLMCHESS_TRUSTED_PROXIES: 配置直接连接本服务的可信代理精确 IP (不支持 CIDR), 多个 IP 用逗号分隔; 默认空表示忽略所有 X-Forwarded-For。
@@ -418,7 +430,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': req_origin_safe(req),
+      ...cors_headers(req),
       'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     });
@@ -426,11 +438,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   /* ── API ── */
-  /* 第47轮: health/providers 与全部早期拒绝分支补 ACAO — 本仓设计上支持异源/file:// 调试
-     (req_origin_safe 与中继各分支都带 ACAO), 而这两条探测端点与 429/415/400 系列一直漏着,
-     异源页拿到的只有一句不透明的「Failed to fetch」, 看不到「未配置 apiKey」「rate limited」这类可操作提示。 */
+  /* 第47轮: health/providers 与全部早期拒绝分支都走统一 CORS 白名单 — 允许的 localhost 开发前端可读错误明细,
+     不可信 Origin 不发 ACAO, 避免任意网页借用户浏览器调用本机/局域网 LLM 中继。 */
   if (u === '/api/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+    res.writeHead(200, { 'Content-Type': 'application/json', ...cors_headers(req) });
     return res.end(JSON.stringify({ ok: true, relay: true, version: VERSION, uptime_s: Math.round(process.uptime()) }));   // 第49轮: 运行时长
   }
 
@@ -441,30 +452,30 @@ const server = http.createServer(async (req, res) => {
       hasKey: !!keys.providers[id].apiKey,
       models: keys.providers[id].models || []
     }));
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...cors_headers(req) });
     return res.end(JSON.stringify({ providers: list }));
   }
 
   if (u === '/api/chat' && req.method === 'POST') {
     // v1.0.3: 轻量限流 (每 IP 每分钟 30 次, 防失控/恶意刷请求烧 key; 内存滑动窗, 零依赖)
     if (!chatRateLimit(req)) {
-      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '60', ...cors_headers(req) });
       return res.end(JSON.stringify({ error: 'rate limited: max 30 requests/min per IP' }));
     }
     // 第28轮: Content-Type 门禁 (显式声明非 JSON 直接 415; 无声明宽松放行兼容旧行为)
     const ct = (req.headers['content-type'] || '').toLowerCase();
     if (ct && ct.indexOf('application/json') < 0) {
-      res.writeHead(415, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      res.writeHead(415, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...cors_headers(req) });
       return res.end(JSON.stringify({ error: 'unsupported media type: use application/json' }));
     }
     const body = await readBody(req);
     if (!body) {
-      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      res.writeHead(400, { 'Content-Type': 'application/json', ...cors_headers(req) });
       return res.end(JSON.stringify({ error: '请求体为空或超过 2MB 上限' }));
     }
     let payload;
     try { payload = JSON.parse(body); } catch (e) {
-      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      res.writeHead(400, { 'Content-Type': 'application/json', ...cors_headers(req) });
       return res.end(JSON.stringify({ error: 'bad json' }));
     }
     /* 第46轮: 非对象 JSON 体守卫 — JSON.parse('null') 合法返回 null, 而下一行读 payload.provider
@@ -472,25 +483,25 @@ const server = http.createServer(async (req, res) => {
        即「一个 POST 就能远程打死中继」(实测 exitCode 1 + 后续请求 ECONNREFUSED)。数组/标量经
        provider 判定本来就走 400, 只有 null 会崩, 故按「非对象」判定。需重启生效。 */
     if (!payload || typeof payload !== 'object') {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
       return res.end(JSON.stringify({ error: '请求体必须是 JSON 对象' }));
     }
     const keys = loadKeys();
     const cfg = (keys.providers || {})[payload.provider];
     if (!cfg) {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
       return res.end(JSON.stringify({ error: '未知服务商: ' + payload.provider }));
     }
     if (!cfg.apiKey) {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
       return res.end(JSON.stringify({ error: '服务商 ' + payload.provider + ' 未配置 apiKey — 请编辑 config/keys.json 后重启' }));
     }
     if (!payload.model || !payload.messages) {
-      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      res.writeHead(400, { 'Content-Type': 'application/json', ...cors_headers(req) });
       return res.end(JSON.stringify({ error: '缺少 model/messages' }));
     }
     if (!Array.isArray(payload.messages) || !payload.messages.length || payload.messages.some(function (m) { return !m || typeof m.role !== 'string' || (typeof m.content !== 'string' && typeof m.content !== 'object'); })) {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': req_origin_safe(req) });
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
       return res.end(JSON.stringify({ error: 'messages 需为 [{role,content}] 数组' }));   // 第49轮: 形状校验 (防畸形消息透传上游)
     }
     if ((cfg.protocol || '') === 'anthropic') return relayAnthropic(cfg, payload, res, req);   // v3.5: Claude 走协议转换

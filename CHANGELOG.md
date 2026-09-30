@@ -6,6 +6,17 @@ Format based on Keep a Changelog; versions follow SemVer.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-30
+
+### Added
+- Live multi-LLM roundtable voting, clearer agreement and changed-vote cues, and per-move notes make AI matches easier to follow.
+
+### Changed
+- The main stage keeps the board and live match visible while moving secondary controls into settings; replay navigation and long-game state handling are more reliable.
+
+### Fixed
+- Relay origin checks and untrusted error rendering are hardened; backup restores now report partial failures, and engine reset/cache boundaries are protected.
+
 ### Changed
 - Docs refreshed to the v1.0.3 prompt-level tiers (README EN/ZH) — removed stale play-style references
 - `prompts_dump.md` regenerated from the live agent (tier system); `npm run check` now guards dump freshness (drift = fail)

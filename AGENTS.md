@@ -10,7 +10,7 @@
 
 ## 硬门禁（违反 = 白干）
 
-1. **测试**：`npm test`（并行 15 套件 ~20s）全绿才能 commit；单套件可 `node test/<name>.js`；改动 js 全部先 `node --check`。
+1. **测试**：`npm test`（并行 17 套件 ~20s）全绿才能 commit；单套件可 `node test/<name>.js`；改动 js 全部先 `node --check`。
 2. **system prompt**（`ai/llm_agent.js`）：≤2400 字、全中文、无特殊符号（①②③≥≤~→emoji）；提示词等级 none/low/mid/high 每级长度恒定（前缀缓存不变式）。
 3. **server.js 尽量不改**（改了用户要重启进程）；确要改必须跑 `test/check_ui.js`（只做语法检查）**以及 `test/_server_http.js`**（真正起服务的 HTTP 行为门禁：静态敏感路径/穿越/中继/CORS/限流）。
 4. **PowerShell 纪律**：每条命令后查 `$LASTEXITCODE`；严禁管道收尾（PowerShell 会伪报 exit 1）。
@@ -20,7 +20,7 @@
 ## 常用命令
 
 ```powershell
-npm test                 # 并行 15 套件（~20s）
+npm test                 # 并行 17 套件（~20s）
 node test/run_tests.js   # 串行链
 node server.js           # 本地起服务 :8788
 git push                 # 直连优先；失败: git -c http.https://github.com.proxy=http://127.0.0.1:10808 push
@@ -31,7 +31,7 @@ git push                 # 直连优先；失败: git -c http.https://github.com
 - `CHANGELOG.md` 保持 Keep a Changelog 格式。
 - 发版流程：bump `package.json` → CHANGELOG 建版本段 → commit → tag `vX.Y.Z` → push tag（`release.yml` 自动跑测试门禁并发 Release）。
 - `test/check_ui.js` 守护 README 双语 H1 版本号一致、且与 package.json 的主次版本前缀对齐 (无版本徽章; 只比 `v\d+.\d+` 前缀, 补丁号不校验)——改版本号记得同步 README 双语 H1。
-- 历史版本：v1.0.2（2026-09-05 上午）、v1.0.3（2026-09-05 晚，prompt-level tiers + CORS/限流/ETag）。
+- 历史版本：v1.0.2（2026-09-05 上午）、v1.0.3（2026-09-05 晚，prompt-level tiers + CORS/限流/ETag）、v1.1.0（2026-09-30，roundtable 直播与正确性/安全加固）。
 
 ## 多 Agent 协作协议（zcode / OpenClaw / Codex / 人工 通用）
 

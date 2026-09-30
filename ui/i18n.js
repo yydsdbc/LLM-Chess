@@ -11,7 +11,7 @@
   var LS_KEY = 'xq_lang';
   var LANGS = ['zh', 'en'];
   var ZH = {
-    app_title: '🦞 LLM-chess v1.0 · AI 对战直播平台',
+    app_title: '🦞 LLM-chess v1.1 · AI 对战直播平台',
     app_subtitle: 'AI 对战直播平台 · 战略决策流 · 风格分级 · 棋谱存档 · OpenAI协议(密钥服务端)',
     nav_settings: '⚙', nav_replay: '🎬', nav_help: '?',
     language_label: '语言',
@@ -160,7 +160,7 @@
     btn_undo: '↩ 悔棋', undo_ok: '↩ 已悔棋 (可连续操作)', undo_need_restore: '复盘查看中 — 请先点 ⟲ 还原再悔棋',
     undo_ai_busy: 'AI 思考中 — 本手落子后方可悔棋',
     resume_banner: '检测到未完对局 ({n} 手) — 可继续对弈', resume_btn: '▶ 续上局', resume_later: '忽略',
-    rp_note_edit: '✏ 编辑备注', backup_btn: '备份', restore_btn: '恢复', backup_ok: '备份已生成 / 恢复 {n} 局', restore_fail: '恢复失败: ',
+    rp_note_edit: '✏ 编辑备注', backup_btn: '备份', restore_btn: '恢复', backup_ok: '备份已生成 / 恢复 {n} 局', backup_partial: '⚠ 已恢复 {n} 局, 但部分数据未保存: {items}', restore_part_elo: 'Elo 评分', restore_part_settings: '界面设置', restore_fail: '恢复失败: ',
     elo_title: '🏆 Elo 天梯', elo_reset: '清空', elo_reset_confirm: '清空全部 Elo 战绩? 不可恢复。', elo_empty: '(暂无战绩 — 完成 AI 对战后自动记账)',
     elo_th_rating: '分数', elo_th_games: '局数', elo_th_wdl: '胜/和/负', elo_th_model: '模型',
     provider_no_key: '未配Key', rp_hk_wheel_label: '滚轮', rp_committee_tag: '会诊 {n}', btn_flip: '⇅ 翻转视角',
@@ -199,7 +199,7 @@
     rp_hk_main: '主界面快捷键: M 静音 · R 重开 · F 全屏观战 · U 悔棋 · 方向键移动光标 + Enter/Space 选子走子 + Esc 取消 (回放打开时 F 由回放接管)'
   };
   var EN = {
-    app_title: '🦞 LLM-chess v1.0 · AI Battle & Spectating Platform',
+    app_title: '🦞 LLM-chess v1.1 · AI Battle & Spectating Platform',
     app_subtitle: 'AI battles live · Decision cards · Tiered style injection · Game archive · OpenAI protocol (keys server-side)',
     nav_settings: '⚙', nav_replay: '🎬', nav_help: '?',
     language_label: 'Language',
@@ -347,7 +347,7 @@
     btn_undo: '↩ Undo', undo_ok: '↩ Move undone (repeatable)', undo_need_restore: 'Reviewing history — click ⟲ Restore before undoing',
     undo_ai_busy: 'AI is thinking — you can undo once this move lands',
     resume_banner: 'Unfinished game found ({n} moves) — resume play?', resume_btn: '▶ Resume', resume_later: 'Dismiss',
-    rp_note_edit: '✏ Edit note', backup_btn: 'Backup', restore_btn: 'Restore', backup_ok: 'Backup saved / restored {n} games', restore_fail: 'Restore failed: ',
+    rp_note_edit: '✏ Edit note', backup_btn: 'Backup', restore_btn: 'Restore', backup_ok: 'Backup saved / restored {n} games', backup_partial: '⚠ Restored {n} games, but some data was not saved: {items}', restore_part_elo: 'Elo ratings', restore_part_settings: 'UI settings', restore_fail: 'Restore failed: ',
     elo_title: '🏆 Elo Ladder', elo_reset: 'Reset', elo_reset_confirm: 'Clear all Elo records? This cannot be undone.', elo_empty: '(No games yet — finished AI games are rated automatically)',
     elo_th_rating: 'Rating', elo_th_games: 'Games', elo_th_wdl: 'W/D/L', elo_th_model: 'Model',
     provider_no_key: 'no key', rp_hk_wheel_label: 'Wheel', rp_committee_tag: 'Council {n}', btn_flip: '⇅ Flip board',

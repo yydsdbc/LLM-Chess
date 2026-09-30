@@ -132,6 +132,27 @@ test('保存第 61 条真实对局时也不挤掉独立导入池', () => {
   assert(R.get(imported.id));
   assert.strictEqual(R.list().filter(x => x.id.indexOf('import-') !== 0).length, 60);
 });
+test('容量淘汰棋谱时同步清理其回放进度和书签', () => {
+  const games = Array.from({ length: 60 }, (_, i) => rec('real-evict-' + i));
+  setRaw('xq_records_v1', JSON.stringify(games));
+  R.list();
+  localStorage.setItem('xq_replay_pos_real-evict-0', '17');
+  localStorage.setItem('xq_replay:bm:real-evict-0', '[4,17]');
+  R.save(rec('real-evict-new'));
+  assert.strictEqual(R.get('real-evict-0'), null);
+  assert.strictEqual(localStorage.getItem('xq_replay_pos_real-evict-0'), null);
+  assert.strictEqual(localStorage.getItem('xq_replay:bm:real-evict-0'), null);
+});
+test('导入池淘汰棋谱时也清理对应回放状态', () => {
+  const first = R.saveImported({ moves: [] });
+  localStorage.setItem('xq_replay_pos_' + first.id, '3');
+  localStorage.setItem('xq_replay:bm:' + first.id, '[3]');
+  R.saveImported({ moves: [] });
+  R.saveImported({ moves: [] });
+  assert.strictEqual(R.get(first.id), null);
+  assert.strictEqual(localStorage.getItem('xq_replay_pos_' + first.id), null);
+  assert.strictEqual(localStorage.getItem('xq_replay:bm:' + first.id), null);
+});
 test('finish 保留显式传入的零时长', () => {
   const r = rec('zero-duration');
   R.finish(r, { result: 'draw', winner: null }, 0);
@@ -170,6 +191,22 @@ test('备份记录写入完全失败时明确报错，不返回虚假的导入�
   try {
     assert.throws(() => R.importAllBackup({ kind: 'llm-chess-backup', records: [rec('cannot-save')] }, 'merge'), /保存|存储|storage/i);
   } finally { localStorage.setItem = realSet; }
+});
+test('备份记录保存成功但 Elo/设置写入失败时返回部分失败清单', () => {
+  setRaw('xq_records_v1', '[]');
+  R.list();
+  const realSet = localStorage.setItem;
+  localStorage.setItem = function (key, value) {
+    if (key === 'xq_elo_v1' || key === 'xq_v1_settings') throw new Error('quota');
+    memory[key] = String(value);
+  };
+  let result;
+  try {
+    result = R.importAllBackup({ kind: 'llm-chess-backup', records: [rec('partial-restore')], elo: { A: 1600 }, settings: { lang: 'en' } }, 'replace');
+  } finally { localStorage.setItem = realSet; }
+  assert.strictEqual(R.get('partial-restore').id, 'partial-restore');
+  assert.strictEqual(result.added, 1);
+  assert.deepStrictEqual(result.failedParts, ['elo', 'settings']);
 });
 
 async function testFileImport() {

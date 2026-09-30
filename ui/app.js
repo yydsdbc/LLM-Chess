@@ -916,7 +916,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         agents[side] = { kind: 'random', label: Ts7('agent_random', { side: (XQ.I18N ? XQ.I18N.t(side === 'red' ? 'rp_red_short' : 'rp_black_short') : (side === 'red' ? '红' : '黑')) }), agent: XQ.RandomAgent.create({ side: side, name: 'Random-' + side }) };
       } else if (v.type === 'llm') {
         if (!relayAvailable) {
-          warnBanner((XQ.I18N ? XQ.I18N.t('warn_llm_no_server') : '⚠️ LLM 需要本地服务: 请运行 node server.js 后访问本页地址') + ' <b>http://' + location.host + '</b>');   // v1.0.daily: 端口随实际服务端口 (server.js 支持 argv 端口)
+          warnBanner((XQ.I18N ? XQ.I18N.t('warn_llm_no_server') : '⚠️ LLM 需要本地服务: 请运行 node server.js 后访问本页地址') + ' http://' + location.host);   // v1.0.daily: 端口随实际服务端口 (server.js 支持 argv 端口)
           agents[side] = null; return;
         }
         /* 第29轮 同方多 LLM: 模型框逗号/分号分隔多模型 (支持 provider:model 跨厂商); 第31轮: 逐侧模式 + 重复模型去重 */
@@ -1442,21 +1442,61 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     ['red', 'black'].forEach(function (sd) {
       var tbtn = document.getElementById('ai-' + sd + '-testconn');
       if (!tbtn) return;
+      var testState = tbtn._testState || (tbtn._testState = { seq: 0, controller: null });
       tbtn.onclick = function () {
         /* 第48轮 i18n 修复: 别名原为 XQ.I18N.t (只吃 key 一个参数), 而下面却按 T2('test_ok', { ms: ms }) 调用 —
            t() 直接忽略第二个参数, 于是「试连」成功时永远显示字面量 '✓ 连通 {ms}ms' / '✓ OK {ms}ms' (两种语言都是),
            实测延迟从不出现。tArgs(k) 在不传第二参时等价于 t(k), 故三处调用共用同一别名即可。 */
         var T2 = XQ.I18N ? XQ.I18N.tArgs : function (k) { return k; };
         var res = document.getElementById('ai-' + sd + '-testres');
+        var requestId = ++testState.seq;
+        if (testState.controller) { try { testState.controller.abort(); } catch (eAbort) {} }
+        testState.controller = null;
         if (!window.XQApp.isRelay()) { if (res) res.innerHTML = '<span style="color:#ff8a7a">' + T2('test_no_relay') + '</span>'; return; }
         if (res) res.innerHTML = '<span style="opacity:.7">' + T2('test_run') + '</span>';
-        var prov = document.getElementById(SIDE_DEFS[sd].provider).value;
-        var mdl = document.getElementById(SIDE_DEFS[sd].model).value || 'test';
+        var providerEl = document.getElementById(SIDE_DEFS[sd].provider);
+        var modelEl = document.getElementById(SIDE_DEFS[sd].model);
+        if (!testState.bound) {
+          testState.invalidate = function () {
+            testState.seq++;
+            if (testState.controller) { try { testState.controller.abort(); } catch (eAbort2) {} }
+            testState.controller = null;
+            if (res) res.textContent = '';
+          };
+          providerEl.addEventListener('change', testState.invalidate);
+          modelEl.addEventListener('input', testState.invalidate);
+          modelEl.addEventListener('change', testState.invalidate);
+          testState.bound = true;
+        }
+        var prov = providerEl.value;
+        var mdl = modelEl.value || 'test';
+        var controller = typeof window.AbortController === 'function' ? new window.AbortController() : null;
+        testState.controller = controller;
+        function isCurrentTest() {
+          if (requestId !== testState.seq) return false;
+          if (providerEl.value !== prov || (modelEl.value || 'test') !== mdl) {
+            testState.seq++;
+            if (testState.controller === controller) testState.controller = null;
+            if (res) res.textContent = '';
+            return false;
+          }
+          if (testState.controller === controller) testState.controller = null;
+          return true;
+        }
         var t0 = Date.now();
-        fetch('api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider: prov, model: mdl, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }) })
-          .then(function (r2) { var ms = Date.now() - t0; if (res) res.innerHTML = r2.ok ? '<span style="color:#58d68d">✓ ' + T2('test_ok', { ms: ms }) + '</span>' : '<span style="color:#ff8a7a">✗ HTTP ' + r2.status + ' (' + ms + 'ms)</span>'; })
-          .catch(function () { if (res) res.innerHTML = '<span style="color:#ff8a7a">✗ ' + T2('test_no_relay') + '</span>'; });
+        var reqOpts = { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: prov, model: mdl, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }) };
+        if (controller) reqOpts.signal = controller.signal;
+        fetch('api/chat', reqOpts)
+          .then(function (r2) {
+            if (!isCurrentTest()) return;
+            var ms = Date.now() - t0;
+            if (res) res.innerHTML = r2.ok ? '<span style="color:#58d68d">✓ ' + T2('test_ok', { ms: ms }) + '</span>' : '<span style="color:#ff8a7a">✗ HTTP ' + r2.status + ' (' + ms + 'ms)</span>';
+          })
+          .catch(function (err) {
+            if (!isCurrentTest() || (err && err.name === 'AbortError')) return;
+            if (res) res.innerHTML = '<span style="color:#ff8a7a">✗ ' + T2('test_no_relay') + '</span>';
+          });
       };
     });
     var buEl = document.getElementById('btn-undo');
@@ -2080,7 +2120,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           try { history.replaceState(null, '', '#rp=' + encodeURIComponent(o.value)); } catch (eH5) {}   // v3.9: 导入也写深链 (与 rpPickLoad 同款)
           rpStart(saved);
         }).catch(function (eImp) {
-          rpEl.info.innerHTML = '<span style="color:#e67e22">' + (XQ.I18N ? XQ.I18N.t('rp_import_fail') : '导入失败: ') + (eImp && eImp.message || eImp) + '</span>';
+          rpEl.info.style.color = '#e67e22';
+          rpEl.info.textContent = (XQ.I18N ? XQ.I18N.t('rp_import_fail') : '导入失败: ') + String(eImp && eImp.message || eImp);
         });
       };
       input.click();
@@ -2581,7 +2622,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         try {
           var bak = JSON.parse(fr.result);
           var r2 = XQ.Record.importAllBackup(bak, 'merge');
-          warnBanner((XQ.I18N ? XQ.I18N.tArgs('backup_ok', { n: r2.added }) : '恢复完成'), null);
+          var failedParts = r2.failedParts || [], failedLabels = [];
+          if (failedParts.indexOf('elo') >= 0) failedLabels.push(XQ.I18N ? XQ.I18N.t('restore_part_elo') : 'Elo 评分');
+          if (failedParts.indexOf('settings') >= 0) failedLabels.push(XQ.I18N ? XQ.I18N.t('restore_part_settings') : '界面设置');
+          warnBanner(failedLabels.length
+            ? (XQ.I18N ? XQ.I18N.tArgs('backup_partial', { n: r2.added, items: failedLabels.join(' / ') }) : '⚠ 已恢复 ' + r2.added + ' 局, 但部分数据未保存: ' + failedLabels.join(' / '))
+            : (XQ.I18N ? XQ.I18N.tArgs('backup_ok', { n: r2.added }) : '恢复完成'), null);
           rpFillPicker();
         } catch (eB) {
           warnBanner((XQ.I18N ? XQ.I18N.t('restore_fail') : '') + (eB && eB.message || eB), null);

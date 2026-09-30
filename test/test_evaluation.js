@@ -23,7 +23,9 @@ function ok(cond, name) {
 }
 
 // ── stub engine: 用自定义 cells + ply 驱动阶段判断 ──
-function cellsFrom(engine) { return engine.snapshot().cells; }
+function cellsFrom(engine) {
+  return engine.snapshot().cells.map(row => row.map(piece => piece ? Object.assign({}, piece) : null));
+}
 function removePiece(cells, x, y) { cells[y][x] = null; }
 function stubEngine(cells, ply) {
   return {

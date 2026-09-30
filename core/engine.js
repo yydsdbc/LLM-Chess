@@ -35,7 +35,8 @@
     var ruleEnforce = opts.ruleEnforce !== false;   // v2.0 规则闭环开关 (默认开; 分析器/回放重建可关, 不重判)
     var board = opts.startBoard ? opts.startBoard.clone() : Board.create();   // v2.0: 支持自定义起始盘面 (规则测试用)
     var genesis = board.clone();   // A2 v3.9: 起始盘面原像 — undoPly 重放基点 (修复自定义起始局面误用标准开局板回放)
-    var turn = opts.turn || 'red';
+    var startTurn = opts.turn || 'red';
+    var turn = startTurn;
     var history = [];        // Move[]
     /* 第48轮: 每手走完后的 {长将计数, 自然限着时钟} 快照栈 — 与 history 严格同长 (仅 applyPlayerMove 压、
        undoPly 弹、newGame 清), 让悔棋/复盘跳转 O(1) 恢复统计而不必重放历史 (见 undoPly 处注释)。 */
@@ -63,6 +64,30 @@
     }
     function copyLegalMoves(moves) {
       return moves.map(Move.clone);
+    }
+    // Protect memoized targets without allocating another array on every render/query.
+    function freezeTargets(targets) {
+      if (typeof Object.freeze !== 'function') return targets;
+      targets.forEach(function (target) { Object.freeze(target); });
+      return Object.freeze(targets);
+    }
+    // snapshot() reuses an object by state version, so freeze its nested view once before caching it.
+    function freezeSnapshot(snapshot) {
+      if (typeof Object.freeze !== 'function') return snapshot;
+      snapshot.cells.forEach(function (row) {
+        row.forEach(function (cell) { if (cell) Object.freeze(cell); });
+        Object.freeze(row);
+      });
+      Object.freeze(snapshot.cells);
+      var move = snapshot.lastMove;
+      if (move) {
+        if (move.from) Object.freeze(move.from);
+        if (move.to) Object.freeze(move.to);
+        if (move.piece) Object.freeze(move.piece);
+        if (move.captured) Object.freeze(move.captured);
+        Object.freeze(move);
+      }
+      return Object.freeze(snapshot);
     }
     /* 第43轮: 盘面文本 memo (键 = _stateVer) — snapshot 每帧都要 posCounts[posKey()], 原先每帧重建一次
        90 格文本; _stateVer 覆盖全部盘面/执子方变更 (apply/undo/newGame 均 bumpVer), 故同版本内结果恒定。 */
@@ -126,7 +151,7 @@
         }
         var val = { cells: cells, turn: turn, over: over, result: result, winner: winner, lastMove: api.lastMove(),
                  ply: history.length, naturalClock: naturalClock, repetitionCount: posCounts[posKey()] || 0 };   // A2 v3.9 增量: 计数进出快照 (replay 重建/观测层依赖; 旧消费者只读原有字段, 纯增量安全)
-        _snapCache = { ver: _stateVer, val: val };
+        _snapCache = { ver: _stateVer, val: freezeSnapshot(val) };
         return val;
       },
 
@@ -138,14 +163,14 @@
         var p = board.get(x, y);
         if (!p || p.color !== turn) return [];
         if (_tgtCache && _tgtCache.key === x + ',' + y + '@' + _stateVer) return _tgtCache.list;   // 第37轮 memo / 第39轮 键改状态版本
-        _tgtCache = { key: x + ',' + y + '@' + _stateVer, list: Generator.legalTargetsFrom(board, x, y) };
+        _tgtCache = { key: x + ',' + y + '@' + _stateVer, list: freezeTargets(Generator.legalTargetsFrom(board, x, y)) };
         return _tgtCache.list;
       },
       dangerTargets: function (x, y) {
         var p = board.get(x, y);
         if (!p || p.color !== turn) return [];
         if (_dgrCache && _dgrCache.key === x + ',' + y + '@' + _stateVer) return _dgrCache.list;   // 第39轮: 与 legalTargets 同款 memo (渲染热路径)
-        _dgrCache = { key: x + ',' + y + '@' + _stateVer, list: Generator.dangerTargetsFrom(board, x, y) };
+        _dgrCache = { key: x + ',' + y + '@' + _stateVer, list: freezeTargets(Generator.dangerTargetsFrom(board, x, y)) };
         return _dgrCache.list;
       },
 
@@ -258,9 +283,8 @@
       },
 
       newGame: function () {
-        board = Board.create();
-        genesis = board.clone();   // A2 v3.9: 起始原像同步重置
-        turn = 'red';
+        board = genesis.clone();
+        turn = startTurn;
         history = [];
         lastMove = null;
         statStack = [];   // 第48轮: 统计快照栈随新局清空 (与 history 同长不变式)

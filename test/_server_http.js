@@ -141,7 +141,7 @@ async function main() {
      钉住一个拼接产物而非真实口径)。 */
   fS.writeFileSync(keysFile, JSON.stringify({ providers: { stubprov: { name: 'Stub', baseUrl: 'http://127.0.0.1:' + upPort + '/v1/', apiKey: 'test-key', models: ['m-a', 'm-b'] }, stubanthropic: { name: 'StubA', baseUrl: 'http://127.0.0.1:' + upPort, protocol: 'anthropic', apiKey: 'anthropic-test-key' }, stubantdead: { name: 'StubAntDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', protocol: 'anthropic', apiKey: 'dead-ant-key' }, stubnokey: { name: 'StubNoKey', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: '' }, stubheaders: { name: 'StubHdr', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'test-key', headers: { 'X-Custom-Auth': 'hdr-ok' } }, stubglm: { name: 'StubGLM', baseUrl: 'http://127.0.0.1:' + upPort + '/tokenrhythm/v1', chatPath: '/v2/chat', apiKey: 'glm-key' }, stubdead: { name: 'StubDead', baseUrl: 'http://127.0.0.1:' + deadPort + '/v1', apiKey: 'dead-key' }, stubreset: { name: 'StubReset', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'reset-key' }, stubresetant: { name: 'StubResetA', baseUrl: 'http://127.0.0.1:' + upPort, protocol: 'anthropic', apiKey: 'reset-ant-key' }, stubhuge: { name: 'StubHuge', baseUrl: 'http://127.0.0.1:' + upPort + '/v1', apiKey: 'huge-key' } } }));   // 第48轮: 后三个供「中途断连 / 超大响应体」断言 (另起实例跑, 见文末第48轮块)
 
-  server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile, LLMCHESS_TRUSTED_PROXIES: '' }) });
+  server = spawn(process.execPath, [path.join(ROOT, 'server.js'), String(PORT)], { cwd: ROOT, stdio: 'ignore', env: Object.assign({}, process.env, { LLMCHESS_KEYS: keysFile, LLMCHESS_TRUSTED_PROXIES: '', LLMCHESS_CORS_ORIGINS: 'https://trusted.example.com' }) });
   const up = await waitHealth(40);   // ~6s 上限
   ok(up, '服务启动 + GET /api/health → 200');
 
@@ -422,13 +422,19 @@ async function main() {
   const sc5 = await req('GET', cacheUrl);
   ok(sc5.status === 404, '静态缓存: 文件删除后回到 404 (缓存不复活已删文件)');
 
-  // 第37轮: CORS 策略 (req_origin_safe 零覆盖) — localhost 回显 / 异源与无 Origin 均 '*' (走 OPTIONS 预检, 不耗限流窗)
+  // 第37轮/第73轮: CORS 策略 — localhost 与显式精确白名单来源可用; 其他远端与 opaque 来源不得获通配放行。
   const or1 = await req('OPTIONS', '/api/chat', null, { Origin: 'http://localhost:5173' });
   ok(or1.status === 204 && or1.headers['access-control-allow-origin'] === 'http://localhost:5173', 'CORS 策略: localhost Origin → ACAO 回显同源');
+  const trustedOrigin = await req('OPTIONS', '/api/chat', null, { Origin: 'https://trusted.example.com' });
+  ok(trustedOrigin.status === 204 && trustedOrigin.headers['access-control-allow-origin'] === 'https://trusted.example.com', 'CORS 策略: 显式精确白名单 Origin → ACAO 精确回显');
   const or2 = await req('OPTIONS', '/api/chat', null, { Origin: 'https://evil.example.com' });
-  ok(or2.status === 204 && or2.headers['access-control-allow-origin'] === '*', 'CORS 策略: 异源 Origin → ACAO * (不泄露同源回显)');
+  ok(or2.status === 204 && !or2.headers['access-control-allow-origin'], 'CORS 策略: 不可信远端 Origin → 不发 ACAO');
+  const orNull = await req('OPTIONS', '/api/chat', null, { Origin: 'null' });
+  ok(orNull.status === 204 && !orNull.headers['access-control-allow-origin'], 'CORS 策略: opaque null Origin → 不发 ACAO');
   const or3 = await req('OPTIONS', '/api/chat', null, {});
-  ok(or3.status === 204 && or3.headers['access-control-allow-origin'] === '*', 'CORS 策略: 无 Origin (file://) → ACAO *');
+  ok(or3.status === 204 && or3.headers['access-control-allow-origin'] === '*', 'CORS 策略: 无 Origin 客户端 → ACAO *');
+  const evilHealth = await req('GET', '/api/health', null, { Origin: 'https://evil.example.com' });
+  ok(evilHealth.status === 200 && !evilHealth.headers['access-control-allow-origin'], 'CORS 策略: API 实际响应同样拒绝不可信 Origin');
 
   // 第37轮: 二次编码穿越边界 — %252e.. 只解码一层不还原为 ../ → 404 非文件泄露 (防护纵深实证)
   const dbl = await req('GET', '/%252e%252e%252fserver.js');

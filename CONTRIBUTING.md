@@ -37,8 +37,8 @@ The LLM request structure is cache-optimized — please preserve it:
 
 ## Cutting a release (maintainer runbook)
 
-1. Move the Unreleased items in `CHANGELOG.md` under a new version heading; bump `version` in `package.json` (README h1 keeps the `v1.0` brand — a guard test enforces prefix consistency).
-2. Commit, tag, push: `git tag v1.0.x && git push origin main --tags`.
+1. Move the Unreleased items in `CHANGELOG.md` under a new version heading; bump `version` in `package.json` and update both README h1 versions (a guard test enforces prefix consistency).
+2. Commit, tag, push the release tag: `git tag vX.Y.Z && git push origin main --tags`.
 3. [`release.yml`](.github/workflows/release.yml) runs `npm test` as a gate and publishes the GitHub Release with auto-generated notes.
 
 ## Docs map

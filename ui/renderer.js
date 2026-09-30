@@ -462,7 +462,7 @@
     var hiding = !msg || (mode !== 'warn' && mode !== 'err');
     b.className = mode || '';
     if (side) b.classList.add(side === 'red' ? 'side-red' : 'side-black');
-    b.innerHTML = msg || '';   // v2 HUD: 分段配色 (ico/model/state/meta spans)
+    b.textContent = msg || '';   // 纯文本出口: 上游错误与导入内容不可作为 HTML 执行
     /* 第40轮 a11y: 横幅是全站运行时错误/警告的唯一出口, 此前无任何 ARIA 语义且只绑 click 关闭 —
        读屏完全不知道 LLM 失败/导入失败/将军/重复局面, 键盘用户也关不掉它。
        busy 模式每秒 tick 会重写全局计时, 整体挂 aria-live 会每秒刷屏, 因此只把警告文本投进 #sr-alert。
@@ -471,7 +471,7 @@
     var alertEl = document.getElementById('sr-alert');
     if (alertEl) {
       if ((mode === 'warn' || mode === 'err') && msg) {
-        var plain = String(msg).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        var plain = String(msg).replace(/\s+/g, ' ').trim();
         if (plain !== alertEl.textContent) alertEl.textContent = plain;   // 幂等: 同文本不重复播报
       } else if (!msg) {
         alertEl.textContent = '';   // 清空 → 同一错误再次发生时仍能触发播报

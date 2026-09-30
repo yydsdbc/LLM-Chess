@@ -2189,3 +2189,30 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 评价守卫反证: 在独立进程仅注入 HEAD 的旧 `position.js` (工作树未改), 新用例有50项失败；当前实现188项全绿。
 - 最终门禁: 修改的 JS 均通过 `node --check`；`npm run check` 52个 JS 及提示词/dump 门禁 ALL PASS；`git diff --check` PASS；完整 `npm test` 17/17 PASS (含 `_server_http` 和既有 UI/i18n/回放行为守卫)。协作 agent 中途达到额度上限, 主 agent 接手复核及收尾。服务端、提示词正文和新功能未改。提交前 HEAD 仍为 `dd8721a`, 无外部并行修改冲突。
 - 后续已发现但本轮未扩展: Elo 的 `stats:` 模型名与统计键冲突需要有版本的数据迁移；备份恢复的 Elo/设置写入失败仍被吞；保存池自动淘汰未清关联进度/书签；试连旧请求结果可覆盖新请求状态。
+
+## 2026-09-26 19:24 第73轮 (codex — security-review 审计修复跨站中继放行与错误消息 HTML 注入)
+
+- 安全审查基线: 工作树仅有上一轮安装的未跟踪 `.agents/skills/`; HEAD `a79bf08`; `npm test` 17/17 PASS。仓库无第三方运行依赖，跟踪文本文件无高置信度密钥匹配。
+- 修复跨站中继 CORS: 请求带 `Origin` 时只回显 localhost 开发来源或 `LLMCHESS_CORS_ORIGINS` 中严格匹配的 HTTP(S) 来源；拒绝任意远端与 opaque `null` 来源，不再错误放行通配符。无 `Origin` 的非浏览器客户端行为保持兼容；README 双语补充跨域部署配置。
+- 修复不可信消息注入: AI 横幅改用纯文本；棋谱/备份导入错误不再拼入 HTML。
+- 回归: 新增可信白名单来源、未授权远端来源、`null` 来源和实际 health 响应 CORS 测试；`_server_http` 131/131、`check_ui` PASS、`_logic_layer` ALL PASS。
+- 最终门禁: 修改的 JS 全部 `node --check` 通过；`npm run check` 53 个 JS + system prompt/dump PASS；`npm test` 17/17 PASS；`git diff --check` PASS。无运行中的并行 agent；保留已有未跟踪 `.agents/skills/`。
+
+## 2026-09-26 19:58 第74轮 (codex — 棋谱状态回收、试连竞态与备份部分恢复反馈)
+
+- 基线: HEAD `a79bf08`; 工作树保留第73轮未提交改动与既有未跟踪 `.agents/skills/`，未做远端同步。`test_record_edges` 26 PASS、`check_ui` PASS。
+- 容量淘汰棋谱时由统一 `writeList` 比对前后 ID，回收已淘汰棋谱的回放进度和书签；覆盖真实棋谱 60 条上限与导入谱 2 条上限。
+- 服务商试连按按钮维护请求世代，重试会中止旧请求，且迟到响应与已变更的服务商/模型不会覆盖当前状态；编辑配置时取消请求并清空过期状态。
+- 备份导入记录 Elo/设置存储失败的 `failedParts`，界面改报双语部分恢复提示，不再显示完整成功。
+- 定向结果: `test_record_edges` 29 PASS、i18n 15/15 组 328 键 PASS、`check_ui` PASS；Headless Edge 用延迟响应实测新试连优先、旧请求 abort、编辑模型取消并清空状态 PASS。Playwright 未安装，使用项目机器上的 Edge CDP 进行本地 UI 验证，未增加依赖。
+- 完整门禁: 修改的 JS 均通过 `node --check`；`npm run check` 53 个 JS + system prompt/dump PASS；`npm test` 17/17 PASS；`git diff --check` PASS。第73/74轮仍在同一未提交工作树，未提交或远端同步。
+
+## 2026-09-26 20:52 第75轮 (codex — 引擎自定义重开与只读缓存边界)
+
+- 修复自定义 `startBoard` / `turn` 在 `newGame()` 时被重置为标准盘面/红方的问题；重开从创建时保存的起始盘面克隆，并恢复配置的先手。
+- `legalTargets` / `dangerTargets` 的缓存数组与坐标设为只读，继续返回同一个缓存引用，避免调用方篡改后污染渲染/走法判断且不增加每帧复制开销。
+- 对 `snapshot()` 的盘面格、行数组、末着及根对象深冻结，保留同状态对象复用，阻止消费者改写记忆化快照。
+- 保留既有目标缓存引用复用守卫；评价测试通过复制快照格构造合成分支，不再直接修改引擎的只读快照。
+- 基线 `test_engine_cache` 7/7 PASS；新增 3 项回归，旧实现下自定义重开用例复现失败。定向 `test_engine_cache` 10/10、`test_evaluation`、`_logic_layer` ALL PASS，修改 JS 语法检查 PASS。
+- 最终门禁: `npm run check` 53 个 JS + prompt/dump 检查 ALL PASS；`npm test` 17/17 PASS；`git diff --check` PASS。
+- 本轮改动 `core/engine.js`、`test/test_engine_cache.js`、`test/test_evaluation.js` 与本日志；保留第73/74轮的全部未提交改动，不提交、不远程同步。

@@ -23,7 +23,7 @@
 <meta name="twitter:image" content="https://raw.githubusercontent.com/yydsdbc/LLM-Chess/main/docs/ui.png">
 <link rel="icon" href="ui/icon.svg" type="image/svg+xml">   <!-- 第24轮: 品牌统一 — ♟西棋占位 data-URI → 第23轮 弈 字标 (server .svg MIME 既有映射) -->
 <link rel="manifest" href="manifest.json">   <!-- 第23轮: PWA 可安装 (独立窗口/主屏图标), server.js 零改动 (application/json MIME 复用) -->
-<title data-i18n="app_title">🦞 LLM-chess v1.0 · AI 对战直播平台</title>
+<title data-i18n="app_title">🦞 LLM-chess v1.1 · AI 对战直播平台</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 /* v1.0.daily a11y: 键盘 Tab 焦点可见 (原仅 hover 反馈, 纯键盘用户看不到焦点在哪) */
@@ -447,7 +447,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 </style>
 </head>
 <body>
-<h1 data-i18n="app_title">🦞 LLM-chess v1.0 · AI 对战直播平台</h1>
+<h1 data-i18n="app_title">🦞 LLM-chess v1.1 · AI 对战直播平台</h1>
 <div class="subtitle" data-i18n="app_subtitle">AI 对战直播平台 · 战略决策流 · 风格分级 · 棋谱存档 · OpenAI协议(密钥服务端)</div>
 
 <div id="arena">
@@ -514,7 +514,7 @@ input[type=checkbox],input[type=range]{accent-color:#FFB000}
 
     <div id="settings-overlay">
         <div class="set-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">   <!-- 第23轮 a11y: 对话语义 — 读屏以「对战设置」宣告进入弹层 -->
-            <h3 id="settings-title" data-i18n="settings_title">🤖 对战设置 (v1.0)</h3>
+            <h3 id="settings-title" data-i18n="settings_title">🤖 对战设置 (v1.1)</h3>
             <div class="set-cols">
                 <!-- 第47轮 a11y: 红/黑两栏此前是无语义 div, 两侧控件可访问名完全相同 (「对手类型」「服务商…」
                      「模型名称」各出现两次), 读屏用户无从分辨在配哪一方 — WCAG 1.3.1 要求分组可由程序判定。
