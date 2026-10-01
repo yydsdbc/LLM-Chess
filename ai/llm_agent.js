@@ -519,7 +519,6 @@ function create(opts) {
           signal: ctrl ? ctrl.signal : undefined
         }).then(function (res) {
           if (settled || stopIfCancelled()) return;
-          if (timer) { clearTimeout(timer); timer = null; }
           if (!res.ok) {
             var retryAfterHdr = null;   // 第38轮: 捕获上游 Retry-After (秒或 HTTP-date 秒差), 退避取地板
             try {
@@ -538,6 +537,8 @@ function create(opts) {
           }
           var ct = res.headers.get('content-type') || '';
           if (ct.indexOf('event-stream') >= 0) {
+            // SSE 从响应头转入流式预算; 普通 JSON (包括错误 body) 保留请求截止时间直到解析完成。
+            if (timer) { clearTimeout(timer); timer = null; }
             // 流式看门狗: 收到头之后若长时间无数据/总时长超限 → abort 触发重试 (修复半开连接卡死)
             var lastAct = Date.now();
             watch = setInterval(function () {

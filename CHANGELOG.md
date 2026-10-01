@@ -6,6 +6,12 @@ Format based on Keep a Changelog; versions follow SemVer.
 
 ## [Unreleased]
 
+### Fixed
+- Cancel an entire committee turn across proposal, queue and final voting; enforce response-body deadlines and ignore late headless-match results.
+- Restore check state after undo, calculate legal recaptures on the correct board, and isolate match observers from settlement.
+- Separate Elo ratings from statistics with legacy-data compatibility, count CLI games once, and honor replacement-mode backup restores.
+- Parse only PGN mainline moves, clear old review/HUD state on every new game, and bind drag gestures to the clicked cell.
+
 ## [1.1.0] - 2026-09-30
 
 ### Added

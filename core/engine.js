@@ -110,8 +110,11 @@
     function refreshStatus() {
       var st = Judge.status(board, turn, legalMovesFor(turn));
       over = st.over; result = st.result; winner = st.winner;
+      _chkCache = { color: turn, ver: _stateVer, val: st.result === 'check' || st.result === 'checkmate' };
       return st;
     }
+    // Standard opening is known to be normal; custom positions may start in check or already be terminal.
+    var initialStatus = opts.startBoard ? refreshStatus() : { over: false, result: 'normal', winner: null };
 
     var api = {
       /** ── 查询 (只读快照) ── */
@@ -235,7 +238,8 @@
         /* 第48轮: 统计快照栈 — 与 history 严格同长 (每手压入走完后的长将计数+自然限着时钟),
            undoPly 弹栈即 O(1) 恢复, 取代原先「每次悔棋都从 genesis 重放整条历史」的 O(n) 重算
            (复盘跳转是连续 undoPly → 489 手棋谱点第一手 ≈ 24 万次 applyMove + 全盘攻击扫描, 主线程可见卡顿)。 */
-        statStack.push({ red: checkStreaks.red, black: checkStreaks.black, naturalClock: naturalClock });
+        statStack.push({ red: checkStreaks.red, black: checkStreaks.black, naturalClock: naturalClock,
+          over: over, result: result, winner: winner });
         emit('move', { move: Move.clone(m), status: st });
         return { ok: true, move: Move.clone(m), status: st };
       },
@@ -270,13 +274,15 @@
           var prevS = statStack.length ? statStack[statStack.length - 1] : null;
           checkStreaks = prevS ? { red: prevS.red, black: prevS.black } : { red: 0, black: 0 };
           naturalClock = prevS ? prevS.naturalClock : 0;
+          var restoredStatus = prevS || initialStatus;
+          over = restoredStatus.over; result = restoredStatus.result; winner = restoredStatus.winner;
         } else {
           statStack.length = 0;
           var rs = replayStats(genesis, history);
           checkStreaks = rs.streaks;
           naturalClock = rs.naturalClock;
+          refreshStatus();
         }
-        over = false; result = 'normal'; winner = null;
         lastMove = history.length ? history[history.length - 1] : null;
         emit('undo', {});
         return true;
@@ -291,7 +297,7 @@
         posCounts = {};   // v1.7.7: 重复计数随新局清零
         checkStreaks = { red: 0, black: 0 };   // v1.7.8: 长将计数随新局清零
         naturalClock = 0;   // v3.8: 自然限着计数随新局清零
-        over = false; result = 'normal'; winner = null;
+        over = initialStatus.over; result = initialStatus.result; winner = initialStatus.winner;
         bumpVer();   // 第39轮: 新局 memo 失效
         emit('new', {});
       },

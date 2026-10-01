@@ -1026,7 +1026,24 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     try { if (gameAbort) gameAbort.abort(); } catch (eAb) {}   // 第38轮: 中止上一局在飞请求
     gameAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     clearKbCursor();   // 第42轮: 走单出口 (连播报区一起清, 否则新局回到同一格听不到反馈)
-    syncArchive();
+    // All new-game entry points must clear the previous game's review and live presentation.
+    replayStack = [];
+    paintReplayBar();
+    clearTimeout(lastBadgeTimer); lastBadgeTimer = null;
+    clearTimeout(checkPulseTimer); checkPulseTimer = null;
+    clearTimeout(warnTimer); warnTimer = null;
+    bannerClear();
+    view.aiThinking = null; view.pendingAnim = null;
+    thinkStart.red = 0; thinkStart.black = 0;
+    checkFlashUntil = 0; thinkWarned = false; repWarnedN = 0; chWarnedN = 0;
+    var boardForReset = document.getElementById('board');
+    if (boardForReset) boardForReset.classList.remove('check-pulse');
+    XQ.UI.lastMoveBadge(null);
+    ['red', 'black'].forEach(function (sd) {
+      capturedBy[sd].length = 0; evalHist[sd].length = 0;
+      XQ.UI.capturedTray(sd, capturedBy[sd]);
+      XQ.UI.evalSpark(sd, evalHist[sd]);
+    });
     var s = readSettings();
     // 新对局: 重置 LLM 对话上下文
     ['red', 'black'].forEach(function (sd) {
@@ -1054,6 +1071,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       info: modelCardHTML('red') + (currentRecord.red.style ? '<span class="badge-style ' + levelClass(currentRecord.red.style) + '">' + levelCN(currentRecord.red.style) + '</span>' : '') });
     XQ.UI.thinkPanel('black', { name: TwR('status_side_black'), title: currentRecord.black.name, stat: '', text: TwR('think_wait'), active: false,
       info: modelCardHTML('black') + (currentRecord.black.style ? '<span class="badge-style ' + levelClass(currentRecord.black.style) + '">' + levelCN(currentRecord.black.style) + '</span>' : '') });
+    syncArchive();
   }
   /* v1.0.daily 存档按钮可用性 (无棋谱/空谱禁用, 防误点导出空文件) */
   function syncArchive() {

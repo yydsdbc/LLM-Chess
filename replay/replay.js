@@ -55,7 +55,6 @@ function moveRisk(eng, f, t, markBag, ply) {
     if (!picked) return 0;   // 非法/被跳过的手不标注
     b2.applyMove(picked);
     var op = side === 'red' ? 'black' : 'red';
-    var recaps = XQ.Generator.generateLegalMoves(b2, side);   // 我方吃回对方进攻子的选项 (与 reply 同盘面)
     var replies = XQ.Generator.generateLegalMoves(b2, op);
     // v1.7.9 将/杀/困标注: 复用本函数已算好的 replies (Judge.moveTag 免二次生成)
     if (markBag && ply) {
@@ -68,11 +67,16 @@ function moveRisk(eng, f, t, markBag, ply) {
       if (!(rp.captured && rp.to.x === t.x && rp.to.y === t.y)) continue;
       var loss = RISK_VALS[rp.captured.type] || 0;   // 我方刚落到 t 的子被吃
       var gain = 0;
-      for (var q3 = 0; q3 < recaps.length; q3++) {
-        if (recaps[q3].captured && recaps[q3].to.x === rp.to.x && recaps[q3].to.y === rp.to.y) {
-          gain = Math.max(gain, RISK_VALS[recaps[q3].captured.type] || 0);
+      b2.applyMove(rp);
+      try {
+        // The landing square becomes capturable only after the opponent has taken our moved piece.
+        var recaps = XQ.Generator.generateLegalMoves(b2, side);
+        for (var q3 = 0; q3 < recaps.length; q3++) {
+          if (recaps[q3].captured && recaps[q3].to.x === rp.to.x && recaps[q3].to.y === rp.to.y) {
+            gain = Math.max(gain, RISK_VALS[recaps[q3].captured.type] || 0);
+          }
         }
-      }
+      } finally { b2.undoMove(rp); }
       worst = Math.max(worst, loss - gain);
     }
     return worst - capturedVal;   // >0 = 这手静态净丢子

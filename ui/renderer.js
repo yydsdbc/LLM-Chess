@@ -280,7 +280,7 @@
         c.classList.toggle('in-check', !overNow && !!p && p.type === 'king' && p.color === snap.turn && engine.inCheck(snap.turn));
         if (!c._clickBound) {   // 第24轮: 池化后只绑定一次; 闭包保存稳定显示坐标, 输入时再读取当前视角映射盘面坐标
           c._clickBound = true;
-          (function (dx, dy) {
+          (function (c, dx, dy) {
             c.onclick = function () {
               if (Date.now() < _suppressUntil) return;
               var rx = view.flip ? 8 - dx : dx, ry = view.flip ? 9 - dy : dy;
@@ -294,9 +294,11 @@
               var rx = view.flip ? 8 - dx : dx, ry = view.flip ? 9 - dy : dy;
               var pd = engLive.pieceAt(rx, ry);
               if (!pd || pd.color !== engLive.turn()) return;
-              startDrag(rx, ry, engLive.pieceAt(rx, ry) && c.querySelector('.piece'), ev, view);
+              var pieceEl = c.querySelector('.piece');
+              if (!pieceEl) return;
+              startDrag(rx, ry, pieceEl, ev, view);
             });
-          })(dx0, dy0);
+          })(c, dx0, dy0);
         }
       }
     }

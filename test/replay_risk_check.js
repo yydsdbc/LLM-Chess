@@ -59,6 +59,30 @@ const rFree = XQ.Replay.moveRisk(sFree.engine(), XQ.Move.parseSq('e3'), XQ.Move.
 ok('免费吃卒 负风险', rFree < 0, 'risk=' + rFree);
 ok('prev 回退后 risks 表仍可用 (memo 保留)', s.prev() === true && Object.keys(s.risks()).length === 3, 'keys=' + Object.keys(s.risks()).length);   // 第37轮: 懒计算 memo 后退不丢
 
+/* 回吃必须在对手已吃走落子后的局面计算；同级车换车吃卒不能算净亏一车。 */
+function exchangeEngine(withDefender, pinned) {
+  const b = XQ.Board.makeFromGrid(new Array(90).fill(null));
+  [[4, 9, 'red', 'king', 'rk'], [3, 0, 'black', 'king', 'bk'],
+    [0, 5, 'red', 'rook', 'rr1'], [0, 2, 'black', 'rook', 'br'],
+    [0, 4, 'black', 'pawn', 'bp']].forEach(function (p) { b.set(p[0], p[1], XQ.Piece.create(p[2], p[3], p[4])); });
+  if (withDefender) b.set(2, 4, XQ.Piece.create('red', 'rook', 'rr2'));
+  if (pinned) {
+    b.set(4, 9, null);
+    b.set(2, 9, XQ.Piece.create('red', 'king', 'rk'));
+    b.set(2, 0, XQ.Piece.create('black', 'rook', 'pin'));
+  }
+  return XQ.Engine.create({ startBoard: b });
+}
+const defended = exchangeEngine(true);
+const defendedBefore = defended.boardText();
+const equalTradeRisk = XQ.Replay.moveRisk(defended, { x: 0, y: 5 }, { x: 0, y: 4 });
+ok('有合法回吃的车换车吃卒净赚一兵，不标严重疑误', equalTradeRisk === -1, 'risk=' + equalTradeRisk);
+ok('分析对手吃子与己方回吃不改变原引擎盘面', defended.boardText() === defendedBefore && defended.ply() === 0);
+const freeLoss = XQ.Replay.moveRisk(exchangeEngine(false), { x: 0, y: 5 }, { x: 0, y: 4 });
+ok('无回吃保护的车吃卒仍标净亏八分', freeLoss === 8, 'risk=' + freeLoss);
+const pinnedRisk = XQ.Replay.moveRisk(exchangeEngine(true, true), { x: 0, y: 5 }, { x: 0, y: 4 });
+ok('被牵制的保护车不能合法回吃，仍标净亏八分', pinnedRisk === 8, 'risk=' + pinnedRisk);
+
 /* ── 第44轮: 懒补齐必须定位到「该手走之前」的局面 ──
    原 computeRisk 把引擎留在调用时的位置, 于是**跳转** (点走法条目 / 拖进度条 / End / 回跳) 之后
    generateLegalMoves 里找不到那一手 → 恒 0 且不写 mark: 疑误着法徽章 (⚠) 与 将/杀/困 标注整体消失,

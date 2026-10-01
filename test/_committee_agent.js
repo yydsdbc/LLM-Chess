@@ -411,6 +411,73 @@ function resetStub(script) { callN = 0; scripted = script; }
     } finally { globalThis.fetch = priorFetch; }
   }
 
+  // C27 换局发生在圆桌阶段之间: 旧手不得重新求值 getter 后启动新局终判。
+  {
+    const priorFetch = globalThis.fetch;
+    let controller = new AbortController();
+    const oldController = controller;
+    const requests = [];
+    let proposalDone;
+    const proposalReady = new Promise(resolve => { proposalDone = resolve; });
+    globalThis.fetch = async function (url, opts) {
+      const body = JSON.parse(opts.body);
+      const isFinal = body.messages[body.messages.length - 1].content.indexOf('圆桌讨论') >= 0;
+      requests.push({ model: body.model, final: isFinal });
+      if (body.model === 'cancel-b' && !isFinal) {
+        return new Promise((resolve, reject) => {
+          opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })), { once: true });
+        });
+      }
+      return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ choices: [{ message: {
+        content: JSON.stringify({ from: 'h3', to: 'e3', summary: 'c27', confidence: 0.7 })
+      } }] }) };
+    };
+    try {
+      const cCancelled = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['cancel-a', 'cancel-b'], mode: 'roundtable',
+        signal: () => controller.signal, onProgress: p => { if (p.ok && p.phase === 'proposal') proposalDone(); } });
+      const oldResult = cCancelled.next(XQ.Engine.create()).then(() => null, err => err);
+      await proposalReady;
+      oldController.abort();
+      controller = new AbortController();
+      const oldError = await oldResult;
+      ok(oldError instanceof Error && requests.length === 2 && !requests.some(r => r.final),
+        'C27 换局取消整手圆桌，不启动旧局终判 (requests=' + requests.length + ')');
+      globalThis.fetch = async function (url, opts) {
+        requests.push({ model: JSON.parse(opts.body).model, newGame: true });
+        return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ choices: [{ message: {
+          content: JSON.stringify({ from: 'h3', to: 'e3', summary: '新局', confidence: 0.7 })
+        } }] }) };
+      };
+      const newMove = await cCancelled.next(XQ.Engine.create());
+      ok(!!newMove && requests.filter(r => r.newGame).length === 4,
+        'C27 同一委员会换局后动态 getter 仍支持新局完整两阶段请求');
+    } finally { globalThis.fetch = priorFetch; }
+  }
+
+  // C28 排队选民与显式 abort 共用整手取消边界，不能取消一人后继续发车。
+  for (const cancellation of ['abort', 'signal']) {
+    const priorFetch = globalThis.fetch;
+    let calls = 0;
+    let queuedController = new AbortController();
+    let getterReads = 0;
+    globalThis.fetch = async function (url, opts) {
+      calls++;
+      return new Promise((resolve, reject) => {
+        opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })), { once: true });
+      });
+    };
+    try {
+      const queued = XQ.CommitteeAgent.create({ side: 'red', provider: 'stub', models: ['queue-a', 'queue-b'], mode: 'council', maxParallel: 1, voterBudgetMs: 50,
+        signal: () => { getterReads++; return queuedController.signal; } });
+      ok(getterReads === 0, 'C28 创建委员会保留动态 getter，零提前求值 (' + cancellation + ')');
+      const pending = queued.next(XQ.Engine.create()).then(() => null, err => err);
+      if (cancellation === 'abort') queued.abort();
+      else { queuedController.abort(); queuedController = new AbortController(); }
+      const error = await pending;
+      ok(error instanceof Error && calls === 1, 'C28 ' + cancellation + ' 取消整手及排队选民，零额外请求 (calls=' + calls + ')');
+    } finally { globalThis.fetch = priorFetch; }
+  }
+
   console.log(failed ? '_committee_agent: ' + failed + ' FAIL' : '_committee_agent: ALL PASS');
   process.exit(failed ? 1 : 0);
 })().catch(function (e) { console.error('suite crashed:', e); process.exit(1); });

@@ -739,6 +739,27 @@ function ok(cond, name) {
     ok(remainingListeners === 0, '连续成功请求清理 external signal 监听 (残留 ' + remainingListeners + ')');
   }
 
+  // 非流式成功/错误响应的 body 也必须受到请求截止时间约束。
+  for (const httpOK of [true, false]) {
+    const priorFetchBodyDeadline = globalThis.fetch;
+    let deadlineRetry = 0, lateRaw = 0, finishBody;
+    globalThis.fetch = async function () {
+      return { ok: httpOK, status: httpOK ? 200 : 503, headers: { get: () => 'application/json' },
+        json: () => new Promise(resolve => { finishBody = resolve; }) };
+    };
+    const deadlineAgent = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'mock-body-deadline', timeoutMs: 25,
+      onRetry: () => { deadlineRetry++; }, onRawResponse: () => { lateRaw++; } });
+    const pending = deadlineAgent.next(XQ.Engine.create()).then(() => null, err => err);
+    await new Promise(resolve => setTimeout(resolve, 90));
+    ok(deadlineRetry === 1, (httpOK ? '成功' : '错误') + ' JSON 响应头后 body 永久挂起仍触发请求超时');
+    deadlineAgent.abort();
+    await pending;
+    finishBody(httpOK ? { choices: [{ message: { content: JSON.stringify({ from: 'b3', to: 'e3', summary: '迟到body', confidence: 0.8 }) } }] } : { error: '迟到错误' });
+    await Promise.resolve(); await Promise.resolve();
+    ok(lateRaw === 0 && deadlineAgent.usage().attempts === 1, (httpOK ? '成功' : '错误') + ' body 超时取消后迟到内容无钩子污染、无额外请求');
+    globalThis.fetch = priorFetchBodyDeadline;
+  }
+
   // ── 开局硬保护回归: 炮吃马被代码拦截 (v2.3 修复: 引擎类型是 knight/bishop, 原 horse/elephant 永不命中 → 拦截失效) ──
   {
     const engineG = XQ.Engine.create();

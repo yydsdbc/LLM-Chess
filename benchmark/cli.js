@@ -49,6 +49,7 @@ function oneGame(i) {
     red: XQ.RandomAgent.create({ side: 'red', name: 'RandomAI#' + (i + 1) + 'R', rng: seedRng(seedBase + i * 2) }),
     black: XQ.RandomAgent.create({ side: 'black', name: 'RandomAI#' + (i + 1) + 'B', rng: seedRng(seedBase + i * 2 + 1) }),
     maxPlies: maxPlies,
+    rateAllResults: true,
     onEvent: function (type, data) {
       if (type === 'illegal') stats.illegal++;
     }
@@ -60,7 +61,6 @@ function oneGame(i) {
     if (rec.winner === 'red') stats.red++;
     else if (rec.winner === 'black') stats.black++;
     else stats.draw++;
-    XQ.Elo.applyResult(rec.red.name, rec.black.name, rec.winner);
   if (/--json/.test(process.argv.join(' '))) {   // 第54轮: 逐局 JSON 行
     console.log(JSON.stringify({ game: i + 1, result: rec.result, winner: rec.winner, plies: rec.moves.length }));
   }

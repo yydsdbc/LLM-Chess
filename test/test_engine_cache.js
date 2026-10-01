@@ -173,4 +173,68 @@ test('棋盘相等比较正确处理空格、同盘面与不同棋子', () => {
   assert.strictEqual(b.equals(copy), false);
 });
 
+test('撤回应将着法恢复将军状态和快照，不重复生成合法着法', () => {
+  const b = XQ.Board.makeFromGrid(new Array(90).fill(null));
+  b.set(5, 9, XQ.Piece.create('red', 'king', 'rk'));
+  b.set(4, 0, XQ.Piece.create('black', 'king', 'bk'));
+  b.set(3, 5, XQ.Piece.create('red', 'rook', 'rr'));
+  const engine = XQ.Engine.create({ startBoard: b });
+  assert.strictEqual(engine.applyPlayerMove(3, 5, 4, 5).status.result, 'check');
+  const checked = engine.result();
+  assert.strictEqual(engine.applyPlayerMove(4, 0, 3, 0).status.result, 'normal');
+  const generate = XQ.Generator.generateLegalMoves;
+  let calls = 0;
+  XQ.Generator.generateLegalMoves = function (board, color) { calls++; return generate(board, color); };
+  try {
+    assert.strictEqual(engine.undoPly(), true);
+    assert.strictEqual(engine.inCheck('black'), true);
+    assert.deepStrictEqual(engine.result(), checked);
+    assert.strictEqual(engine.snapshot().result, 'check');
+    assert.strictEqual(calls, 0, '悔棋直接恢复统计栈中的状态');
+  } finally { XQ.Generator.generateLegalMoves = generate; }
+});
+
+test('自定义起始将军状态在创建、悔棋与重开时保持一致', () => {
+  const b = XQ.Board.makeFromGrid(new Array(90).fill(null));
+  b.set(5, 9, XQ.Piece.create('red', 'king', 'rk'));
+  b.set(4, 0, XQ.Piece.create('black', 'king', 'bk'));
+  b.set(4, 5, XQ.Piece.create('red', 'rook', 'rr'));
+  const engine = XQ.Engine.create({ startBoard: b, turn: 'black' });
+  assert.deepStrictEqual(engine.result(), { over: false, result: 'check', winner: null });
+  assert.strictEqual(engine.applyPlayerMove(4, 0, 3, 0).ok, true);
+  engine.undoPly();
+  assert.strictEqual(engine.snapshot().result, 'check');
+  engine.newGame();
+  assert.deepStrictEqual(engine.result(), { over: false, result: 'check', winner: null });
+});
+
+test('自定义已将杀起始局面创建与重开均保持终局', () => {
+  const b = XQ.Board.makeFromGrid(new Array(90).fill(null));
+  b.set(4, 9, XQ.Piece.create('red', 'king', 'rk'));
+  b.set(3, 0, XQ.Piece.create('black', 'king', 'bk'));
+  b.set(3, 5, XQ.Piece.create('red', 'rook', 'rr'));
+  const engine = XQ.Engine.create({ startBoard: b, turn: 'black' });
+  const terminal = { over: true, result: 'checkmate', winner: 'red' };
+  assert.deepStrictEqual(engine.result(), terminal);
+  assert.strictEqual(engine.applyPlayerMove(3, 0, 4, 0).reason, 'game_over');
+  engine.newGame();
+  assert.deepStrictEqual(engine.result(), terminal);
+  assert.strictEqual(engine.snapshot().over, true);
+});
+
+test('撤销将杀着法恢复非终局状态并允许重走', () => {
+  const b = XQ.Board.makeFromGrid(new Array(90).fill(null));
+  b.set(4, 9, XQ.Piece.create('red', 'king', 'rk'));
+  b.set(3, 0, XQ.Piece.create('black', 'king', 'bk'));
+  b.set(2, 5, XQ.Piece.create('red', 'rook', 'rr'));
+  const engine = XQ.Engine.create({ startBoard: b });
+  const before = engine.result();
+  assert.strictEqual(engine.applyPlayerMove(2, 5, 3, 5).status.result, 'checkmate');
+  assert.strictEqual(engine.isOver(), true);
+  assert.strictEqual(engine.undoPly(), true);
+  assert.deepStrictEqual(engine.result(), before);
+  assert.strictEqual(engine.snapshot().over, false);
+  assert.strictEqual(engine.applyPlayerMove(2, 5, 3, 5).status.result, 'checkmate');
+});
+
 console.log('test_engine_cache: ' + passed + ' PASS');

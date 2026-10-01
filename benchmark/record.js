@@ -214,6 +214,27 @@
   }
 
   /* ── 第36轮 PGN 导入: 解析本仓导出格式 (标准头 + from-to 制着法 + {注释}) ── */
+  function pgnMainline(text) {
+    var out = [], comment = 0, variation = 0, lineComment = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (lineComment) {
+        if (ch === '\n' || ch === '\r') { lineComment = false; out.push(' '); }
+        continue;
+      }
+      if (comment) {
+        if (ch === '{') comment++;
+        else if (ch === '}') comment--;
+        continue;
+      }
+      if (ch === '{') { comment = 1; out.push(' '); continue; }
+      if (ch === ';') { lineComment = true; out.push(' '); continue; }
+      if (ch === '(') { variation++; out.push(' '); continue; }
+      if (ch === ')') { if (variation) variation--; out.push(' '); continue; }
+      if (!variation) out.push(ch);
+    }
+    return out.join('');
+  }
   function importFromPGN(text) {
     var lines = String(text || '').split(/\r?\n/);
     var tags = {};
@@ -228,7 +249,7 @@
         moveText.push(t);
       }
     });
-    var body = moveText.join(' ').replace(/\$\d+/g, ' ');   // 第37轮: 剥 NAG ($1 等)
+    var body = pgnMainline(moveText.join('\n')).replace(/\$\d+/g, ' ');   // 主线坐标不能来自注释、建议着法或变例
     var pairs = [];
     var re = /([a-i](?:10|[1-9]))\s*-\s*([a-i](?:10|[1-9]))/g;   // 第37轮: 宽松连字符空格
     var pm;
@@ -264,10 +285,6 @@
   }
 
   /* 第55轮: CSV 导出 */
-  function csvCount(v) {
-    var n = Number(v);
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-  }
   function csvCell(value) {
     var s = String(value == null ? '' : value);
     if (/^\s*[=+\-@]/.test(s)) s = "'" + s;
@@ -276,12 +293,8 @@
   function exportCSV() {
     var rows = [['name', 'rating', 'games', 'win', 'draw', 'loss']];
     try {
-      var elo = JSON.parse(root.localStorage.getItem('xq_elo_v1') || '{}');
-      if (!elo || typeof elo !== 'object' || Array.isArray(elo)) elo = {};
-      Object.keys(elo).filter(function (k) { return k.indexOf('stats:') !== 0 && typeof elo[k] === 'number' && Number.isFinite(elo[k]); }).forEach(function (name) {
-        var st = elo['stats:' + name];
-        if (!st || typeof st !== 'object' || Array.isArray(st)) st = {};
-        rows.push([name, elo[name], csvCount(st.games), csvCount(st.win), csvCount(st.draw), csvCount(st.loss)]);
+      XQ.Elo.leaderboard().forEach(function (entry) {
+        rows.push([entry.name, entry.rating, entry.games, entry.win, entry.draw, entry.loss]);
       });
     } catch (e) {}
     return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\n');
@@ -298,10 +311,10 @@
   function exportAll() {
     return {
       kind: 'llm-chess-backup',
-      version: 1,
+      version: 2,
       date: new Date().toISOString(),
       records: list(),
-      elo: parseStoredObject('xq_elo_v1', {}),
+      elo: XQ.Elo.exportTable(),
       settings: parseStoredObject('xq_v1_settings', null)
     };
   }
@@ -330,11 +343,7 @@
     }
     var failedParts = [];
     if (bak.elo && typeof bak.elo === 'object') {
-      var t = Object.create ? Object.create(null) : {};
-      var currentElo = parseStoredObject('xq_elo_v1', {});
-      Object.keys(currentElo).forEach(function (k) { t[k] = currentElo[k]; });
-      Object.keys(bak.elo).forEach(function (k) { t[k] = bak.elo[k]; });   // 合并 (同键以备份为准)
-      try { root.localStorage.setItem('xq_elo_v1', JSON.stringify(t)); } catch (e4) { failedParts.push('elo'); }
+      try { XQ.Elo.importTable(bak.elo, mode); } catch (e4) { failedParts.push('elo'); }
     }
     if (bak.settings && typeof bak.settings === 'object' && mode === 'replace') {
       try { root.localStorage.setItem('xq_v1_settings', JSON.stringify(bak.settings)); } catch (e5) { failedParts.push('settings'); }

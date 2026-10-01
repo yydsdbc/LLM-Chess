@@ -37,6 +37,21 @@
     var rotation = 0;
     var errStreak = {};
     var streams = [];
+    var activeCall = null;
+
+    function cancellationError(state) {
+      if (state.signal && state.signal.aborted) return new Error('外部中止: 对局已取消');
+      return new Error('请求已中止');
+    }
+    function cancelCall(state) {
+      if (!state || state.cancelled) return;
+      state.cancelled = true;
+      if (state.cancelStage) state.cancelStage();
+      agents.forEach(function (a) { if (a.agent.abort) a.agent.abort(); });
+    }
+    function checkCall(state) {
+      if (state.cancelled || (state.signal && state.signal.aborted)) throw cancellationError(state);
+    }
 
     function weightOf(name) {
       if (!opts.weightByElo || !XQ.Elo || !XQ.Elo.ratingOf) return 1;
@@ -129,7 +144,8 @@
     }
 
     /* 并行问询 (有界 worker), 每选民预算/进度/流缓冲; note 为圆桌注记 (第二轮传入) */
-    function askAll(engine, history, note, phase, eligibleIndexes) {
+    function askAll(engine, history, note, phase, eligibleIndexes, state) {
+      checkCall(state);
       var budget = typeof opts.voterBudgetMs === 'number' ? opts.voterBudgetMs : 60000;
       var maxP = typeof opts.maxParallel === 'number' && opts.maxParallel > 0 ? Math.max(1, Math.floor(opts.maxParallel)) : agents.length;
       var eligible = agents.map(function (_, idx) { return !eligibleIndexes || eligibleIndexes.indexOf(idx) >= 0; });
@@ -186,7 +202,7 @@
         });
       }
       function pump() {
-        while (!stopped && Object.keys(active).length < maxP && queueAt < queue.length) {
+        while (!stopped && !state.cancelled && Object.keys(active).length < maxP && queueAt < queue.length) {
           var idx = queue[queueAt++];
           active[idx] = true;
           startVoter(idx);
@@ -203,7 +219,7 @@
         votes.push(v.mv
           ? { model: a.name, from: XQ.Move.sqName(v.mv.from), to: XQ.Move.sqName(v.mv.to), conf: confOf(v.mv), ms: Date.now() - t0, ok: true, weight: weightOf(a.name) }
           : { model: a.name, fail: String((v.err && v.err.message) || v.err || 'failed').slice(0, 60), ok: false });
-        if (opts.onProgress) {
+        if (opts.onProgress && !state.cancelled) {
           try {
             opts.onProgress({ side: side, answered: answered, total: activeCount, voter: a.name, ok: !!v.mv, phase: phase || null,
               voters: agents.map(function (a2, j2) { return { name: a2.name, state: vstate[j2] }; }), tally: liveTally() });
@@ -235,12 +251,33 @@
           if (!eligible[idx]) { settledCalls[idx] = true; resolve({ err: new Error('round1 failed'), name: agents[idx].name, index: idx }); }
         });
       });
+      state.cancelStage = function () {
+        stopped = true;
+        agents.forEach(function (a, idx) {
+          if (!settledCalls[idx]) settleFns[idx]({ err: cancellationError(state), name: a.name });
+        });
+      };
       pump();
       return Promise.all(calls);
     }
 
     function next(engine, history) {
       streams = [];
+      // 整手固定取消边界; 子 agent 配置仍保留动态 getter, 下一局重新读取。
+      var state = { signal: (typeof opts.signal === 'function' ? opts.signal() : opts.signal) || null, cancelled: false, cancelStage: null };
+      try { checkCall(state); } catch (err) { return Promise.reject(err); }
+      activeCall = state;
+      var onAbort = function () { cancelCall(state); };
+      if (state.signal && typeof state.signal.addEventListener === 'function') state.signal.addEventListener('abort', onAbort, { once: true });
+      function cleanup() {
+        if (state.signal && typeof state.signal.removeEventListener === 'function') state.signal.removeEventListener('abort', onAbort);
+        state.cancelStage = null;
+        if (activeCall === state) activeCall = null;
+      }
+      function complete(promise) {
+        return promise.then(function (mv) { checkCall(state); cleanup(); return mv; }, function (err) { cleanup(); throw err; })
+          .catch(function (err) { cleanup(); throw err; });
+      }
       if (mode === 'rotate') {
         var pick = null;
         for (var tries = 0; tries < agents.length; tries++) {
@@ -249,21 +286,23 @@
           if ((errStreak[cand.name] || 0) < 2) { pick = cand; break; }   // 连续 2 失败的选民跳过
         }
         if (!pick) pick = agents[rotation % agents.length];
-        return pick.agent.next(engine, history).then(function (mv) {
+        return complete(pick.agent.next(engine, history).then(function (mv) {
+          checkCall(state);
           errStreak[pick.name] = 0;
           mv.meta = mv.meta || {};
           mv.meta.voterName = pick.name;
           mv.meta.reasoning = '[轮换 ' + pick.name + '] ' + (mv.meta.reasoning || '');
           return mv;
         }).catch(function (e) {
-          errStreak[pick.name] = (errStreak[pick.name] || 0) + 1;
+          if (!state.cancelled) errStreak[pick.name] = (errStreak[pick.name] || 0) + 1;
           throw e;
-        });
+        }));
       }
       /* council / roundtable 共用问询; roundtable 两阶段 (提案→互看→终判) */
-      var master = askAll(engine, history, null, mode === 'roundtable' ? 'proposal' : null);
+      var master = askAll(engine, history, null, mode === 'roundtable' ? 'proposal' : null, null, state);
       if (mode === 'roundtable') {
         master = master.then(function (rs1) {
+          checkCall(state);
           var good1 = rs1.filter(function (r) { return r.mv; });
           if (!good1.length) throw (rs1[0] && rs1[0].err) || new Error('committee: all voters failed (round 1)');
           var round1Map = {};   // 第63轮: 记录一轮提案 (改选检测用)
@@ -275,7 +314,8 @@
               return r.name + ' 建议 ' + XQ.Move.sqName(r.mv.from) + '-' + XQ.Move.sqName(r.mv.to) + ((r.mv.meta && r.mv.meta.summary) ? ' (' + r.mv.meta.summary + ')' : '');
             });
             return '## 圆桌讨论: 同侪建议 — ' + (peers.length ? peers.join('; ') : '(无)') + ' — 互看后独立终判: 可坚持原选或改选, 勿盲从多数, 以局面与合法列表为准, 仍需给出完整 JSON。';
-          }, 'final', eligible2).then(function (rs2) {
+          }, 'final', eligible2, state).then(function (rs2) {
+            checkCall(state);
             rs2.forEach(function (r) {
               if (!r.mv) return;
               r.mv.meta = r.mv.meta || {};
@@ -288,7 +328,7 @@
           return calls2;
         });
       }
-      return master.then(function (rs) { return finalize(rs, engine); });
+      return complete(master.then(function (rs) { checkCall(state); return finalize(rs, engine); }));
     }
 
     return {
@@ -296,7 +336,7 @@
       _mode: mode,   // 第56轮: 暴露模式 (app entry 读)
       side: side, kind: 'llm', next: next, usage: usage,
       reset: function () { rotation = 0; errStreak = {}; streams = []; agents.forEach(function (a) { if (a.agent.reset) a.agent.reset(); }); },
-      abort: function () { agents.forEach(function (a) { if (a.agent.abort) a.agent.abort(); }); },
+      abort: function () { cancelCall(activeCall); },
       guardCheck: agents.length && agents[0].agent.guardCheck ? agents[0].agent.guardCheck : null
     };
   }

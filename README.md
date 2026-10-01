@@ -73,7 +73,7 @@ LLM-chess/
 ├── replay/
 │   ├── replay.js            # replay data layer: record → engine state machine (tolerant of dirty data)
 │   └── replay_controller.js # replay control: play/pause/step/seek/7 speeds/loop
-├── test/               # 17 suites, see Testing below (perft gold standard included)
+├── test/               # 18 suites, see Testing below (perft gold standard included)
 └── tools/              # npm script entry points (Node-side, zero-dep)
     ├── start.js        #   npm start — background start on port 8788
     ├── stop.js         #   npm stop  — stop the background instance
@@ -171,8 +171,11 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 |---------|----------|
 | `npm test` | runs the full suite below |
 | `node test/run_tests.js` | engine, 50 checks (perft gold standard, repetition, perpetual-check tracking, moveTag, threefold draw, hanging guard, natural-rule draw) |
+| `node test/test_match_lifecycle.js` | 8 match lifecycle checks: deadlines, late results, observer failures, CLI scoring exactly once |
+| `node test/test_engine_cache.js` | 14 engine state/cache checks, including custom starts and undo after check |
+| `node test/test_record_edges.js` | 39 record/Elo/backup checks, including legacy migration and PGN comments |
 | `node test/test_evaluation.js` | evaluation knowledge, 88 checks (phases / dynamic values / advisors / aged pawns / bare cannon / palace horse / central pawn / gate control / pawn-in-palace / bottom cannon / side+corner horse) |
-| `node test/test_llm_convo.js` | LLM agent, 151 checks (prompts / retries / fallback valve / opening guard / warnings / full-width rescue / confidence / attempts / external abort / signal-getter form) |
+| `node test/test_llm_convo.js` | LLM agent, 162 checks (prompts / retries / fallback valve / opening guard / warnings / full-width rescue / confidence / attempts / external abort / signal-getter form / JSON body deadlines) |
 | `node test/replay_smoke.js` | replay, 52 checks (data/control layers, speeds, seek, tolerance, parseEval direction, imported records, capture-jump) |
 | `node test/_clean_reason_check.js` | reasoning-stream cleaner, 10 checks |
 | `node test/cn_notation_check.js` | Chinese notation, 25 checks (classic anchors / file-disambiguation 前中后 / legacy-key sentinel) |

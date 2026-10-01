@@ -127,7 +127,7 @@ ok(w && w.games === 2 && w.win === 1 && w.draw === 1 && w.loss === 0, 'L8 战绩
 ok(lb.every(function (x) { return x.name.indexOf('stats:') !== 0; }), 'L8 leaderboard 不泄漏 stats 内部键');
 E.applyResult('L8-Solo', 'L8-Solo', 'red');
 var soloTable = JSON.parse(sandbox.localStorage.getItem('xq_elo_v1'));
-ok(soloTable['L8-Solo'] === 1500 && !soloTable['stats:L8-Solo'], 'L8 同名模型自战不改分也不记两局');
+ok(soloTable.ratings['L8-Solo'] === 1500 && !soloTable.stats['L8-Solo'], 'L8 同名模型自战不改分也不记两局');
 sandbox.localStorage.setItem('xq_elo_v1', JSON.stringify({ EloA: 1600, EloC: 1500, EloB: 1400, TieZ: 1500, TieA: 1500 }));
 var sortedA = E.leaderboard().map(function (e) { return e.name; }).join(',');
 ok(sortedA === 'EloA,EloC,TieA,TieZ,EloB', 'L8 排行榜按 rating 降序，同分按名字稳定升序: ' + sortedA);
@@ -1066,9 +1066,21 @@ function l21Round64() {
     if (index >= 0) listeners.splice(index, 1);
   };
   var pointerDown = topLeft._listeners && topLeft._listeners.pointerdown && topLeft._listeners.pointerdown[0];
+  var queriedCell = null;
+  topLeft.querySelector = function () { queriedCell = this; return this.firstChild; };
   if (pointerDown) pointerDown({ button: 0, pointerType: 'mouse', clientX: 20, clientY: 30 });
   var dragStarted = !!(docListeners.pointerup && docListeners.pointerup.length);
   ok(dragStarted, 'L21 翻转后显示格上的红方棋子仍能启动拖拽 (起点按当前视角映射)');
+  ok(queriedCell === topLeft, 'L21 拖拽入口读取被点击格的棋子节点，不读取循环末格');
+  var pointerUpSafe = true;
+  if (dragStarted) {
+    try { docListeners.pointerup[0]({ clientX: 20, clientY: 30 }); }
+    catch (eDrag) { pointerUpSafe = false; }
+  }
+  ok(pointerUpSafe, 'L21 点击松手不会因错误格的空棋子节点抛异常');
+  topLeft.querySelector = function () { return null; };
+  if (pointerDown) pointerDown({ button: 0, pointerType: 'mouse', clientX: 20, clientY: 30 });
+  ok(!docListeners.pointerup.length, 'L21 棋子节点已消失时不建立拖拽生命周期');
   if (docListeners.pointercancel && docListeners.pointercancel.length) {
     docListeners.pointercancel[docListeners.pointercancel.length - 1]();
   }
@@ -1139,4 +1151,43 @@ function l22Round72() {
   ok(engine.ply() === 4 && JSON.stringify(engine.snapshot().cells) === JSON.stringify(expected),
     'L22 主盘 4→2→1 连续复盘后还原回原始 4 手盘面');
   ok(mainCtx.replayStack.length === 0, 'L22 还原后清空复盘栈');
+
+  var cleared = [], badge = 'old move', barVisible = true, trays = {}, sparks = {}, syncedRecord = null;
+  var startCtx = {
+    XQ: {
+      Record: { blank: function () { return { red: { name: 'red' }, black: { name: 'black' }, moves: [] }; } },
+      UI: {
+        thinkPanel: function () {}, lastMoveBadge: function (value) { badge = value; },
+        capturedTray: function (side, values) { trays[side] = values.slice(); },
+        evalSpark: function (side, values) { sparks[side] = values.slice(); }
+      }
+    },
+    gameId: 1, gameAbort: null, AbortController: globalThis.AbortController,
+    clearKbCursor: function () {}, syncArchive: function () { syncedRecord = startCtx.currentRecord; }, readSettings: function () { return {}; },
+    modelCardHTML: function () { return ''; }, agents: { red: null, black: null },
+    thinkStat: {}, thinkStart: { red: 8, black: 9 }, decisionLog: {}, currentRecord: { moves: ['old'] },
+    replayStack: [engine.lastMove()], paintReplayBar: function () { barVisible = startCtx.replayStack.length > 0; },
+    capturedBy: { red: ['卒'], black: ['兵'] }, evalHist: { red: [3], black: [-3] },
+    view: { aiThinking: 'old model', aiThinkingSide: 'red', pendingAnim: engine.lastMove() },
+    bannerClear: function () { startCtx.view.aiThinkingSide = null; },
+    lastBadgeTimer: 11, checkPulseTimer: 12, warnTimer: 13,
+    clearTimeout: function (id) { cleared.push(id); },
+    checkFlashUntil: 999999, thinkWarned: true, repWarnedN: 2, chWarnedN: 5,
+    document: { getElementById: function () { return { classList: { remove: function () {} } }; } }
+  };
+  vm.runInNewContext(appPart('  function startRecord() {', '  /* v1.0.daily 存档按钮可用性'), startCtx);
+  startCtx.startRecord();
+  ok(startCtx.replayStack.length === 0 && !barVisible,
+    'L22 新局清空旧局复盘栈并隐藏还原按钮');
+  ok(badge === null && [11, 12, 13].every(function (id) { return cleared.indexOf(id) >= 0; }),
+    'L22 保存设置开新局时清除旧着法徽章及展示定时器');
+  ok(startCtx.capturedBy.red.length === 0 && startCtx.capturedBy.black.length === 0
+    && startCtx.evalHist.red.length === 0 && startCtx.evalHist.black.length === 0
+    && trays.red.length === 0 && sparks.black.length === 0,
+    'L22 新局的吃子托盘和评值走势不继承上一局');
+  ok(startCtx.view.aiThinking === null && startCtx.view.aiThinkingSide === null
+    && startCtx.view.pendingAnim === null && startCtx.checkFlashUntil === 0,
+    'L22 新局不继承旧思考状态、动画或将军闪屏');
+  ok(syncedRecord === startCtx.currentRecord && syncedRecord.moves.length === 0,
+    'L22 存谱和悔棋按钮根据新空棋谱更新，不能读取上一局');
 }

@@ -1,6 +1,7 @@
 /* test_record_edges.js — Elo / 棋谱存取边界回归 */
 'use strict';
 const assert = require('assert');
+['piece', 'move', 'board', 'rules', 'generator', 'judge', 'engine'].forEach(name => require('../core/' + name + '.js'));
 require('../benchmark/elo.js');
 require('../benchmark/record.js');
 
@@ -38,8 +39,8 @@ test('损坏评分参与对局会恢复初始分，不污染正常对手', () =>
     setRaw('xq_elo_v1', JSON.stringify({ A: value, B: 1500 }));
     assert.deepStrictEqual(E.applyResult('A', 'B', 'red'), { red: 1516, black: 1484 });
     const saved = JSON.parse(localStorage.getItem('xq_elo_v1'));
-    assert.strictEqual(saved.A, 1516);
-    assert.strictEqual(saved.B, 1484);
+    assert.strictEqual(saved.ratings.A, 1516);
+    assert.strictEqual(saved.ratings.B, 1484);
   }
   setRaw('xq_elo_v1', '{"A":1e309,"B":1500}');
   assert.deepStrictEqual(E.applyResult('A', 'B', 'red'), { red: 1516, black: 1484 });
@@ -49,8 +50,8 @@ test('损坏评分的同名自战会修复评分，且不累计战绩', () => {
   setRaw('xq_elo_v1', JSON.stringify({ A: '1500' }));
   assert.deepStrictEqual(E.applyResult('A', 'A', 'red'), { red: 1500, black: 1500 });
   const saved = JSON.parse(localStorage.getItem('xq_elo_v1'));
-  assert.strictEqual(saved.A, 1500);
-  assert.strictEqual(saved['stats:A'], undefined);
+  assert.strictEqual(saved.ratings.A, 1500);
+  assert.strictEqual(saved.stats.A, undefined);
 });
 
 test('K=0 是合法的零变分，而不是回退到默认 K', () => {
@@ -174,7 +175,8 @@ test('导出总备份遇到损坏的 Elo 和设置 JSON 时安全降级', () => 
   setRaw('xq_elo_v1', '{broken');
   setRaw('xq_v1_settings', '{broken');
   const backup = R.exportAll();
-  assert.deepStrictEqual(backup.elo, {});
+  assert.deepStrictEqual(Object.keys(backup.elo.ratings), []);
+  assert.deepStrictEqual(Object.keys(backup.elo.stats), []);
   assert.strictEqual(backup.settings, null);
 });
 test('空记录备份以 replace 导入会清空当前记录', () => {
@@ -207,6 +209,104 @@ test('备份记录保存成功但 Elo/设置写入失败时返回部分失败清
   assert.strictEqual(R.get('partial-restore').id, 'partial-restore');
   assert.strictEqual(result.added, 1);
   assert.deepStrictEqual(result.failedParts, ['elo', 'settings']);
+});
+
+test('PGN 注释中的合法建议着法不会成为真实落子', () => {
+  const imported = R.importFromPGN('[Event "test"]\n[Result "*"]\n\n1. h3-e3 {对手可能 h8-e8}');
+  assert.strictEqual(imported.moves.length, 1);
+  assert.strictEqual(imported.moves[0].from, 'h3');
+});
+test('PGN 多行注释、行注释和嵌套变例均与主线隔离', () => {
+  const imported = R.importFromPGN('[Event "test"]\n[Result "*"]\n\n1. h3-e3 {预测\nh8-e8} (1... h8-e8 (2. b3-c3)) ; h8-e8\nb10-c8 2. b3-c3');
+  assert.deepStrictEqual(imported.moves.map(move => move.from + '-' + move.to), ['h3-e3', 'b10-c8', 'b3-c3']);
+});
+test('Elo 模型名含 stats: 前缀时评分与双方战绩不碰撞', () => {
+  setRaw('xq_elo_v1', '{}');
+  E.applyResult('A', 'stats:A', 'red');
+  assert.strictEqual(E.ratingOf('stats:A'), 1484);
+  assert.deepStrictEqual(E.leaderboard().map(row => [row.name, row.games, row.win, row.loss]), [['A', 1, 1, 0], ['stats:A', 1, 0, 1]]);
+  assert(R.exportCSV().split('\n').includes('stats:A,1484,1,0,0,1'));
+});
+test('旧 Elo 表中的 stats: 数值模型与普通模型战绩都可读取，读取不改写存储', () => {
+  const oldRaw = JSON.stringify({ A: 1600, 'stats:A': { games: 3, win: 2, draw: 1, loss: 0 }, 'stats:B': 1400, 'stats:stats:B': { games: 2, win: 0, draw: 0, loss: 2 } });
+  setRaw('xq_elo_v1', oldRaw);
+  assert.deepStrictEqual(E.leaderboard().map(row => [row.name, row.rating, row.games]), [['A', 1600, 3], ['stats:B', 1400, 2]]);
+  assert.strictEqual(localStorage.getItem('xq_elo_v1'), oldRaw);
+  E.applyResult('A', 'stats:B', null, 0);
+  const saved = JSON.parse(localStorage.getItem('xq_elo_v1'));
+  assert.strictEqual(saved.version, 2);
+  assert.strictEqual(saved.ratings['stats:B'], 1400);
+  assert.strictEqual(saved.stats.A.games, 4);
+  assert.strictEqual(saved.stats['stats:B'].games, 3);
+});
+test('备份 Elo replace 删除旧对手，merge 保留旧对手', () => {
+  setRaw('xq_elo_v1', JSON.stringify({ A: 1600, B: 1400 }));
+  R.importAllBackup({ kind: 'llm-chess-backup', records: [], elo: { A: 1500 } }, 'replace');
+  assert.deepStrictEqual(E.leaderboard().map(row => row.name), ['A']);
+  R.importAllBackup({ kind: 'llm-chess-backup', records: [], elo: { B: 1400 } }, 'merge');
+  assert.deepStrictEqual(E.leaderboard().map(row => row.name), ['A', 'B']);
+});
+test('版本字段名和原型字段名也可作为普通 Elo 模型名', () => {
+  setRaw('xq_elo_v1', '{"version":2,"ratings":1200,"stats":1400,"kind":1300,"__proto__":1500,"constructor":1600}');
+  assert.strictEqual(E.leaderboard().length, 6);
+  assert.strictEqual(E.ratingOf('version'), 2);
+  E.applyResult('__proto__', 'constructor', null, 0);
+  assert.strictEqual(E.ratingOf('ratings'), 1200);
+  assert.strictEqual(E.ratingOf('__proto__'), 1500);
+  const saved = JSON.parse(localStorage.getItem('xq_elo_v1'));
+  assert.strictEqual(saved.ratings.version, 2);
+  assert.strictEqual(saved.stats.__proto__.games, 1);
+  assert.strictEqual(saved.stats.constructor.games, 1);
+});
+test('新 Elo 备份恢复保留含 stats: 模型的完整评分和战绩', () => {
+  setRaw('xq_elo_v1', '{}');
+  E.applyResult('A', 'stats:A', 'red');
+  const before = E.leaderboard();
+  const backup = R.exportAll();
+  assert.strictEqual(backup.version, 2);
+  assert.strictEqual(backup.elo.version, 2);
+  E.resetAll();
+  const result = R.importAllBackup(backup, 'replace');
+  assert.deepStrictEqual(result.failedParts, []);
+  assert.deepStrictEqual(E.leaderboard(), before);
+});
+test('旧版备份恢复仍保留战绩，replace 空 Elo 表清空评分与战绩', () => {
+  E.applyResult('old-opponent', 'A', 'red');
+  R.importAllBackup({ kind: 'llm-chess-backup', version: 1, records: [], elo: { A: 1700, 'stats:A': { games: 5, win: 4, draw: 0, loss: 1 } } }, 'replace');
+  assert.deepStrictEqual(E.leaderboard().map(row => [row.name, row.rating, row.games]), [['A', 1700, 5]]);
+  R.importAllBackup({ kind: 'llm-chess-backup', records: [], elo: {} }, 'replace');
+  assert.deepStrictEqual(E.leaderboard(), []);
+  assert.deepStrictEqual(Object.keys(E.exportTable().stats), []);
+});
+test('公开 Elo 导出与备份对象修改不会污染评分缓存', () => {
+  setRaw('xq_elo_v1', '{"A":1600,"stats:A":{"games":1,"win":1}}');
+  const table = E.exportTable();
+  table.ratings.A = 0;
+  table.stats.A.games = 99;
+  const backup = R.exportAll();
+  backup.elo.ratings.A = 0;
+  assert.strictEqual(E.ratingOf('A'), 1600);
+  assert.strictEqual(E.leaderboard()[0].games, 1);
+});
+test('Elo 升级或备份写入失败时原始存储和读取缓存保持原值', () => {
+  const oldRaw = '{"A":1600,"B":1400,"stats:A":{"games":3,"win":3}}';
+  setRaw('xq_elo_v1', oldRaw);
+  E.ratingOf('A');
+  const realSet = localStorage.setItem;
+  localStorage.setItem = function (key, value) {
+    if (key === 'xq_elo_v1') throw new Error('quota');
+    realSet(key, value);
+  };
+  try {
+    E.applyResult('A', 'B', 'red');
+    assert.strictEqual(E.ratingOf('A'), 1600);
+    assert.strictEqual(E.leaderboard()[0].games, 3);
+    const result = R.importAllBackup({ kind: 'llm-chess-backup', records: [], elo: { A: 1000 } }, 'replace');
+    assert.deepStrictEqual(result.failedParts, ['elo']);
+    assert.strictEqual(E.ratingOf('A'), 1600);
+    assert.strictEqual(E.ratingOf('B'), 1400);
+    assert.strictEqual(localStorage.getItem('xq_elo_v1'), oldRaw);
+  } finally { localStorage.setItem = realSet; }
 });
 
 async function testFileImport() {

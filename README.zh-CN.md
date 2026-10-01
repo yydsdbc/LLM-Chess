@@ -71,7 +71,7 @@ LLM-chess/
 ├── replay/
 │   ├── replay.js            # 回放数据层: 棋谱 → 引擎状态机 (next增量/prev/goto重建, 脏数据容错)
 │   └── replay_controller.js # 回放控制层: 播放/暂停/步进/跳转/倍速7档/循环
-├── test/               # 17 套件 (详见下方「测试」表): run_tests.js 50项(perft金标准+规则闭环) · test_llm_convo.js 158项(提示词/重试/缓存/取消与会诊回归) · replay_smoke.js 52项 · test_evaluation.js 188项(局面阶段/子力价值/王城安全与摘要) · test_engine_cache.js 10项(缓存/自定义开局/快照隔离) · test_record_edges.js 29项(棋谱/Elo/备份边界) · _clean_reason_check.js · cn_notation_check.js · i18n_check.js · link_check.js · check_ui.js · _replay_edge.js · _logic_layer.js · _prompt_level_smoke.js · replay_risk_check.js · _committee_agent.js · _server_http.js (中继安全与 HTTP 行为)
+├── test/               # 18 套件 (详见下方「测试」表): 引擎/评价/LLM与会诊/对局生命周期/回放/棋谱与Elo/记谱/i18n/链接/UI/HTTP行为门禁
 └── tools/              # npm 脚本入口 (Node 侧, 零依赖)
     ├── start.js        #   npm start — 后台启动 (端口 8788)
     ├── stop.js         #   npm stop  — 停止后台实例
@@ -181,8 +181,11 @@ LLM-chess/
 | 命令 | 覆盖 |
 |------|------|
 | `node test/run_tests.js` | 引擎 50 项 (perft 金标准 + 重复局面/长将追踪/moveTag 三态/长将判负/三次重复判和/送吃守卫/自然限着判和) |
+| `node test/test_match_lifecycle.js` | 对局生命周期 8 项 (截止时间/迟到结果隔离/观察者异常/CLI 单次计分) |
+| `node test/test_engine_cache.js` | 引擎状态与缓存 14 项 (自定义起始局面/快照隔离/将军后悔棋) |
+| `node test/test_record_edges.js` | 棋谱、Elo、备份 39 项 (旧格式迁移/模型名边界/PGN 注释隔离) |
 | `node test/test_evaluation.js` | 阶段性知识模型 88 项 (阶段判断/动态子力/摘要/士象完整性/底线老兵/空头炮/窝心马/中炮矄中卒/开局任务提醒/出车提醒/将门控制/兵临九宫/沉底炮) |
-| `node test/test_llm_convo.js` | LLM Agent 151 项 (提示词/重试/兑底安全阀/开局炮保护回归/必填校验/对拉与长将警示/重复局面警示/全角容错/信度归一/对手吃子标注/重试钩子/多轮缓存守护/HIST_CAP裁剪/亏子标注/危子预标/reasoning打捞/attempts/外部中止/信号取值函数) |
+| `node test/test_llm_convo.js` | LLM Agent 162 项 (提示词/重试/缓存/安全阀/外部中止与信号 getter/成功与错误 JSON 正文截止时间) |
 | `node test/replay_smoke.js` | 回放系统 52 项 (数据层/控制层/倍速/循环/跳转/容错/杀标注/parseEval方向/导入落库/战绩汇总) |
 | `node test/_clean_reason_check.js` | 思考流清洗 10 项 (垃圾压缩/记谱保留/复述删改) |
 | `node test/cn_notation_check.js` | 中文记谱 25 项 (经典谱锚点/同列多兵前中后消歧/同列多车马边界/旧键哨兵) |

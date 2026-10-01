@@ -763,7 +763,7 @@ else if (!/k\.indexOf\(CACHE_PREFIX\) === 0 && k !== CACHE/.test(swCode)) wire48
 if (!/var gaveCheck = \(st\.result === 'check' \|\| st\.result === 'checkmate'\);/.test(engCode)) wire48.push('引擎将军判定未覆盖将杀 (增量统计与 replayStats 分歧 21/16951 手, 全在将杀手)');
 if (!/var statStack = \[\];/.test(engCode)) wire48.push('缺统计快照栈 (悔棋仍每次从 genesis 重放整条历史 → 复盘跳转 O(n²))');
 else if (!/if \(statStack\.length > history\.length\) \{/.test(engCode)) wire48.push('悔棋未走统计快照栈 (守卫锚点失效)');
-if (!/statStack\.push\(\{ red: checkStreaks\.red, black: checkStreaks\.black, naturalClock: naturalClock \}\);/.test(engCode)) wire48.push('走子未压入统计快照 (栈与 history 同长不变式被破坏)');
+if (!/statStack\.push\(\{ red: checkStreaks\.red, black: checkStreaks\.black, naturalClock: naturalClock,\s+over: over, result: result, winner: winner \}\);/.test(engCode)) wire48.push('走子未压入完整状态快照 (统计/终局状态与 history 同长不变式被破坏)');
 // (d) renderer: #btn-row 隐藏时保焦点
 if (!/if \(brWasVisible && !snap\.over && brEl\.contains\(document\.activeElement\)\)/.test(renCode)) wire48.push('#btn-row 隐藏时未接管焦点 (终局 Tab 到「重新开始」激活后焦点掉回 body)');
 // (e) app: 还原条隐藏保焦点 / 还原清当前手标记 / 归档禁用保焦点 / 回放关闭焦点兜底
