@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* test/run_all.js — 并行测试运行器 (v1.0.3, 第4项优化)
- * 15 套件并行跑 (串行 33.5s → 并行 ~15s, 2.3x)。
+ * 21 套件并行跑; 各套件互相隔离, 支持 Windows/Unix。
  * 零依赖 (child_process); Windows/Unix 兼容; 任一套件失败即整体失败 (CI 友好)。
  * 原串行链保留: npm run test:serial (test_llm_convo 带 mock 时序, 并行安全已验证)
  */
@@ -16,6 +16,8 @@ const SUITES = [   // 第18轮 +_replay_edge / 第19轮 +_logic_layer / 第23轮
   'test_engine_cache.js',
   'test_match_lifecycle.js',
   'test_settings_modes.js',
+  'test_spectator.js',
+  'test_thinking_visual.js',
   'test_llm_convo.js',
   'replay_smoke.js',
   '_clean_reason_check.js',

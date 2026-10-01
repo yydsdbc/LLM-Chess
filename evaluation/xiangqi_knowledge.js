@@ -25,9 +25,9 @@
   // ── 棋局阶段判断 ──
   // 三信号: 已走回合数 / 剩余棋子数 / 大子交换 (大子=车马炮, 双方初始共12)
   var _phaseCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;   // 第37轮: 按引擎+手数 memo (每帧多处调用不再重复扫 90 格)
-  function detectPhase(engine) {
+  function detectPhase(engine, snapshot) {
     var ply = engine.ply();
-    var snap = engine.snapshot();
+    var snap = snapshot || engine.snapshot();
     if (_phaseCache) {
       var hit = _phaseCache.get(engine);
       if (hit && hit.ply === ply && hit.snapshot === snap) return hit.phase;

@@ -2,10 +2,12 @@
 
 # 🦞 LLM-chess v1.1 · AI 对战直播平台
 
-[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-17%20suites-brightgreen)
+[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-21%20suites-brightgreen)
 
 中国象棋 + LLM 对战平台。v1.5 决策卡片流/棋风对垒/观战动效；v1.6 回放系统（不调 LLM 快速重看对局）；v1.7 HUD 观战仪表盘（被吃托盘/中文记谱/评值走势/终局结算）；v2 赛博暗金主题。核心引擎可独立用于搜索算法（alpha-beta / MCTS）与 Agent 研发。
 
+
+观战时可查看模型返回的计划、候选与最终决策，以及真实的响应阶段。红黑血量式对抗条将静态局面评分映射为百分比，明确标注为未经校准的估计，与模型选着信心分开；终局显示实际赛果。
 
 ## 快速开始
 
@@ -71,7 +73,7 @@ LLM-chess/
 ├── replay/
 │   ├── replay.js            # 回放数据层: 棋谱 → 引擎状态机 (next增量/prev/goto重建, 脏数据容错)
 │   └── replay_controller.js # 回放控制层: 播放/暂停/步进/跳转/倍速7档/循环
-├── test/               # 19 套件 (详见下方「测试」表): 引擎/评价/LLM与会诊/对局生命周期/设置/回放/棋谱与Elo/记谱/i18n/链接/UI/HTTP行为门禁
+├── test/               # 21 套件 (详见下方「测试」表): 引擎/评价/LLM与会诊/对局生命周期/设置/回放/棋谱与Elo/记谱/i18n/链接/UI/HTTP行为门禁
 └── tools/              # npm 脚本入口 (Node 侧, 零依赖)
     ├── start.js        #   npm start — 后台启动 (端口 8788)
     ├── stop.js         #   npm stop  — 停止后台实例
@@ -180,6 +182,8 @@ LLM-chess/
 
 | 命令 | 覆盖 |
 |------|------|
+| `node test/test_spectator.js` | 对抗条静态估计、固定红方视角、真实终局、异常分数与快照缓存 |
+| `node test/test_thinking_visual.js` | 决策路径、实际思考阶段、文本转义、回调隔离与语言热切 |
 | `node test/run_tests.js` | 引擎 50 项 (perft 金标准 + 重复局面/长将追踪/moveTag 三态/长将判负/三次重复判和/送吃守卫/自然限着判和) |
 | `node test/test_match_lifecycle.js` | 对局生命周期 8 项 (截止时间/迟到结果隔离/观察者异常/CLI 单次计分) |
 | `node test/test_settings_modes.js` | 有效棋手类型、配置保留、两级设置迁移、无密钥提示与设置焦点 |

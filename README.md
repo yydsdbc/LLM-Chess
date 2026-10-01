@@ -1,6 +1,6 @@
 # 🦞 LLM-chess v1.1 · AI Battle & Spectating Platform
 
-[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-17%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
+[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-21%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
 
 ![LLM-chess v1.1 battle & spectating UI](docs/ui.png)
 
@@ -73,7 +73,7 @@ LLM-chess/
 ├── replay/
 │   ├── replay.js            # replay data layer: record → engine state machine (tolerant of dirty data)
 │   └── replay_controller.js # replay control: play/pause/step/seek/7 speeds/loop
-├── test/               # 19 suites, see Testing below (perft gold standard included)
+├── test/               # 21 suites, see Testing below (perft gold standard included)
 └── tools/              # npm script entry points (Node-side, zero-dep)
     ├── start.js        #   npm start — background start on port 8788
     ├── stop.js         #   npm stop  — stop the background instance
@@ -83,6 +83,7 @@ LLM-chess/
 ## Features
 
 ### Live Spectating (v1.5)
+- **Live thinking and battle bar**: real response stages and returned plans/candidates/decisions form a visible path. Red/black percentages map static position scores to an uncalibrated estimate, independent of model confidence; game endings display the actual result.
 - **Decision cards**: after each move the panel streams cards — move / plan / summary / candidate moves with scores / confidence / time, last 4 kept.
 - **Prompt levels**: each side can pick **None** (task and output protocol) or **High** (protocol plus strategy and tactics, the default). None does not prescribe an opening or playing style; both levels receive the same engine position summary and legal moves, and use the same code-level safety guards. Old Low / Mid and legacy style settings become High when loaded; existing game records retain their original level metadata. Resuming a record uses the current player settings, so games continued across prompt revisions may mix strategies and should not be treated as a single-profile benchmark.
 - **Effects**: sliding moves (0.28s), captured-piece ghost fade, check warning sound, red king-square pulse, breathing think-panel border.
@@ -169,7 +170,9 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 
 | Command | Coverage |
 |---------|----------|
-| `npm test` | runs the full suite below |
+| `npm test` | runs all 21 suites below |
+| `node test/test_spectator.js` | static battle-bar estimates, fixed red perspective, terminal results, invalid scores and snapshot caching |
+| `node test/test_thinking_visual.js` | returned decision paths, live thinking stages, escaping, callback isolation and language changes |
 | `node test/run_tests.js` | engine, 50 checks (perft gold standard, repetition, perpetual-check tracking, moveTag, threefold draw, hanging guard, natural-rule draw) |
 | `node test/test_match_lifecycle.js` | 8 match lifecycle checks: deadlines, late results, observer failures, CLI scoring exactly once |
 | `node test/test_settings_modes.js` | effective player modes, configuration preservation, two-level settings migration, missing-key warnings and settings focus |

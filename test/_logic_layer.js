@@ -251,6 +251,41 @@ viewR.selected = { x: 4, y: 9 };
 sandbox.XQ.UI.render(spy, viewR);
 ok(cnt.snapshot === 1, 'L10 选中态渲染同样仅 1 次 snapshot (legal/danger 走 memo)');
 
+// 第79轮: 接入真实局面评价和观战条后, 首次评价也必须复用本帧快照。
+(function () {
+  var oldKnowledge = XQ.XiangqiKnowledge, oldEvaluator = XQ.PositionEvaluator, oldSpectator = XQ.Spectator;
+  var meterIds = ['spectator-meter', 'spectator-red-fill', 'spectator-black-fill', 'spectator-red-value', 'spectator-black-value', 'spectator-meter-note'];
+  var oldElements = meterIds.map(function (id) { return DOC_MAP[id]; });
+  try {
+    ['evaluation/xiangqi_knowledge.js', 'evaluation/position.js', 'ui/spectator.js'].forEach(function (f) {
+      vm.runInNewContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), sandbox, { filename: f });
+    });
+    meterIds.forEach(function (id) { DOC_MAP[id] = mkEl('div'); });
+    var realEvaluate = XQ.PositionEvaluator.evaluate, evaluations = 0, reads = 0;
+    XQ.PositionEvaluator.evaluate = function (engine, side) { evaluations++; return realEvaluate(engine, side); };
+    var engine = XQ.Engine.create();
+    var spyEngine = Object.create(engine, { snapshot: { value: function () { reads++; return engine.snapshot(); } } });
+    var view = { boardEl: mkEl('div'), selected: null, flip: false, pendingAnim: null, startTime: Date.now(), arrow: true };
+    view.boardEl.parentNode = mkEl('div');
+    sandbox.XQ.UI.render(spyEngine, view);
+    ok(reads === 1 && evaluations === 1 && DOC_MAP['spectator-meter'].dataset.status === 'estimate',
+      'L79 首次真实观战估计随render仅读取1次快照, 不因阶段/评价重复读取 (reads=' + reads + ', evaluations=' + evaluations + ')');
+    ok(DOC_MAP['spectator-red-value'].textContent === '50%' && DOC_MAP['spectator-black-value'].textContent === '50%',
+      'L79 实际render输出初始50/50展示估计');
+    view.selected = { x: 1, y: 7 }; view.flip = true;
+    sandbox.XQ.UI.render(spyEngine, view);
+    ok(reads === 2 && evaluations === 1, 'L79 选子及翻转不重复评价, 每帧仍仅1次快照 (reads=' + reads + ', evaluations=' + evaluations + ')');
+    var move = engine.generateLegalMoves('red')[0];
+    engine.applyPlayerMove(move.from.x, move.from.y, move.to.x, move.to.y);
+    reads = 0;
+    sandbox.XQ.UI.render(spyEngine, view);
+    ok(reads === 1 && evaluations === 2, 'L79 走子后实际render刷新估计并保持快照单次约定 (reads=' + reads + ', evaluations=' + evaluations + ')');
+  } finally {
+    XQ.XiangqiKnowledge = oldKnowledge; XQ.PositionEvaluator = oldEvaluator; XQ.Spectator = oldSpectator;
+    meterIds.forEach(function (id, i) { if (oldElements[i]) DOC_MAP[id] = oldElements[i]; else delete DOC_MAP[id]; });
+  }
+})();
+
 /* ═══ L12 第41轮: 棋子显示偏好单出口 + 兑底选词 + 状态条时钟单出口 ═══
    L12 全部断言都指向同一类缺陷: 「同一个展示事实在多处各写一遍」。第40轮为此改了三处阶段名 i18n,
    而棋子字/兑底标记/时钟文案当时仍各有多份拷贝, 故本轮收敛为单出口并逐条钉住行为。 */

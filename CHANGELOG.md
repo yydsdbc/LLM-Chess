@@ -6,6 +6,9 @@ Format based on Keep a Changelog; versions follow SemVer.
 
 ## [Unreleased]
 
+### Added
+- Visualize live LLM response stages and the returned plan, candidates and decision; add a red/black battle bar from static position scores, explicitly labeled as an uncalibrated estimate rather than measured win probability.
+
 ### Changed
 - Reduce prompt selection to None (task/output protocol) and High (strategy/tactics, the default), with clearer tactical checks and flexible opening choices; migrate legacy settings to High while preserving historical game metadata.
 - Unify the live stage and settings with a graphite palette, warm wood board, clearer side colors and larger decision-card text; fit desktop viewports and preserve readable mobile cards.
@@ -13,6 +16,7 @@ Format based on Keep a Changelog; versions follow SemVer.
 - Align all prompt tiers with the 2400-character limit and clarify JSON budgets, coordinate exceptions, confidence, score perspective and pawn endgames.
 
 ### Fixed
+- Keep live thinking visible through language changes and isolate thinking/retry callbacks from replaced agents.
 - Preserve decision-card layout across partial panel updates and restrict fallback labels to LLM moves in live play, resumed games and replay.
 - Keep legal moves available during format-only retries, clear stale parsed moves between attempts, and detect missing keys even when the provider list is empty.
 - Restore readable black-turn status colors; verify both sides and all supported prompt levels and generate retry documentation from real requests.

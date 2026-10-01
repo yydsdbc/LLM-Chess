@@ -722,9 +722,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var Tw = XQ.I18N ? XQ.I18N.t : function (k) { return k; };   // 第26轮 i18n (思考中提示)
     var thinkCards = decisionLog[side] && decisionLog[side].length ? XQ.UI.decisionCards(decisionLog[side].slice(-4), decisionLog[side].length) : null;
     var committeeMode = holder.agent && holder.agent._mode;
-    if (committeeMode === 'council' || committeeMode === 'roundtable') {
+    view.aiProgress = null;
+    if (holder.kind === 'llm' || committeeMode === 'council' || committeeMode === 'roundtable') {
       if (!thinkCards) thinkCards = [];
-      thinkCards.push('<div class="dcard d-thinking"><span class="d-thinking-progress">' + Tw('think_busy') + '</span><span class="d-thinking-stream"></span></div>');
+      thinkCards.push(XQ.UI.thinkingCard({ phase: 'waiting', progress: Tw('think_busy') }));
     } else if (thinkCards) {
       thinkCards.push('<div class="dcard d-thinking">' + Tw('think_busy') + '</div>');   // v1.7.3: 保留决策卡+思考中提示; 第26轮 i18n
     }
@@ -961,19 +962,31 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           if (tok && specs.indexOf(tok) < 0) specs.push(tok);
         });
         var multiMode = (['rotate', 'council', 'roundtable'].indexOf(v.multi) >= 0) && specs.length > 1 ? v.multi : 'off';
+        function isCurrentThinking() {
+          return aiBusy && view.aiThinkingSide === side && agents[side] && agents[side].agent === agent;
+        }
         var onThink = function (s2, text) {
-          if (!aiBusy || s2 !== side) return;
+          if (!isCurrentThinking() || s2 !== side) return;
+          if (XQ.UI.updateThinking(side, { phase: 'streaming', text: cleanReason(text) })) return;
           var stream = document.querySelector('#think-' + side + '-body .d-thinking-stream');
           if (stream) stream.textContent = cleanReason(text) || '…';
           else showThinking(s2, text);
         };
-        var onRetry2 = function (info) { view.aiRetries = view.aiRetries || {}; view.aiRetries[side] = info.attempt; view.aiRetryWait = info.waitMs || 0; };   // 第38轮: 等待量可见   // v2.5: 重试实时可见 (状态条 重试N次)
+        var onRetry2 = function (info) {
+          if (!isCurrentThinking()) return;
+          view.aiRetries = view.aiRetries || {};
+          view.aiRetries[side] = info.attempt;
+          view.aiRetryWait = info.waitMs || 0;
+          XQ.UI.updateThinking(side, { phase: 'retry', retry: info.attempt });
+        };   // 第38轮: 等待量可见; 第79轮: 重试状态同步到当前思考卡
         var onProg = function (p) {   // 第31轮: 会诊进度实时上卡 (⚡ 思考中卡片文字替换)
-          if (!aiBusy || p.side !== side) return;
+          if (!isCurrentThinking() || p.side !== side) return;
+          view.aiProgress = { phase: p.phase, answered: p.answered, total: p.total };
           var dc = document.querySelector('#think-' + side + '-body .d-thinking-progress');
           var key = p.phase === 'proposal' ? 'roundtable_proposal_progress' : (p.phase === 'final' ? 'roundtable_final_progress' : 'council_progress');
           var fallback = p.phase === 'proposal' ? '🗣 圆桌提案 (' : (p.phase === 'final' ? '🗳 圆桌终判 (' : '⚡ 会诊中 (');
-          if (dc) dc.textContent = XQ.I18N ? XQ.I18N.tArgs(key, { a: p.answered, t: p.total }) : fallback + p.answered + '/' + p.total + ' 已应答)…';
+          var progress = XQ.I18N ? XQ.I18N.tArgs(key, { a: p.answered, t: p.total }) : fallback + p.answered + '/' + p.total + ' 已应答)…';
+          if (!XQ.UI.updateThinking(side, { phase: p.phase || 'waiting', progress: progress }) && dc) dc.textContent = progress;
         };
         var agent, modelName, modelsOut = null;
         if (multiMode !== 'off') {
@@ -1069,6 +1082,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     clearTimeout(warnTimer); warnTimer = null;
     bannerClear();
     view.aiThinking = null; view.pendingAnim = null;
+    view.aiProgress = null;
     thinkStart.red = 0; thinkStart.black = 0;
     checkFlashUntil = 0; thinkWarned = false; repWarnedN = 0; chWarnedN = 0;
     var boardForReset = document.getElementById('board');
@@ -1442,7 +1456,18 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           title: currentRecord && currentRecord[sd] ? currentRecord[sd].name : undefined
         });
         var lg = decisionLog[sd] || [];
-        if (lg.length) XQ.UI.thinkPanel(sd, { cards: XQ.UI.decisionCards(lg.slice(-4), lg.length) });
+        var thinking = XQ.UI.thinkingState(sd);
+        if (thinking) {
+          var progressKey = view.aiProgress && (view.aiProgress.phase === 'proposal' ? 'roundtable_proposal_progress' : (view.aiProgress.phase === 'final' ? 'roundtable_final_progress' : 'council_progress'));
+          thinking.progress = progressKey ? XQ.I18N.tArgs(progressKey, { a: view.aiProgress.answered, t: view.aiProgress.total }) : XQ.I18N.t('think_busy');
+        }
+        if (lg.length || thinking) {
+          var cards = XQ.UI.decisionCards(lg.slice(-4), lg.length);
+          if (thinking) cards.push(XQ.UI.thinkingCard(thinking));
+          XQ.UI.thinkPanel(sd, { cards: cards });
+        } else {
+          XQ.UI.thinkPanel(sd, { text: aiBusy && view.aiThinkingSide === sd ? XQ.I18N.t('think_busy') : (logTextFor(sd) || XQ.I18N.t('think_wait')) });
+        }
       });
       if (rpEl && rpSession) {
         rpPaintChartCaptions();

@@ -253,7 +253,7 @@ h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0
 .dcard.d-thinking{border-color:rgba(241,196,15,.5);color:#ffd54a;text-align:center;animation:pulse-check 1.2s ease-in-out infinite}
 
 /* 第77轮: 统一直播舞台视觉。行为状态保留，替换历次金色/青色主题覆盖。 */
-:root{--cell:min(64px,calc((100vh - 290px)/10),calc((100vw - 600px)/9));--board-h:calc(var(--cell)*10 + 38px);--surface:#181d26;--surface-raised:#202733;--line:#343d4c;--accent:#e9b86e;--red:#ff968b;--black:#dce5f3;--c-normal:#e9b86e;--c-think:#e9b86e;--c-warn:#f0ba73;--c-err:#ff968b;--c-win:#a0d8b0;--c-fail:#a5aebc;--t1:#f2f0e9;--t2:#bdc5d1;--t3:#a5aebc}
+:root{--cell:min(64px,calc((100vh - 340px)/10),calc((100vw - 600px)/9));--board-h:calc(var(--cell)*10 + 38px);--surface:#181d26;--surface-raised:#202733;--line:#343d4c;--accent:#e9b86e;--red:#ff968b;--black:#dce5f3;--c-normal:#e9b86e;--c-think:#e9b86e;--c-warn:#f0ba73;--c-err:#ff968b;--c-win:#a0d8b0;--c-fail:#a5aebc;--t1:#f2f0e9;--t2:#bdc5d1;--t3:#a5aebc}
 body{background:#080607;background-image:radial-gradient(ellipse at 50% 28%,#242a35 0%,#11151d 52%,#080607 100%);background-attachment:fixed;color:var(--t1);padding:32px 24px;font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif}
 h1{color:var(--t1);font-size:clamp(20px,2vw,30px);font-weight:650;letter-spacing:1px;text-shadow:none;margin-bottom:10px}
 .subtitle{color:var(--t3);font-size:13px;line-height:1.7;letter-spacing:.4px;margin-bottom:28px;max-width:90vw}
@@ -309,10 +309,40 @@ h1{color:var(--t1);font-size:clamp(20px,2vw,30px);font-weight:650;letter-spacing
 .d-more::before,.d-more::after{content:"";flex:1;height:1px;background:var(--line)}
 .dcard.d-thinking{border-color:#8b744f;color:var(--accent);animation:none;text-shadow:none}
 .d-thinking-stream{display:block;max-height:90px;overflow:hidden;margin-top:8px;font-size:12px;line-height:1.65;color:var(--t2);opacity:1;white-space:pre-wrap;text-align:left}
+.d-path{margin-top:10px}
+.d-path-step{position:relative;display:flex;flex-direction:column;gap:3px;padding-left:16px;overflow-wrap:anywhere}
+.d-path-step::before{content:"";position:absolute;top:7px;left:0;width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.d-path-step:not(:last-child)::after{content:"";position:absolute;top:17px;bottom:-7px;left:3px;width:1px;background:#566172}
+.d-path-label{color:var(--t3);font-size:11px;font-weight:600}
+.d-path .d-plan,.d-path .d-sum{color:var(--t1);font-size:13px}
+.d-path .d-cands{border:0;padding-top:0}
+.d-path-candidates{display:flex;flex-wrap:wrap;gap:4px}
+.d-thinking-head{display:flex;align-items:center;gap:8px;text-align:left;font-weight:600;font-size:13px}
+.d-thinking-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:0 0 auto}
+.d-thinking[data-phase="streaming"] .d-thinking-dot{animation:blink 1.5s ease-in-out infinite}
+.d-thinking[data-phase="retry"] .d-thinking-dot{background:var(--red)}
+.d-thinking-retry{margin-left:auto;color:var(--t3);font-size:11px;font-weight:400}
+.d-thinking-progress{margin-top:8px;color:var(--t1);font-size:12px;text-align:left;overflow-wrap:anywhere}
+.d-thinking-source,.d-reason-source{margin-top:10px;color:var(--t3);font-size:11px;text-align:left}
+.d-thinking .d-thinking-stream{max-height:170px;overflow:auto;overscroll-behavior:contain;overflow-wrap:anywhere;font-size:13px;margin-top:4px}
+.d-thinking-progress[hidden],.d-thinking-retry[hidden],.d-thinking-source[hidden],.d-thinking-stream[hidden]{display:none}
+.spectator-meter{width:calc(var(--cell)*9 + 38px);max-width:100%;margin-top:14px}
+.spectator-meter-labels{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px;font-size:13px;line-height:1.4}
+.spectator-side{display:flex;gap:7px;align-items:center;flex:1}
+.spectator-side-red{color:var(--red)}
+.spectator-side-black{color:var(--black);justify-content:flex-end}
+.spectator-meter-title{color:var(--t3);font-size:11px;flex:0 0 auto}
+.spectator-meter-track{height:14px;display:flex;overflow:hidden;border:1px solid #596476;border-radius:8px;background:#202733}
+.spectator-meter-fill{height:100%;width:0;transition:width .3s ease-out}
+.spectator-meter-red{background:linear-gradient(90deg,#a94048,#e37b75)}
+.spectator-meter-black{background:linear-gradient(90deg,#6e829e,#b9c8da);border-left:2px solid #181d26;box-sizing:border-box}
+.spectator-meter-note{margin-top:4px;color:var(--t3);font-size:11px;line-height:1.4;text-align:center;overflow-wrap:anywhere}
+.spectator-meter[data-status="draw"] .spectator-meter-red,.spectator-meter[data-status="draw"] .spectator-meter-black{background:#677487}
+.spectator-meter[data-status="unavailable"] .spectator-meter-fill{visibility:hidden}
 .think-pager{right:10px;bottom:8px;padding:3px 8px;font-size:11px;background:#161d28;border-color:#596170;color:var(--t2)}
 .think-pager .pg-btn{border-radius:4px;padding:2px 5px}
 .think-pager .pg-btn:hover{background:#354153;color:var(--t1)}
-#status-bar{gap:20px;margin-top:22px;padding:12px 20px;min-width:340px;border-radius:10px;background:#1b222d;border:1px solid var(--line);font-size:15px;letter-spacing:.3px;box-shadow:0 6px 22px rgba(0,0,0,.2)}
+#status-bar{gap:20px;margin-top:12px;padding:12px 20px;min-width:340px;border-radius:10px;background:#1b222d;border:1px solid var(--line);font-size:15px;letter-spacing:.3px;box-shadow:0 6px 22px rgba(0,0,0,.2)}
 #status-bar.status-red-turn{color:var(--red);background:#261e25;border-color:#60424a}
 #status-bar.status-black-turn{color:var(--black);background:#1d2735;border-color:#526078}
 #status-bar.status-check{color:#ffb4a8;background:#382124;border-color:#ae655e}
@@ -385,7 +415,8 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
   .think-body{min-height:56px;max-height:210px}
   .think-body.card-mode{min-height:150px;max-height:210px}
   .think-panel.collapsed{height:auto}
-  #status-bar{max-width:100%;min-width:0;width:calc(var(--cell)*9 + 42px);margin-top:18px;gap:12px;flex-wrap:wrap;justify-content:center}
+  .spectator-meter{width:calc(var(--cell)*9 + 42px)}
+  #status-bar{max-width:100%;min-width:0;width:calc(var(--cell)*9 + 42px);margin-top:12px;gap:12px;flex-wrap:wrap;justify-content:center}
 }
 @media(max-width:600px){
   body{padding:24px 12px}
@@ -610,6 +641,15 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
   </div>
 </div><!-- /arena -->
 
+<div id="spectator-meter" class="spectator-meter" data-status="unavailable">
+    <div class="spectator-meter-labels">
+        <span class="spectator-side spectator-side-red"><span data-i18n="side_red">红方</span><strong id="spectator-red-value">—</strong></span>
+        <span class="spectator-meter-title" data-i18n="spectator_title">局势估计</span>
+        <span class="spectator-side spectator-side-black"><strong id="spectator-black-value">—</strong><span data-i18n="side_black">黑方</span></span>
+    </div>
+    <div class="spectator-meter-track" aria-hidden="true"><span id="spectator-red-fill" class="spectator-meter-fill spectator-meter-red"></span><span id="spectator-black-fill" class="spectator-meter-fill spectator-meter-black"></span></div>
+    <div id="spectator-meter-note" class="spectator-meter-note" data-i18n="spectator_unavailable">暂无局势估计</div>
+</div>
 <div id="status-bar" class="status-red-turn">   <!-- v1.0.daily a11y: live 播报分离到 #sr-status — 思考中 #status-info 每秒 tick 若留在 aria-live 区会触发读屏每秒刷屏 -->
     <!-- 第46轮 i18n: 静态文案此前是裸中文且无 data-i18n — 首帧渲染排在两次网络往返之后, 这段空窗里 EN 界面
          一直显示「当前回合：红方」(apply() 只管带 data-i18n 的节点)。挂 data-i18n 后随 DOMContentLoaded 即本地化;
@@ -640,6 +680,7 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
 <script src="replay/replay_controller.js"></script>
 <script src="benchmark/elo.js"></script>
 <script src="benchmark/match.js"></script>
+<script src="ui/spectator.js"></script>
 <script src="ui/renderer.js"></script>
 <script src="ui/i18n.js"></script>
 <script src="ui/app.js"></script>

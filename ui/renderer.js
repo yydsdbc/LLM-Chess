@@ -335,13 +335,49 @@
       }
     }
     renderStatus(engine, view, snap);
+    renderSpectatorMeter(engine, snap);
     renderOverlay(engine, view);
   }
 
+  /* 百分比仅用于观战, 与模型选着信心无关; 始终复用本帧快照。 */
+  function renderSpectatorMeter(engine, snap) {
+    var meter = document.getElementById('spectator-meter');
+    if (!meter) return;
+    var estimate = XQ.Spectator && XQ.Spectator.estimate
+      ? XQ.Spectator.estimate(engine, snap) : { status: 'unavailable' };
+    var status = estimate && estimate.status || 'unavailable';
+    var red = estimate && estimate.red, black = estimate && estimate.black;
+    if (status === 'estimate' && (typeof red !== 'number' || typeof black !== 'number'
+      || !isFinite(red) || !isFinite(black) || red < 0 || black < 0 || red > 100 || black > 100)) status = 'unavailable';
+    var redText = '—', blackText = '—', note = T('spectator_unavailable');
+    if (status === 'estimate') {
+      redText = red + '%'; blackText = black + '%'; note = T('spectator_estimate_note');
+    } else if (status === 'red-win' || status === 'black-win') {
+      redText = T(status === 'red-win' ? 'spectator_won' : 'spectator_lost');
+      blackText = T(status === 'black-win' ? 'spectator_won' : 'spectator_lost');
+      note = T('spectator_result_note');
+      red = status === 'red-win' ? 100 : 0; black = 100 - red;
+    } else if (status === 'draw') {
+      redText = T('spectator_draw'); blackText = redText; note = T('spectator_result_note');
+      red = 50; black = 50;
+    } else { status = 'unavailable'; red = 0; black = 0; }
+    meter.dataset.status = status;
+    var redFill = document.getElementById('spectator-red-fill');
+    var blackFill = document.getElementById('spectator-black-fill');
+    var redValue = document.getElementById('spectator-red-value');
+    var blackValue = document.getElementById('spectator-black-value');
+    var noteEl = document.getElementById('spectator-meter-note');
+    if (redFill) redFill.style.width = red + '%';
+    if (blackFill) blackFill.style.width = black + '%';
+    if (redValue) redValue.textContent = redText;
+    if (blackValue) blackValue.textContent = blackText;
+    if (noteEl) noteEl.textContent = note;
+  }
+
   /* ── 棋局阶段标签 (v3.7 HUD 徽章: 状态条显示阶段, 观战者一眼知阶段; 第40轮改走 i18n 字典) ── */
-  function phaseCN(engine) {
+  function phaseCN(engine, snap) {
     try {
-      var ph = XQ.XiangqiKnowledge && XQ.XiangqiKnowledge.detectPhase(engine);
+      var ph = XQ.XiangqiKnowledge && XQ.XiangqiKnowledge.detectPhase(engine, snap);
       if (!ph) return '';
       // 第40轮 i18n: 原直取 PHASE_CN 中文常量 → EN 界面状态条与时钟每帧显示「中局」等中文 (phase_opening/middlegame/endgame)
       if (XQ.I18N) return XQ.I18N.t('phase_' + ph);
@@ -379,7 +415,7 @@
     if (view.aiThinking) {
       document.getElementById('status-info').textContent = '';   // 思考中: 由 tick 填充当前思考时间
     } else {
-      document.getElementById('status-info').textContent = clockText(engine, view, snap.ply);   // 第41轮: 与 updateClock 共用单出口 (原逐字内联一份重复实现)
+      document.getElementById('status-info').textContent = clockText(engine, view, snap.ply, snap);   // 第41轮: 与 updateClock 共用单出口; 第79轮: 阶段识别同样复用当前帧快照
     }
     document.getElementById('status-bar').className = cls;
     var brEl = document.getElementById('btn-row');
@@ -650,6 +686,7 @@
       if (statEl) statEl.textContent = opts.stat;
     }
     if (opts.cards !== undefined && body) {
+      body.removeAttribute('data-i18n');   // 动态正文由控制器重绘, 不再让静态语言挂载覆盖卡片。
       // v1.5 决策卡片模式: 结构化信息 (策略/候选/评价) 替代长文本; 分页器隐藏
       st.cards = opts.cards;
       body.classList.add('card-mode');
@@ -673,6 +710,7 @@
       }
       body.scrollTop = body.scrollHeight;   // v1.7.1: 卡片模式自动滚到底部 (最新决策可见)
     } else if (opts.text !== undefined && body) {
+      body.removeAttribute('data-i18n');
       body.classList.remove('card-mode');
     }
     if (opts.text !== undefined && body && opts.cards === undefined) {
@@ -695,7 +733,76 @@
   /* ── v1.5 决策卡片渲染 (app 提供 meta, 输出 HTML 片段数组) ──
    * 展示: 手号/着法/策略/候选走法与评分/局面评价/信心耗时 — 直播平台信息卡 */
   function esc(s) {
-    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  var THINKING_PHASES = { waiting: 1, streaming: 1, proposal: 1, final: 1, retry: 1 };
+  function thinkingPhase(value) { return Object.prototype.hasOwnProperty.call(THINKING_PHASES, value) ? value : 'waiting'; }
+  function retryCount(value) { return typeof value === 'number' && isFinite(value) && value >= 0 ? Math.floor(value) : null; }
+  function thinkingCard(data) {
+    data = data || {};
+    var phase = thinkingPhase(data.phase);
+    var text = String(data.text == null ? '' : data.text).slice(-20000);
+    var progress = String(data.progress == null ? '' : data.progress);
+    var retry = retryCount(data.retry), hasText = !!text.trim();
+    return '<div class="dcard d-thinking" data-phase="' + phase + '"'
+      + (retry != null ? ' data-retry="' + retry + '"' : '') + '>'
+      + '<div class="d-thinking-head"><span class="d-thinking-dot" aria-hidden="true"></span>'
+      + '<span class="d-thinking-phase">' + esc(T('thinking_phase_' + phase)) + '</span>'
+      + '<span class="d-thinking-retry"' + (retry == null ? ' hidden' : '') + '>'
+      + (retry != null ? esc(TA('thinking_retry_count', { n: retry })) : '') + '</span></div>'
+      + '<div class="d-thinking-progress"' + (!progress ? ' hidden' : '') + '>' + esc(progress) + '</div>'
+      + '<div class="d-thinking-source"' + (!hasText ? ' hidden' : '') + '>' + (hasText ? esc(T('thinking_model_source')) : '') + '</div>'
+      + '<div class="d-thinking-stream"' + (!hasText ? ' hidden' : '') + '>' + esc(text) + '</div></div>';
+  }
+  function currentThinking(side) {
+    if (side !== 'red' && side !== 'black') return null;
+    var panel = document.getElementById(side === 'red' ? 'think-red' : 'think-black');
+    var card = panel && panel.querySelector('.dcard.d-thinking');
+    return card && Object.prototype.hasOwnProperty.call(THINKING_PHASES, card.dataset.phase) ? card : null;
+  }
+  function readThinkingData(card) {
+    if (card._thinkingData) return card._thinkingData;
+    var stream = card.querySelector('.d-thinking-stream');
+    var progress = card.querySelector('.d-thinking-progress');
+    var retry = card.dataset.retry;
+    return { phase: thinkingPhase(card.dataset.phase), text: stream ? stream.textContent : '',
+      progress: progress ? progress.textContent : '', retry: retry == null ? null : retryCount(Number(retry)) };
+  }
+  function thinkingState(side) {
+    var card = currentThinking(side);
+    if (!card) return null;
+    var data = readThinkingData(card);
+    return { phase: data.phase, text: data.text, progress: data.progress, retry: data.retry };
+  }
+  function updateThinking(side, data) {
+    var card = currentThinking(side);
+    if (!card) return false;
+    data = data || {};
+    var old = readThinkingData(card);
+    var next = { phase: data.phase === undefined ? old.phase : thinkingPhase(data.phase),
+      text: data.text === undefined ? old.text : String(data.text == null ? '' : data.text).slice(-20000),
+      progress: data.progress === undefined ? old.progress : String(data.progress == null ? '' : data.progress),
+      retry: data.retry === undefined ? old.retry : retryCount(data.retry) };
+    card._thinkingData = next;
+    card.dataset.phase = next.phase;
+    var phase = card.querySelector('.d-thinking-phase');
+    var progress = card.querySelector('.d-thinking-progress');
+    var retry = card.querySelector('.d-thinking-retry');
+    var source = card.querySelector('.d-thinking-source');
+    var stream = card.querySelector('.d-thinking-stream');
+    if (phase) phase.textContent = T('thinking_phase_' + next.phase);
+    if (progress) { progress.textContent = next.progress; progress.hidden = !next.progress; }
+    if (retry) { retry.textContent = next.retry == null ? '' : TA('thinking_retry_count', { n: next.retry }); retry.hidden = next.retry == null; }
+    var hasText = !!next.text.trim();
+    if (source) { source.textContent = hasText ? T('thinking_model_source') : ''; source.hidden = !hasText; }
+    if (stream) {
+      var follow = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 32;
+      stream.textContent = next.text; stream.hidden = !hasText;
+      if (follow) stream.scrollTop = stream.scrollHeight;
+    }
+    return true;
   }
   function decisionCards(entries, total) {
     var cards = entries.map(function (e) {
@@ -706,6 +813,11 @@
         return '<span class="d-cand' + (isWin ? ' d-cand-win' : '') + '"' + attrs + '>' + esc(c.move) + (c.score ? ' <b>' + esc(c.score) + '</b>' : '') + (c.changed ? ' <span class="d-changed">↩</span>' : '') + '</span>';
       }).join('');
       var hasReason = !!e.reasoning;
+      var reasonSource = e.fallback || (hasReason && e.reasoning.indexOf('【兑底】') === 0)
+        ? 'thinking_fallback_source'
+        : hasReason && e.reasoning.indexOf('【快答·未开思考】') >= 0 ? 'thinking_summary_source'
+        : e.committeeMode === 'council' || e.committeeMode === 'roundtable' || (hasReason && e.reasoning.indexOf('同侪会诊 ') === 0)
+          ? 'thinking_vote_source' : 'thinking_model_source';
       /* 第56轮: 娱乐性 — 会诊投票明细表 (e.votes 存在且 >1 选民) */
       var voteTable = '';
       if (e.votes && e.votes.length > 1) {
@@ -718,19 +830,23 @@
       // 原实现比对 app 写入的中文标记串, 而该写入自第40轮 i18n 后按字典产出, EN 下标记串根本不再出现
       var sumTxt = e.fallback ? T('fb_summary') : (e.summary === '兑底·安全着法' ? T('fb_summary') : e.summary);   // 兼容仍有中文标记串的旧内存数据
       return '<div class="dcard">'
-        + '<div class="d-head"><span class="d-move">#' + e.n + ' ' + esc(e.name) + '</span>'
+        + '<div class="d-head"><span class="d-move">#' + esc(e.n) + ' ' + esc(e.name) + '</span>'
         + (e.voterName ? '<span class="d-voter" title="' + esc(e.voterName) + '">✦' + esc(String(e.voterName).split(':').pop()) + '</span>' : '')
         + (e.unanimity ? '<span class="d-consensus">🤝</span>' : (e.votes && e.votes.length > 1 ? '<span class="d-split">⚡</span>' : ''))   // 第63轮: 共识/分裂
         + (e.committeeMode === 'roundtable' ? '<span class="d-rtable">🗣</span>' : '')   // 第56轮: 圆桌标记   // 第32轮: 胜出选民
         + (e.evaluation ? '<span class="d-eval">' + esc(e.evaluation) + '</span>' : '')
-        + (hasReason ? '<button class="d-toggle" data-ply="' + e.n + '" aria-label="' + esc(T('d_reason_toggle')) + '" aria-expanded="false">💭</button>' : '')   // 第42轮 i18n/a11y: 原 aria-label 硬编码英文 'reasoning' — 中文界面读屏播报英文词
+        + (hasReason ? '<button class="d-toggle" data-ply="' + esc(e.n) + '" aria-label="' + esc(T('d_reason_toggle')) + '" aria-expanded="false">💭</button>' : '')   // 第42轮 i18n/a11y: 原 aria-label 硬编码英文 'reasoning' — 中文界面读屏播报英文词
         + '</div>'
-        + (e.plan ? '<div class="d-plan">📌 ' + esc(e.plan) + '</div>' : '')
-        + (sumTxt ? '<div class="d-sum">' + esc(sumTxt) + '</div>' : '')
+        + (e.plan || cands || sumTxt ? '<div class="d-path">' : '')
+        + (e.plan ? '<div class="d-plan d-path-step"><span class="d-path-label">' + esc(T('d_path_plan')) + '</span><span>' + esc(e.plan) + '</span></div>' : '')
+        + (cands ? '<div class="d-cands d-path-step"><span class="d-path-label">' + esc(T('d_path_candidates')) + '</span><span class="d-path-candidates">' + cands + '</span></div>' : '')
+        + (sumTxt ? '<div class="d-sum d-path-step"><span class="d-path-label">' + esc(T(e.fallback ? 'd_path_fallback' : 'd_path_reason')) + '</span><span>' + esc(sumTxt) + '</span></div>' : '')
+        + (e.plan || cands || sumTxt ? '</div>' : '')
         + (voteTable ? voteTable : '')
-        + (cands ? '<div class="d-cands">' + cands + '</div>' : '')
-        + '<div class="d-meta">' + (e.confidence != null ? T('d_conf') + esc(e.confidence) + ' · ' : '') + (e.secs ? esc(e.secs) + 's' : '') + '</div>'   // 第27轮 i18n: 信 角标原硬编码
-        + (hasReason ? '<div class="d-reason" data-ply="' + e.n + '" style="display:none">' + esc(e.reasoning.indexOf('【兑底】') === 0 ? T('fb_reason') : e.reasoning) + '</div>' : '')   // 第27轮 i18n: 兑底推理同上 (标记前缀比对)
+        + '<div class="d-meta">' + (e.confidence != null ? esc(T('d_conf')) + ' ' + esc(e.confidence) + ' · ' : '') + (e.secs ? esc(e.secs) + 's' : '') + '</div>'   // 第27轮 i18n: 信 角标原硬编码
+        + (hasReason ? '<div class="d-reason" data-ply="' + esc(e.n) + '" style="display:none">'
+          + '<div class="d-reason-source">' + esc(T(reasonSource)) + '</div>'
+          + esc(e.reasoning.indexOf('【兑底】') === 0 ? T('fb_reason') : e.reasoning) + '</div>' : '')   // 第27轮 i18n: 兑底推理同上 (标记前缀比对)
         + '</div>';
     });
     if (total > entries.length) cards.push('<div class="d-more">' + TA('d_more', { n: total - entries.length }) + '</div>');   // 第27轮 i18n: 折叠行原硬编码中文 (EN 实机截图抓漏)
@@ -870,9 +986,9 @@
      第41轮: 原 renderStatus 内联一份、updateClock 另一份逐字重复, 第40轮修阶段名 i18n 时必须同时改两处
      (第三处在 app.js ticker) — 三份等价逻辑靠人工同步, 漏改一处即出现「状态条中文 · 时钟英文」的撕裂。
      现收敛到此函数, 两个调用点共用 (守护: _logic_layer L12 断言两条路径输出逐字相同)。 */
-  function clockText(engine, view, ply) {
+  function clockText(engine, view, ply, snap) {
     var elapsed = (Date.now() - view.startTime) / 1000 | 0;
-    var ph = phaseCN(engine);
+    var ph = phaseCN(engine, snap);
     var lim = '';
     try { if (engine.naturalClock && engine.naturalClock() >= 60) lim = (XQ.I18N ? XQ.I18N.tArgs('status_limit', { n: engine.naturalClock() }) : ' · 限着 ' + engine.naturalClock() + '/120'); } catch (eNC) {}
     var mm = (elapsed / 60 | 0) + ':' + ('0' + (elapsed % 60)).slice(-2);
@@ -888,5 +1004,5 @@
     if (el) el.textContent = clockText(engine, view, engine.ply());
   }
 
-  XQ.UI = { CS: CS, drawBoard: drawBoard, render: render, aiBanner: aiBanner, logMove: logMove, thinkPanel: thinkPanel, decisionCards: decisionCards, updateClock: updateClock, clockText: clockText, capturedTray: capturedTray, lastMoveBadge: lastMoveBadge, evalSpark: evalSpark, pieceGlyph: pieceGlyphOf, dismissEndOverlay: dismissEndOverlay, relabelLastMoveBadge: relabelLastMoveBadge };
+  XQ.UI = { CS: CS, drawBoard: drawBoard, render: render, aiBanner: aiBanner, logMove: logMove, thinkPanel: thinkPanel, thinkingCard: thinkingCard, updateThinking: updateThinking, thinkingState: thinkingState, decisionCards: decisionCards, renderSpectatorMeter: renderSpectatorMeter, updateClock: updateClock, clockText: clockText, capturedTray: capturedTray, lastMoveBadge: lastMoveBadge, evalSpark: evalSpark, pieceGlyph: pieceGlyphOf, dismissEndOverlay: dismissEndOverlay, relabelLastMoveBadge: relabelLastMoveBadge };
 })(typeof window !== 'undefined' ? window : globalThis);

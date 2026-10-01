@@ -425,7 +425,11 @@ function create(opts) {
             var j = JSON.parse(data);
             if (j.usage) countUsage(j.usage);
             var d = j.choices && j.choices[0] && j.choices[0].delta || {};
-            if (d.reasoning_content) { reasoning += d.reasoning_content; if (onDelta) onDelta('reason', extractCN(reasoning) || '思考中…'); }
+            if (d.reasoning_content) {
+              reasoning += d.reasoning_content;
+              var visibleReason = extractCN(reasoning);
+              if (onDelta && visibleReason) onDelta('reason', visibleReason);
+            }
             // v1.5.2: content 是落子 JSON, 不推面板 (仅靠决定卡片 afterMove 展示), 防用户看到原始 JSON
             if (d.content) { answer += d.content; }
           } catch (e) { /* 忽略不完整事件 */ }
@@ -566,7 +570,8 @@ function create(opts) {
               var txt = msg.content || '';
               var reasoning = String(msg.reasoning_content || '');
               if (!txt && reasoning) txt = reasoning;
-              if (onDelta) onDelta('reason', extractCN(reasoning) || '思考中…');
+              var visibleReason = extractCN(reasoning);
+              if (onDelta && visibleReason) onDelta('reason', visibleReason);
               if (opts.onRawResponse) { try { opts.onRawResponse(side, txt); } catch (e3) {} }
               if (!txt) finishReject(new Error('接口返回为空')); else finishResolve({ answer: txt, reasoning: reasoning });
             }).catch(function (e) { finishReject(new Error('响应解析失败: ' + (e && e.message || e))); });

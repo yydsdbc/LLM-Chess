@@ -46,7 +46,7 @@ var SHELL = [                         // 相对路径: 子路径部署同样成�
   './ai/random_agent.js', './ai/llm_agent.js', './ai/committee_agent.js',
   './benchmark/record.js', './benchmark/elo.js', './benchmark/match.js',
   './replay/replay.js', './replay/replay_controller.js',
-  './ui/renderer.js', './ui/i18n.js', './ui/app.js'
+  './ui/spectator.js', './ui/renderer.js', './ui/i18n.js', './ui/app.js'
 ];
 
 self.addEventListener('install', function (e) {
