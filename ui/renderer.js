@@ -672,7 +672,7 @@
         if (tb && typeof tb.focus === 'function') { try { tb.focus({ preventScroll: true }); } catch (eFT) { tb.focus(); } }
       }
       body.scrollTop = body.scrollHeight;   // v1.7.1: 卡片模式自动滚到底部 (最新决策可见)
-    } else if (body) {
+    } else if (opts.text !== undefined && body) {
       body.classList.remove('card-mode');
     }
     if (opts.text !== undefined && body && opts.cards === undefined) {

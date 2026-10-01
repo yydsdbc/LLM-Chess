@@ -173,6 +173,7 @@ function ok(cond, name) {
   ok(retryUser.includes('你刚才的输出无效'), '重试 user 含"输出无效"警告块');
   ok(retryUser.includes('不在合法列表'), '重试 user 携带具体失败原因');
   ok(retryUser.includes('坐标颠倒'), '重试 user 含被拒归因指南 (v1.5.11: 坐标颠倒/送将等)');
+  ok(retryUser.includes('已被系统拒绝的着法 (勿再选): a1-a5'), '真正非法着法仍加入重试禁选表');
 
   // ── 黑方视角 prompt ──
   const agentB = XQ.LLMAgent.create({ side: 'black', provider: 'mock', model: 'mock-3' });
@@ -222,6 +223,7 @@ function ok(cond, name) {
     ok(userMD.includes('14字以内') && !userMD.includes('30字'), 'summary 字数口径统一为 14字 (v3.9b, 原 30/14 不一致)');
     ok(userMD.includes('全角字符一律半角'), 'retry 含全角字符提醒 (v3.9b)');
     ok(mvMD && mvMD.meta && mvMD.meta.attempts === 2, '缺字段场景重试成功 (v3.9b)');
+    ok(!userMD.includes('已被系统拒绝的着法'), '仅缺输出字段不禁用合法中炮着法');
   }
   ok(sysR.includes('开局路线'), '首手 system 含开局三节');
   ok(sysR.includes('标注图例') && sysR.includes('危=走后被白吃') && sysR.includes('亏=此吃子交换净亏'), 'system 含合法列表标注图例 (v3.3)');
@@ -778,6 +780,7 @@ function ok(cond, name) {
     ok(calls.length - baseG === 2, '开局炮吃马被拦截重选, 共 2 次调用 (修复前拦截失效仅 1 次)');
     const rg = userOf(calls[baseG + 1]);
     ok(rg.includes('开局保护') && rg.includes('前2回合'), '重试 user 含开局保护原因, 回合数口径同步 (前2回合)');
+    ok(rg.includes('已被系统拒绝的着法 (勿再选): b3-b10'), '开局保护拒绝的炮吃马仍加入禁选表');
     ok(mvG.from.x === 1 && mvG.to.x === 4, '拦截后改选中炮 b3-e3');
   }
 
@@ -912,6 +915,7 @@ function ok(cond, name) {
     ok(userOf(calls[calls.length - 1]).includes('[a10>b10危]'), '非吃子送吃着法 → 合法列表预标 危 (v3.3)');
     const firstEntryW = (userOf(calls[calls.length - 1]).match(/\[[^\]]*\]/) || [''])[0];
     ok(!!firstEntryW && firstEntryW !== '[a10>b10危]', '危/亏 着法沉底: 列表首个条目不是 [a10>b10危] (v3.7 排序)');
+    ok(userOf(calls[calls.length - 1]).includes('已被系统拒绝的着法 (勿再选): a10-b10'), '送吃守卫仍将危险着法加入禁选表');
   }
 
   {
@@ -941,6 +945,44 @@ function ok(cond, name) {
     ok(W('HTTP 503 服务繁忙', 3) === 9000, '503 退避 9s (v2.9 原有行为保持)');
     ok(W('HTTP 429 rate limited', 2) === 6000, '429 限流退避 6s (原有行为保持)');
     ok(W('返回无法解析: xxx', 2) === 400, '格式类错误短等 400ms 不变 (v3.8)');
+  }
+
+  {
+    // 格式错误不能排除唯一合法应将: 第一答只缺 summary, 第二答保持同一着法补齐字段。
+    const board = XQ.Board.makeFromGrid(new Array(90).fill(null));
+    board.set(4, 9, XQ.Piece.create('red', 'king'));
+    board.set(5, 0, XQ.Piece.create('black', 'king'));
+    board.set(3, 9, XQ.Piece.create('black', 'rook'));
+    board.set(3, 7, XQ.Piece.create('black', 'rook'));
+    const engine = XQ.Engine.create({ startBoard: board });
+    const bodies = [];
+    globalThis.fetch = async function (url, opts) {
+      bodies.push(JSON.parse(opts.body));
+      const reply = { from: 'e1', to: 'e2', confidence: 0.9 };
+      if (bodies.length > 1) reply.summary = '避将保帅';
+      return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ choices: [{ message: { content: JSON.stringify(reply) } }] }) };
+    };
+    const agent = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'forced-format' });
+    const move = await agent.next(engine);
+    const retry = userOf(bodies[1]);
+    ok(engine.inCheck('red') && engine.generateLegalMoves('red').length === 1, '回归局面确为唯一应将 e1-e2');
+    ok(bodies.length === 2 && XQ.Move.sqName(move.to) === 'e2' && move.meta.confidence === 0.9, '唯一应将补字段后正常返回且保留高可靠度');
+    ok(!retry.includes('已被系统拒绝的着法') && retry.includes('修正格式字段'), '格式重试保留唯一合法候选并明确只修字段');
+  }
+
+  {
+    // 非法着法之后发生解析失败, 不能继承上个 attempt 的解析结果重复加入禁选表。
+    const bodies = [];
+    globalThis.fetch = async function (url, opts) {
+      bodies.push(JSON.parse(opts.body));
+      const reply = bodies.length === 2 ? '格式错误未给JSON' : JSON.stringify({
+        from: bodies.length === 1 ? 'a1' : 'b3', to: bodies.length === 1 ? 'a5' : 'e3', summary: '调炮', confidence: 0.7
+      });
+      return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ choices: [{ message: { content: reply } }] }) };
+    };
+    await XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'stale-parse' }).next(XQ.Engine.create());
+    const rejected = userOf(bodies[2]).split('已被系统拒绝的着法 (勿再选): ')[1];
+    ok(bodies.length === 3 && rejected === 'a1-a5', '解析失败不重复禁用上次非法着法');
   }
 
   console.log(fail ? `\n${fail} FAILED` : `\n全部通过 ✓ (${pass} 项)`);

@@ -49,15 +49,30 @@ globalThis.fetch = async function (url, opts) {
   await agent.next(engine, null);
   const inc = calls[1].messages;
 
+  // 从真实重试请求导出警告, 避免手写副本与实现漂移。
+  const retryCalls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async function (url, opts) {
+    retryCalls.push(JSON.parse(opts.body));
+    const reply = { from: 'b3', to: 'e3', confidence: 0.75 };
+    if (retryCalls.length > 1) reply.summary = '架中炮';
+    return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ choices: [{ message: { content: JSON.stringify(reply) } }] }) };
+  };
+  try {
+    await XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'dump-format' }).next(XQ.Engine.create());
+  } finally { globalThis.fetch = originalFetch; }
+  const retryUser = retryCalls[1].messages[retryCalls[1].messages.length - 1].content;
+  const retryText = retryUser.slice(retryUser.indexOf('\n## 警告:')).trim();
+
   let md = '# LLM 实际发送的提示词 (v' + JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version + ' 真实渲染)\n\n';
   md += '> 生成时间: ' + new Date().toLocaleString('zh-CN') + ' | 场景: 红方执子, mock 对局第1手与第3手\n\n';
   md += '---\n\n## 一、首手 (每局第一次调用)\n\n### System (完整提示词)\n\n```text\n' + first[0].content + '\n```\n\n';
   md += '### User\n\n```text\n' + first[1].content + '\n```\n\n';
   md += '---\n\n## 二、后续每手 (v2.7 多轮结构: system + 历史 user/assistant 对 + 增量 user; 请求 N+1 前缀 ⊇ 请求 N 全体, 前缀缓存最大化)\n\n### System (恒定提示词)\n\n```text\n' + inc[0].content + '\n```\n\n';
   md += '### 历史对数: ' + ((inc.length - 2) / 2 | 0) + ' 对 (末条为当前增量 user)\n\n### 增量 User (末条消息)\n\n```text\n' + inc[inc.length - 1].content + '\n```\n\n---\n\n';
-  md += '## 三、出错重试时的追加块 (追加于增量 User 消息末尾, 失败请求全体复用缓存)\n\n```text\n\\n## 警告: 你刚才的输出无效 (原因: <失败原因>)。多为: 坐标颠倒(列字母在前, 如 e3)、不合走法(马走日象飞田炮隔子)、送将、缺 summary 或 confidence。回复第一个字符必须是 {。勿解释勿复述本警告, 被拒着法不可再选, 直接改选合法列表另一手最稳着法, 只输出一个 JSON。重答前先自查一遍: 括号与引号是否闭合, 是否只含这一个 JSON。\\n\n```\n\n';
+  md += '## 三、缺少字段重试时的实际追加块 (格式修正可保持合法原选, 着法被引擎或守卫拒绝时才禁选)\n\n```text\n' + retryText + '\n```\n\n';
   md += '## 提示词所在位置: `ai/llm_agent.js`\n'
-    + '- 首手 System: `systemPrompt()` 函数 (约 33-70 行)\n'
+    + '- 首手 System: `systemPrompt()` 函数\n'
     + '- 多轮组装: `buildMessagesWithEngine()` (历史对追加, v2.7) + `firstUserMsg/incUserMsg`\n';
 
   if (checkOnly) {
@@ -67,6 +82,25 @@ globalThis.fetch = async function (url, opts) {
     console.log('[--check] 特殊符号扫描: ' + (bad.length ? '发现 ' + bad.join(' ') : '0 (通过)'));
     console.log('[--check] 增量消息数: ' + inc.length + ' | 历史对数: ' + ((inc.length - 2) / 2 | 0));
     if (sys.length > 2400 || bad.length) { console.log('[--check] ✗ 守护违例 — exit 1'); process.exit(1); }   // v3.9a: 升级为硬门禁
+    // 默认 mid 不能代表 high: 对红黑双方与全部等级检查实际发送的字节。
+    try {
+      for (const side of ['red', 'black']) {
+        for (const promptLevel of ['none', 'low', 'mid', 'high']) {
+          const fixture = XQ.Engine.create();
+          const move = fixture.generateLegalMoves(side)[0];
+          let rendered;
+          globalThis.fetch = async function (url, opts) {
+            rendered = JSON.parse(opts.body).messages[0].content;
+            const answer = JSON.stringify({ from: XQ.Move.sqName(move.from), to: XQ.Move.sqName(move.to), summary: '测试', confidence: 0.5 });
+            return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ choices: [{ message: { content: answer } }] }) };
+          };
+          await XQ.LLMAgent.create({ side, promptLevel, provider: 'mock', model: 'dump-gate' }).next(fixture);
+          const prohibited = /[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮≥≤~→←↑↓⚠]/.test(rendered);
+          console.log('[--check] ' + side + '/' + promptLevel + ' system: ' + rendered.length + ' 字');
+          if (rendered.length > 2400 || prohibited) throw new Error(side + '/' + promptLevel + ' system 守护违例');
+        }
+      }
+    } finally { globalThis.fetch = originalFetch; }
     // v1.0.4: prompts_dump 漂移守护 — 磁盘上的 dump 若与当前代码渲染不一致 (除生成时间行) 即 fail, 防文档腐化
     const dumpPath = path.join(ROOT, 'prompts_dump.md');
     if (fs.existsSync(dumpPath)) {

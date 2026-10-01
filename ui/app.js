@@ -274,13 +274,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   function pg(color, type) {
     return XQ.UI && XQ.UI.pieceGlyph ? XQ.UI.pieceGlyph(color, type) : XQ.Piece.CHARS[color][type];
   }
-  /* 第41轮 兑底透明化 (v2.0 语义): 兑底着法 = 模型未给 summary 且未给 confidence (重试全败后安全阀代走)。
+  function isLLMFallback(kind, summary, confidence) {
+    return kind === 'llm' && !summary && confidence == null;
+  }
+  /* 第41轮 兑底透明化 (v2.0 语义): 兑底着法 = LLM 未给 summary 且未给 confidence。
      原实现用 `entry.summary === '(无摘要)'` 判定 — 而该值自第40轮起改由字典产出 (EN 译作 '(no summary)'),
      跨语言比对必然失败 → 英文界面下兑底徽章/摘要/推理全部不再出现 (功能随 i18n 修复静默消失)。
      现按「模型是否真的给了 summary」这一原始事实判定, 并落在语言中立的布尔旗标 entry.fallback 上,
      渲染层据旗标选词 (见 renderer.decisionCards), 与界面语言彻底解耦。 */
-  function fbMark(entry, hasSummary, rawReasoning) {
-    entry.fallback = !hasSummary && entry.confidence == null;
+  function fbMark(entry, hasSummary, rawReasoning, kind) {
+    entry.fallback = isLLMFallback(kind, hasSummary, entry.confidence);
     if (!entry.fallback) return entry;
     entry.summary = '';   // 摘要位置让给本地化的 fb_summary (旗标即数据, 不再用中文串充当标记)
     if (!rawReasoning) entry.reasoning = '【兑底】前几次输出无效, 系统按静态评分选定此安全走法';   // 前缀是数据标记, renderer 按前缀映射 fb_reason
@@ -317,7 +320,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       unanimity: !!(meta && meta.unanimity),
       committeeMode: (meta && meta.committeeMode) || (meta && meta.roundtable ? 'roundtable' : null) || ((agents[side] && agents[side].models && agents[side].models.length > 1) ? (agents[side].agent && agents[side].agent._mode || 'council') : null)   // 第56轮: 模式标记; 复盘优先使用棋谱记录
     };
-    fbMark(entry, hasSummary, entry.reasoning);   // 第41轮: 兑底着法标旗 (无 summary 且无 confidence)
+    fbMark(entry, hasSummary, entry.reasoning, holder ? holder.kind : 'human');   // 人类和随机AI没有模型摘要，不代表LLM失败。
     if (!entry.fallback && !entry.summary) entry.summary = (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)');   // 纯展示兜底: 有 summary 缺失但置信度在 → 保留原「无摘要」占位
     decisionLog[side].push(entry);
     if (decisionLog[side].length > 60) decisionLog[side].shift();
@@ -782,6 +785,35 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   };
   var CFG_KEY = 'xq_v1_settings';
 
+  function settingsLLMActive(side) {
+    var d = SIDE_DEFS[side];
+    return document.getElementById(d.checkbox).checked && document.getElementById(d.type).value === 'llm';
+  }
+  function syncSettingsModes() {
+    Object.keys(SIDE_DEFS).forEach(function (side) {
+      var checkbox = document.getElementById(SIDE_DEFS[side].checkbox);
+      var col = checkbox.closest('.set-col');
+      var visible = relayAvailable && settingsLLMActive(side);
+      if (col) col.querySelectorAll('.llm-only').forEach(function (el) {
+        el.style.display = visible ? '' : 'none';
+      });
+    });
+    paintServerWarn();
+  }
+  function bindSettingsModes() {
+    Object.keys(SIDE_DEFS).forEach(function (side) {
+      var d = SIDE_DEFS[side];
+      [d.checkbox, d.type].forEach(function (id) {
+        document.getElementById(id).addEventListener('change', syncSettingsModes);
+      });
+    });
+    syncSettingsModes();
+  }
+  function setRelayAvailable(available) {
+    relayAvailable = !!available;
+    syncSettingsModes();
+  }
+
   /* 动态拉取服务商列表 (中继可用时覆盖静态 options) */
   var PROVIDER_MODELS = {};
   function fillModelDatalist() {
@@ -817,9 +849,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     if (!relayAvailable) return Promise.resolve(false);
     return fetch('api/providers').then(function (r) { return r.json(); })
       .then(function (j) {
-        var list = (j && j.providers) || [];
-        if (!list.length) return false;
+        var list = j && Array.isArray(j.providers) ? j.providers : [];
         _noKeysConfigured = !list.some(function (pk) { return pk.hasKey; });   // 第28轮: 零 Key 探测 (设置面板给可操作提示)
+        syncSettingsModes();
+        if (!list.length) return false;
         PROVIDER_MODELS = {};
         list.forEach(function (p) { PROVIDER_MODELS[p.id] = p.models || []; });
         Object.keys(SIDE_DEFS).forEach(function (side) {
@@ -888,6 +921,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (document.getElementById(d.quick)) document.getElementById(d.quick).checked = !!v.quick;
       if (document.getElementById(d.multi)) document.getElementById(d.multi).value = v.multi || 'off';
     });
+    syncSettingsModes();
   }
   function saveAISettings() {
     /* 第36轮: 对局进行中改设置=开新局 — 与 R 键悔棋路径同口径确认 */
@@ -994,7 +1028,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var swEl = document.getElementById('server-warn');
     if (!swEl) return;
     var noKey = relayAvailable && typeof _noKeysConfigured !== 'undefined' && _noKeysConfigured;   // 第28轮: 中继活但零 Key → 给可操作提示 (原先只在走子失败时暴露)
-    swEl.style.display = (!relayAvailable || noKey) ? 'block' : 'none';
+    var wantsLLM = Object.keys(SIDE_DEFS).some(settingsLLMActive);
+    swEl.style.display = wantsLLM && (!relayAvailable || noKey) ? 'block' : 'none';
     swEl.innerHTML = noKey
       ? (XQ.I18N ? XQ.I18N.t('server_no_key') : '')
       : (XQ.I18N ? XQ.I18N.t('server_warn') : '') + '<b>http://' + location.host + '</b>';
@@ -1004,17 +1039,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var saved;
     try { saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); } catch (e) { saved = {}; }
     fillSettings(saved);
-    var llmOpts = document.querySelectorAll('.llm-only');
-    llmOpts.forEach(function (el) {
-      el.style.display = relayAvailable ? '' : 'none';
-    });
-    paintServerWarn();
     document.getElementById('settings-overlay').classList.add('show');
     var gb = document.getElementById('gear-toggle');   // 第42轮 a11y: 展开态与 aria-haspopup="dialog" 配套
     if (gb) gb.setAttribute('aria-expanded', 'true');
     // 第23轮 a11y: focus 延到下一渲染帧 — visibility 过渡起帧前元素仍按 hidden 计算, 同步/强制 reflow 的 focus 都被静默忽略 (实测定位)
     var fEl = document.getElementById('ai-red-enabled');
-    var doFocus = function () { if (fEl) { try { fEl.focus({ preventScroll: true }); } catch (eF) { fEl.focus(); } } };
+    var doFocus = function () {
+      var overlay = document.getElementById('settings-overlay');
+      if (!overlay || !overlay.classList.contains('show')) return;
+      if (fEl) { try { fEl.focus({ preventScroll: true }); } catch (eF) { fEl.focus(); } }
+    };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { requestAnimationFrame(doFocus); });
     else setTimeout(doFocus, 0);   // v1.0.daily a11y: 打开焦点入面板
   }
@@ -1278,7 +1312,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         summary: m.summary || '', plan: m.plan || '', evaluation: m.evaluation || '',
         confidence: (typeof m.confidence === 'number') ? m.confidence : null, candidates: m.candidates || [], reasoning: '', secs: secs2,
         voterName: m.voterName || null, votes: m.votes || null, unanimity: !!m.unanimity, committeeMode: m.committeeMode || null };
-      fbMark(entry2, !!m.summary, '');
+      fbMark(entry2, !!m.summary, '', rec[sd] && rec[sd].kind);
       if (!entry2.fallback && !entry2.summary) entry2.summary = (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)');
       decisionLog[sd].push(entry2);
     });
@@ -1445,6 +1479,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         try { if (localStorage.getItem('xq_fold_' + (id === 'think-red' ? 'red' : 'black')) === '1') { root.classList.add('collapsed'); var f0 = head.querySelector('.fold'); if (f0) f0.textContent = '▸'; syncExp(); } } catch (eF2) {}
       }
     });
+    bindSettingsModes();
     document.getElementById('gear-toggle').onclick = openAISettings;
     var closeSettingsBtn = document.getElementById('btn-settings-close');
     if (closeSettingsBtn) closeSettingsBtn.onclick = closeAISettings;
@@ -1649,7 +1684,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         return w;
       };
       spEl.addEventListener('pointerdown', function (e) {
-        spDrag = { x: e.clientX, w: parseInt(getComputedStyle(document.querySelector('.think-panel')).width, 10) || 200, lastW: null };
+        spDrag = { x: e.clientX, w: parseInt(getComputedStyle(document.querySelector('.think-panel')).width, 10) || 240, lastW: null };
         if (spEl.setPointerCapture) { try { spEl.setPointerCapture(e.pointerId); } catch (eC) {} }
         e.preventDefault();
       });
@@ -1673,7 +1708,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
            焦点在分隔条上按一次 ←/→ 既调宽又移动棋盘光标 (还多播报一次格位)。此处显式 stopPropagation,
            与「已被消费就放行」的全局判据形成双保险 (任一条单独存在即可阻断)。 */
         e.stopPropagation();
-        var cur = parseInt(getComputedStyle(document.querySelector('.think-panel')).width, 10) || 200;
+        var cur = parseInt(getComputedStyle(document.querySelector('.think-panel')).width, 10) || 240;
         spApply(cur + (e.key === 'ArrowRight' ? 10 : -10), true);
       });
     }
@@ -1862,8 +1897,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
 
     // 探测本地中继是否可用
     fetch('api/health').then(function (r) { return r.json(); })
-      .then(function (j) { relayAvailable = !!(j && j.relay); })
-      .catch(function () { relayAvailable = false; })
+      .then(function (j) { setRelayAvailable(j && j.relay); })
+      .catch(function () { setRelayAvailable(false); })
       .then(function () {
         return loadProviderOptions();
       })
@@ -2847,7 +2882,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       else if (st.mark === '困') html += '<div style="color:#ff5050;font-size:13px;font-weight:bold">' + T('rp_stuck') + '</div>';
       else if (st.mark === '将') html += '<div style="color:#e0a030;font-size:12px">' + T('rp_check_now') + '</div>';
       if (e.summary) html += '<div>🧠 <b>' + T('rp_ai_summary') + '</b> ' + esc2(e.summary) + '</div>';
-      else html += '<div>🧠 <b>' + T('rp_ai_summary') + '</b> <span style="color:#c4a56e">' + T('rp_fallback_summary') + '</span></div>';   // v3.4: 兑底手回放不空白
+      else html += '<div>🧠 <b>' + T('rp_ai_summary') + '</b> <span style="color:#c4a56e">' + T(isLLMFallback(rpSession.record && rpSession.record[e.side] && rpSession.record[e.side].kind, e.summary, e.confidence) ? 'rp_fallback_summary' : 'summary_none') + '</span></div>';
       if (e.plan) html += '<div style="color:#c4a56e;font-size:12px">📋 ' + T('rp_plan') + ' ' + esc2(e.plan) + '</div>';
       if (e.evaluation) html += '<div>⚖️ <b>' + T('rp_eval_label') + '</b> ' + esc2(e.evaluation) + '</div>';
       html += '<div>🎯 <b>' + T('rp_confidence') + '</b> ' + (typeof e.confidence === 'number' ? e.confidence : '—')

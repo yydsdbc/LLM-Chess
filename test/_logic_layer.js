@@ -477,6 +477,8 @@ function swNav(u) { return Promise.resolve(swFire('fetch', navReq(u))); }
 }).then(function () {
   l22Round72();               // 第72轮: 回放自动播放取消与主盘连续复盘恢复
 }).then(function () {
+  l23Round77();               // 第77轮: 真实棋手类型的兑底判定与决策卡局部更新
+}).then(function () {
   // L9 PGN 导入 (第36轮新增解析器的守护): 标签/多标签/着法/非法报错
 var pgnOk = ['[Event "x"]', '[Red "红"] [RedModel "glm-a"]', '[Black "黑"] [BlackModel "glm-c"]', '[Result "1-0"]', '', '1. h3-e3 b10-c8 2. b3-c3'].join(String.fromCharCode(10));
 var recP = XQ.Record.importFromPGN(pgnOk);
@@ -1190,4 +1192,75 @@ function l22Round72() {
     'L22 新局不继承旧思考状态、动画或将军闪屏');
   ok(syncedRecord === startCtx.currentRecord && syncedRecord.moves.length === 0,
     'L22 存谱和悔棋按钮根据新空棋谱更新，不能读取上一局');
+}
+
+function l23Round77() {
+  var appSource = fs.readFileSync(path.join(ROOT, 'ui/app.js'), 'utf8');
+  var markStart = appSource.indexOf('  function fbMark(');
+  var helperStart = appSource.indexOf('  function isLLMFallback(');
+  var markEnd = appSource.indexOf('  function afterMove(', markStart);
+  if (markStart < 0 || markEnd < 0) throw new Error('L23 生产兑底函数边界缺失');
+  var markCtx = {};
+  vm.runInNewContext(appSource.slice(helperStart >= 0 ? helperStart : markStart, markEnd), markCtx);
+  var kinds = [
+    { kind: 'human', summary: '', confidence: null, fallback: false },
+    { kind: 'random', summary: '', confidence: null, fallback: false },
+    { kind: undefined, summary: '', confidence: null, fallback: false },
+    { kind: 'llm', summary: '', confidence: null, fallback: true },
+    { kind: 'llm', summary: '保护中兵', confidence: null, fallback: false },
+    { kind: 'llm', summary: '', confidence: 0, fallback: false },
+    { kind: 'llm', summary: '', confidence: 0.7, fallback: false }
+  ];
+  kinds.forEach(function (c) {
+    var entry = { summary: c.summary, confidence: c.confidence };
+    markCtx.fbMark(entry, !!c.summary, '', c.kind);
+    ok(entry.fallback === c.fallback,
+      'L23 兑底仅限缺摘要且缺信心的 LLM: ' + String(c.kind) + '/' + c.summary + '/' + c.confidence);
+    if (!c.fallback) ok(!entry.reasoning, 'L23 非兑底着法不捏造模型失败推理: ' + String(c.kind));
+  });
+
+  var infoStart = appSource.indexOf('  function rpPaintInfo(st) {');
+  var infoEnd = appSource.indexOf('  /* v1.6.1 评估条:', infoStart);
+  if (infoStart < 0 || infoEnd < 0) throw new Error('L23 生产回放信息函数边界缺失');
+  markCtx.XQ = sandbox.XQ;
+  markCtx.rpCtrl = null;
+  markCtx.rpSession = { summary: {}, record: { red: {}, black: {}, moves: [] } };
+  markCtx.rpEl = { info: {}, range: {} };
+  markCtx.pg = function () { return '兵'; };
+  markCtx.esc2 = function (s) { return String(s == null ? '' : s); };
+  markCtx.rpRepaintFocus = function (el, html) { el.innerHTML = html; };
+  markCtx.document = { getElementById: function () { return null; } };
+  vm.runInNewContext(appSource.slice(infoStart, infoEnd), markCtx);
+  kinds.forEach(function (c) {
+    markCtx.rpSession.record.red.kind = c.kind;
+    markCtx.rpPaintInfo({ idx: 1, total: 1, entry: { side: 'red', piece: 'pawn', from: 'a4', to: 'a5', summary: c.summary, confidence: c.confidence } });
+    var html = markCtx.rpEl.info.innerHTML;
+    ok((html.indexOf(sandbox.XQ.I18N.t('rp_fallback_summary')) >= 0) === c.fallback,
+      'L23 回放与实盘兑底口径一致: ' + String(c.kind) + '/' + c.summary + '/' + c.confidence);
+    if (!c.summary && !c.fallback) ok(html.indexOf(sandbox.XQ.I18N.t('summary_none')) >= 0,
+      'L23 回放缺摘要不等于模型失败: ' + String(c.kind));
+  });
+
+  var savedPanel = DOC_MAP['think-red'];
+  var savedWindow = sandbox.window;
+  var panel = mkEl('div'), body = mkEl('div'), pager = mkEl('div');
+  var prev = mkEl('button'), next = mkEl('button'), pgInfo = mkEl('span');
+  pager.querySelector = function (selector) { return selector === '.pg-prev' ? prev : selector === '.pg-next' ? next : pgInfo; };
+  panel.querySelector = function (selector) { return selector === '.think-body' ? body : selector === '.think-pager' ? pager : null; };
+  body.clientWidth = 240; body.clientHeight = 160;
+  body.getBoundingClientRect = function () { return { width: 240, height: 160 }; };
+  sandbox.window = { getComputedStyle: function () { return { fontSize: '14px', lineHeight: '22px', fontStyle: 'normal', fontWeight: '400', fontFamily: 'sans-serif' }; } };
+  DOC_MAP['think-red'] = panel;
+  var markup = '<div class="dcard">最新决策</div>';
+  sandbox.XQ.UI.thinkPanel('red', { cards: [markup] });
+  [{ stat: '1手' }, { name: '红方' }, { active: true }, { info: 'model info' }].forEach(function (opts) {
+    sandbox.XQ.UI.thinkPanel('red', opts);
+    ok(body.classList.contains('card-mode') && body.innerHTML === markup,
+      'L23 决策卡局部更新保留卡片模式与正文: ' + Object.keys(opts)[0]);
+  });
+  sandbox.XQ.UI.thinkPanel('red', { text: '等待下一局', active: false });
+  ok(!body.classList.contains('card-mode') && body.textContent === '等待下一局',
+    'L23 显式 text 更新才退出卡片模式');
+  DOC_MAP['think-red'] = savedPanel;
+  sandbox.window = savedWindow;
 }
