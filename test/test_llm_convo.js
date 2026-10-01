@@ -203,7 +203,7 @@ function ok(cond, name) {
   const sysP = calls[0].messages[0].content;
   ok(sysP.includes('照面违规被拒'), 'system 含照面规则 (v3.9b: 引擎拒照面, 提示词预防烧重试)');
   ok(sysP.includes('一律红方视角'), 'system evaluation 红方视角口径统一 (v3.9b: 黑方不再歧义)');
-  ok(sysP.includes('车换马炮亏'), 'system 含兑子速算 (v3.9b)');
+  ok(sysP.includes('车换单个马炮亏'), 'system 兑子速算明确区分单子与双子交换');
   ok(sysP.includes('过河兵价值翻倍'), 'system 含过河兵价值 (v3.9b)');
   ok(!sysP.includes('解将除外'), 'system 防拉锯不再暗示连将豁免 (v3.9b, 与长将判负矛盾消解)');
   ok(sysP.includes('沿线直射'), 'system 露将具体化 (v3.9b)');
@@ -225,7 +225,7 @@ function ok(cond, name) {
     ok(mvMD && mvMD.meta && mvMD.meta.attempts === 2, '缺字段场景重试成功 (v3.9b)');
     ok(!userMD.includes('已被系统拒绝的着法'), '仅缺输出字段不禁用合法中炮着法');
   }
-  ok(sysR.includes('开局路线'), '首手 system 含开局三节');
+  ok(sysR.includes('开局路线只是选项') && sysR.includes('战术优先于开局路线'), '默认 high 提供可选开局路线并服从当前战术');
   ok(sysR.includes('标注图例') && sysR.includes('危=走后被白吃') && sysR.includes('亏=此吃子交换净亏'), 'system 含合法列表标注图例 (v3.3)');
   {
     // v2.6 连走 6 手: system 应逐字恒定 (缓存优先), 开局三节保留但自带忽略标记
@@ -248,7 +248,7 @@ function ok(cond, name) {
     for (let k = 0; k < 6; k++) await agentM.next(engineM, null);
     const sysMid = calls[calls.length - 1].messages[0].content;
     ok(sysMid === calls[baseM].messages[0].content, 'system 全程恒定: 第6手与第1手逐字相同 (v2.6 缓存优先, 动态裁剪取消)');
-    ok(sysMid.includes('开局路线') && sysMid.includes('中残局忽略本节'), '开局三节全程保留且自带中残局忽略自限标记');
+    ok(sysMid.includes('阶段策略') && sysMid.includes('中残局忽略开局建议'), '阶段策略全程固定且明确中残局忽略开局建议');
     ok(sysMid.includes('方向感') && sysMid.includes('思考纪律') && sysMid.includes('输出格式'), '中残局仍保留方向感/思考纪律/输出格式');
   }
 

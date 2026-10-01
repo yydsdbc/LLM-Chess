@@ -339,7 +339,7 @@
   }
 
   // ── 摘要生成 (简短中文, 直接注入 prompt) ──
-  function summarize(engine, side) {
+  function summarize(engine, side, options) {
     var e = evaluate(engine, side);
     var s = e.score;
     var youLose = s < 0;
@@ -377,7 +377,7 @@
     if (e.bottomCannonTheirs.length) risk.push('对方沉底炮(' + e.bottomCannonTheirs.join('、') + ')压你方底线, 警惕底线闷杀, 可兑走或驱赶');   // v3.9
     if (e.attackHorseMine.length) adv.push('己方马(' + e.attackHorseMine.join('、') + ')逼近对方九宫, 己成槽心/挂角位, 可跴将/抽车取势, 护住马眼勿轻兑');   // v3.9.2 槽心马/挂角马 (零噪音, 与窝心马 v2.5 x=4 宫心互斥)
     if (e.attackHorseTheirs.length) risk.push('对方马(' + e.attackHorseTheirs.join('、') + ')逼近你方九宫, 可走槽心/挂角位, 勿随手送马, 可驱赶/走跴或预兑');   // v3.9.2
-    if (e.phase === 'opening') {   // v3.2 开局任务提醒 (中残局零噪音)
+    if (e.phase === 'opening' && !(options && options.openingTasks === false)) {   // 请求可省略固定路线，观战摘要默认行为保留。
       if (!e.taskCannon) adv.push('开局任务: 尽快架中炮 (炮二/八平五)');
       if (e.taskHomeKnights >= 1) adv.push('开局任务: 尽快上正马 (两匹都出)');   // v3.2: 还有马在原位就提醒 (含已上一匹的情况)
       if (e.taskCannon && e.taskHomeKnights === 0 && e.taskHomeRooks >= 1) adv.push('三任务近完成, 优先出车进攻 (车一平二/车九平八, 占肋道/卒林线)');   // v3.4: 出车提醒收紧到三任务近完成 (原 opening 全程触发与挺兵任务抢手)

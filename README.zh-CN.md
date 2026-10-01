@@ -80,9 +80,9 @@ LLM-chess/
 
 ## v1.5 观战直播平台
 
-- **AI 信息面板**：双侧面板头部下方 info 条 —— 提示词等级徽章(无=灰/低=蓝/中=绿/高=金) + 局面评价摘要(优势绿/风险红)；思考中闪烁提示。
+- **AI 信息面板**：双侧面板头部下方 info 条 —— 提示词等级徽章(无=灰/高=金，旧棋谱仍显示原等级) + 局面评价摘要(优势绿/风险红)；思考中闪烁提示。
 - **思考可视化（决策卡片）**：每手落子后面板切换为卡片流 —— 着法/战略计划/摘要/候选着法+评分/信心/耗时，最近 4 手；备选模式保留分页文本流。
-- **提示词等级系统**：设置页每方可选 无/低/中/高，控制注入 system prompt 的风格指引量（无=纯引擎评价零偏置）；等级随棋谱存档（agents[side].style 字段，旧棋风存档自动映射显示）。
+- **提示词等级系统**：设置页每方仅可选 **无（基础协议）** 或 **高（策略与战术，默认）**。无保留任务、坐标、合法列表与输出格式，不指定开局或棋风；高增加应将、交换、对手回应和阶段策略。两级仍共享引擎局面摘要、合法着法标注及代码安全守卫，不能把“无”当作完全无辅助的模型。旧低/中及旧棋风设置加载后转为高；已有棋谱保留原始等级元数据。续局沿用当前棋手设置，跨提示词版本续弈可能混合策略，不能按初始等级作为整局对照样本。
 - **观战动效**：落子滑动入位(0.28s) + 吃子 ghost 淡出 + 将军警示音(两连上升音) + 将帅格红色脉冲 + 思考面板呼吸边框。
 - **统一输出协议**：LLM 扩展 JSON `{from,to,plan,summary,candidates[{move,score}],evaluation,confidence}`，解析失败前 2 次严格重试(含字段完整性校验)、第 3 次坐标兑底(校验合法列表)；嵌套 JSON 用括号配对扫描器提取。
 - **快棋提示词 (v1.5.2)**：system 629 字(原 1178)——禁深推、凭直觉一步选定、优先级一行化、输出总长≤120字；max_tokens 2000；实测 glm-5.3-flash 首手 8~20s (原 70~300s); 流式 JSON 不上推面板 (仅 reasoning 上推) + 强制 100% 简体中文 + 字体加大 (12.5px) + stat 压紧防 tokens 被挤 + UNKNOWN_FIELD/REASONING_REQUIRED 自动摘字段重试；thinking 字段链路已打通(server 透传, 默认不发送, glm-5.3 系强制思考)。
@@ -170,7 +170,7 @@ LLM-chess/
 | 单机 (人类/随机AI) | 双击 `index.html` 或任意静态服务器 | 零依赖 |
 | 人机/AI对战 (LLM) | `node server.js` → http://localhost:8788 | 密钥在 `config/keys.json` 填好后重启 |
 
-- 设置入口：棋盘左上角 ⚙。每方可独立配置 人类 / 随机AI / LLM（红黑可用不同服务商），LLM 可另选提示词等级（无/低/中/高）。
+- 设置入口：棋盘左上角 ⚙。每方可独立配置 人类 / 随机AI / LLM（红黑可用不同服务商），LLM 可另选提示词等级（无/高，默认高）。
 - 全屏观战：顶部 ⛶ 按钮或 F 键（设置/输入框聚焦时不抢键；回放打开时 F 归回放全屏管）。
 - 竞技场布局：左侧红方 / 右侧黑方思考流面板（LLM 流式输出 reasoning，侧边显示累计耗时/手数）；底部横幅带方色 + 棋谱行记录每手耗时 ⏱。窄屏自动变红上黑下横条。
 - 存档：下方 💾 导出当前对局 JSON；📂 导入并重放。
@@ -182,10 +182,10 @@ LLM-chess/
 |------|------|
 | `node test/run_tests.js` | 引擎 50 项 (perft 金标准 + 重复局面/长将追踪/moveTag 三态/长将判负/三次重复判和/送吃守卫/自然限着判和) |
 | `node test/test_match_lifecycle.js` | 对局生命周期 8 项 (截止时间/迟到结果隔离/观察者异常/CLI 单次计分) |
-| `node test/test_settings_modes.js` | 有效棋手类型、配置保留、无密钥提示与设置焦点 |
+| `node test/test_settings_modes.js` | 有效棋手类型、配置保留、两级设置迁移、无密钥提示与设置焦点 |
 | `node test/test_engine_cache.js` | 引擎状态与缓存 14 项 (自定义起始局面/快照隔离/将军后悔棋) |
 | `node test/test_record_edges.js` | 棋谱、Elo、备份 39 项 (旧格式迁移/模型名边界/PGN 注释隔离) |
-| `node test/test_evaluation.js` | 阶段性知识模型 88 项 (阶段判断/动态子力/摘要/士象完整性/底线老兵/空头炮/窝心马/中炮矄中卒/开局任务提醒/出车提醒/将门控制/兵临九宫/沉底炮) |
+| `node test/test_evaluation.js` | 阶段性知识模型 197 项 (阶段判断/动态子力/摘要/士象完整性/底线老兵/空头炮/窝心马/中炮矄中卒/开局任务提醒/出车提醒/将门控制/兵临九宫/沉底炮/请求省略固定路线但评价与风险不变) |
 | `node test/test_llm_convo.js` | LLM Agent 170 项 (提示词/重试/缓存/安全阀/外部中止与信号 getter/成功与错误 JSON 正文截止时间/格式重试保留合法原选) |
 | `node test/replay_smoke.js` | 回放系统 52 项 (数据层/控制层/倍速/循环/跳转/容错/杀标注/parseEval方向/导入落库/战绩汇总) |
 | `node test/_clean_reason_check.js` | 思考流清洗 10 项 (垃圾压缩/记谱保留/复述删改) |
@@ -195,7 +195,7 @@ LLM-chess/
 | `node test/check_ui.js` | 语法 (17 文件) + getElementById/HTML 交叉核查 + script src/localStorage 前缀/发布文件/HTML 净化/PWA manifest(图标+截图+分类)+SW 守护/回放对话框语义/生命周期世代守卫/a11y+PWA 源串守卫(#sr-alert 播报区/#sr-cursor 键盘光标播报/label for=/走法列表键盘/拖拽中止/终局卡焦点归还/设置层模态闸门/SW 全壳预缓存+导航兜底+写缓存兜底/棋子字单出口/兑底判定按原始 summary) + 接线/写入点守卫(静态 id 只许文档层取用/终局导出绑定/dataset.flip 写入点/隐藏工具条可聚焦性/状态条时钟补位/Enter·Space 让位/光标播报区清理/回放首绘/面板 stat 单出口/回放态 AI 闸门/终局卡别名先赋值后使用) + a11y/i18n/热路径/PWA 节 (回放工具条 17 个纯符号按钮的可访问名/棋谱下拉与跳转框与思考面板翻页器命名/翻转与全屏的 aria-pressed/试连结果 live region/回放层 Tab 陷阱对更高层模态让位/走法列表重建后归还焦点/会诊与帮助表 th[scope]/走法效果标记走字典/拖拽幽灵尺寸缓存/分隔条与音量松手才落盘/回放进度条 input 合帧/sw.js 作用域相对 API 判定与 waitUntil 写缓存/manifest 启动底色对齐**生效的** body 规则) + 事件双跑/ARIA 角色/重建保焦点节 (分隔条让位已消费的方向键与 selfActing 认 role=separator/徽章真按钮与 click 绑定与隐藏态 visibility/棋盘格 role=img 与走法条目 role=button/终局卡收起旗标与复位/续局横幅 role=status/思考面板与回放面板重建保焦点与展开态/四处焦点陷阱含 a[href]) + 双入口一致性/默认焦点/横幅语义节 (终局卡遮罩点击与 Esc 共用「已收起」旗标/回放走法表 role=button 与 aria-current/anthropic 上游失败 502 补 ACAO/Esc 穿过输入框早退与设置层消费声明/脚本错误横幅播报·可聚焦·有关闭绑定/首屏状态条 data-i18n 与 fetch 前同步首绘/回放盘面格子 role=img 与坐标标签与行列标尺 aria-hidden/跳最长思考的可访问名/续局横幅与横幅自清的焦点交还) + 敏感路径/模态收口/焦点与状态同步节 (静态托管 config·.git·logs 与点开头目录黑名单与空字节路径守卫/早期拒绝与 health·providers 补 ACAO/sw.js 只缓存 status===200/回放层收口未处理按键/设置面板红黑栏 role=group 与 aria-labelledby/走法日志悔棋·重开的焦点守护/回放传输按钮禁用后保留焦点/主界面走法条目 aria-current/回放全屏按钮名称随态与语言/#server-warn 的 role=status/snapshot 记忆化与每手死计算清理) + 规范化判黑名单/路由/中继收尾/隐藏禁用保焦点/语言热切节 (黑名单在规范化后逐段判定/路由只认 pathname/中继提前收尾单出口与响应体上限/sw activate 只清自身前缀/引擎 gaveCheck 含将杀与统计快照栈/#btn-row 隐藏·还原条隐藏·归档按钮禁用·回放打开者失效四处的焦点接管/横幅角色随可聚焦性增删/高倍速走法表同步 aria-current/试连结果走 tArgs 让 {ms} 真正替换/#server-warn 与终局结算块的语言热切重绘) |
 | `node test/_replay_edge.js` | 回放边界 (空/单/双手谱 + 越界跳转) + 书签纯逻辑 |
 | `node test/_logic_layer.js` | 纯逻辑层守护 (书签导航/存档配额与导入/Elo 数学/控制器边界) + 引擎 legalTargets·dangerTargets·inCheck·posKey 记忆化与状态版本失效 + DOM 桩渲染热路径守护 (每帧一次 snapshot/箭头与走势图签名去重/走法列表 tabindex/横幅投 #sr-alert) + DOM 桩 i18n·棋子字块 + vm 桩 Service Worker 离线壳守护 (安装期壳预缓存/作用域相对导航兜底/waitUntil 写缓存) + **L14·L15·L16·L17·L18·L19·L20** (决策卡无障碍名对真实字典/重复计数 undo 键时点/sw.js 作用域相对 API 判定/终局卡收起旗标与棋盘格·走法条目 ARIA 角色/横幅 err 态播报与收起时交还焦点/snapshot 记忆化: 同版本复用同一对象·走子换代·undo 读回被恢复盘面; L20: **逐手**比对增量统计与整条重放且采样强制覆盖将杀 (将军判定必须含 checkmate, 不只是 `result === 'check'`)·统计快照栈让悔棋精确还原且重走后不变式仍成立·sw activate 只清自身 `xq-shell-` 前缀 (同源兄弟应用缓存不被误删)) |
-| `node test/_prompt_level_smoke.js` | 提示词 63 项 (红黑双方四等级 2400 字门禁/每级前缀恒定/legacy 兼容/可解析 JSON 示例与输出预算) |
+| `node test/_prompt_level_smoke.js` | 提示词107项：红黑双方两等级2400字门禁/每级前缀恒定/旧配置规范化/可解析JSON示例与预算/完整请求不混入固定开局任务 |
 | `node test/replay_risk_check.js` | 回放疑误着法检测 (含懒补齐路径: 跳转到某手必须与逐手走到该手得到相同的风险表与相同的 将/杀/困 标注) + 存档配额兜底 |
 | `node test/_committee_agent.js` | 同方多 LLM 委员会: 会诊投票/平票决胜/轮换/全灭/用量聚合 |
 | `node test/_server_http.js` | server.js HTTP 行为 131 项 (含注入 stub 上游的真实中继穿越) | (真实起服务: 健康形状+版本/静态+ETag/304含sw.js与`?query`形态/404/路径穿越403含兄弟同名前缀目录与反斜杠形态/畸形编码400/**静态敏感路径黑名单**(`/config/keys.json` 此前逐字返回真实密钥文件; `.git/`·`logs/`·点开头目录一律拒绝)/**空字节路径守卫**(`GET /%00` 此前使 fs.stat 同步抛出并终止进程, 其后复检进程存活)/OPTIONS含静态路径/非法JSON 400/空体400/超2MB中断/未知服务商400/未配Key 400/缺model字段400/**CORS 精确来源白名单** (localhost 与配置来源放行, 其他远端和 null 拒绝) / **早期拒绝与 health·providers 补 ACAO**/providers形状+无密钥泄漏+hasKey+no-store/HEAD+ETag/manifest+icon+sw MIME/方法守卫/错ETag全量200/限流429+Retry-After+ACAO/OpenAI流式SSE直通/目录请求404/keys.json热加载+半写容错/**静态缓存失效判据**(改文件后不得回旧字节)/**上游请求构造口径**(自定义头合并/thinking 仅 GLM 系透传且对 GLM 系确实注入/尾斜杠去除与默认及自定义 chatPath/stream_options 仅流式/缺省值)/**上游连接失败 → 502**(该错误分支此前零覆盖, 回归会变成挂起而非快速失败; 两条协议路径都必须带 ACAO)/**上游非 200 状态透传**(401/429/500 不得被改写成 200/502 — 流式下错误体被当 SSE 解析, 最终只报「流式返回为空」)/**非对象 JSON 体 → 400**(字面量 null 请求体此前在 async 处理器里抛错并终止整个进程 — 一个 POST 即可远程打死中继)/providers name·baseUrl·models 透传/OPTIONS 预检头**值**/keys.json 被删(ENOENT)容错/静态 Cache-Control 指令值/`temperature: 0` 不被缺省覆盖/`Content-Length` 按**字节**长度(中文 prompt)/**上游中途断连 → 502**(非流式两条路径此前永久挂起 — 客户端只能自己超时, 实测 12s 无任何字节; Node 只在存在 `error` 监听时才 emit error, 故表现为挂起而非崩溃)/**非流式上游响应体 16MB 上限**(不再无界缓冲)/**黑名单改在规范化后逐段判定**(`/x/..%5cconfig/keys.json` 借 raw 首段绕过并返回密钥文件)/**路由只认 pathname**(`POST /api/chat?t=1` 此前落静态分支回 404)) |

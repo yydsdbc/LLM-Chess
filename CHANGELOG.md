@@ -7,6 +7,7 @@ Format based on Keep a Changelog; versions follow SemVer.
 ## [Unreleased]
 
 ### Changed
+- Reduce prompt selection to None (task/output protocol) and High (strategy/tactics, the default), with clearer tactical checks and flexible opening choices; migrate legacy settings to High while preserving historical game metadata.
 - Unify the live stage and settings with a graphite palette, warm wood board, clearer side colors and larger decision-card text; fit desktop viewports and preserve readable mobile cards.
 - Show LLM settings only for enabled LLM players, retain hidden configuration, and keep settings actions accessible while scrolling.
 - Align all prompt tiers with the 2400-character limit and clarify JSON budgets, coordinate exceptions, confidence, score perspective and pawn endgames.
@@ -14,7 +15,7 @@ Format based on Keep a Changelog; versions follow SemVer.
 ### Fixed
 - Preserve decision-card layout across partial panel updates and restrict fallback labels to LLM moves in live play, resumed games and replay.
 - Keep legal moves available during format-only retries, clear stale parsed moves between attempts, and detect missing keys even when the provider list is empty.
-- Restore readable black-turn status colors; verify both sides and all four prompt tiers and generate retry documentation from real requests.
+- Restore readable black-turn status colors; verify both sides and all supported prompt levels and generate retry documentation from real requests.
 - Cancel an entire committee turn across proposal, queue and final voting; enforce response-body deadlines and ignore late headless-match results.
 - Restore check state after undo, calculate legal recaptures on the correct board, and isolate match observers from settlement.
 - Separate Elo ratings from statistics with legacy-data compatibility, count CLI games once, and honor replacement-mode backup restores.

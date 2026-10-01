@@ -49,6 +49,9 @@ globalThis.fetch = async function (url, opts) {
   await agent.next(engine, null);
   const inc = calls[1].messages;
 
+  await XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'dump-none', promptLevel: 'none' }).next(XQ.Engine.create());
+  const noneSystem = calls[2].messages[0].content;
+
   // 从真实重试请求导出警告, 避免手写副本与实现漂移。
   const retryCalls = [];
   const originalFetch = globalThis.fetch;
@@ -66,7 +69,10 @@ globalThis.fetch = async function (url, opts) {
 
   let md = '# LLM 实际发送的提示词 (v' + JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version + ' 真实渲染)\n\n';
   md += '> 生成时间: ' + new Date().toLocaleString('zh-CN') + ' | 场景: 红方执子, mock 对局第1手与第3手\n\n';
-  md += '---\n\n## 一、首手 (每局第一次调用)\n\n### System (完整提示词)\n\n```text\n' + first[0].content + '\n```\n\n';
+  md += '两级选择: `none` 仅使用基本决策协议, `high` 额外加入战术核对与阶段策略, 默认 `high`。旧 `low`、`mid`、棋风与未知值均迁移为 `high`; 显式 `none` 保持不变。\n\n';
+  md += '`none` 仍共享当前棋盘、合法着法标注、引擎局面知识摘要及代码安全守卫, 并非完全无帮助的裸模型。LLM 请求使用的摘要保留真实阶段、威胁与评分, 不追加固定中炮或三任务路线; 引擎其他调用方的默认摘要保持兼容。两级的 System 各自保持固定, 换局或阶段变化不会动态裁剪。\n\n';
+  md += '---\n\n## 一、首手 (每局第一次调用)\n\n### High System (默认, 战术与阶段策略)\n\n```text\n' + first[0].content + '\n```\n\n';
+  md += '### None System (基本决策协议)\n\n```text\n' + noneSystem + '\n```\n\n';
   md += '### User\n\n```text\n' + first[1].content + '\n```\n\n';
   md += '---\n\n## 二、后续每手 (v2.7 多轮结构: system + 历史 user/assistant 对 + 增量 user; 请求 N+1 前缀 ⊇ 请求 N 全体, 前缀缓存最大化)\n\n### System (恒定提示词)\n\n```text\n' + inc[0].content + '\n```\n\n';
   md += '### 历史对数: ' + ((inc.length - 2) / 2 | 0) + ' 对 (末条为当前增量 user)\n\n### 增量 User (末条消息)\n\n```text\n' + inc[inc.length - 1].content + '\n```\n\n---\n\n';
@@ -82,10 +88,10 @@ globalThis.fetch = async function (url, opts) {
     console.log('[--check] 特殊符号扫描: ' + (bad.length ? '发现 ' + bad.join(' ') : '0 (通过)'));
     console.log('[--check] 增量消息数: ' + inc.length + ' | 历史对数: ' + ((inc.length - 2) / 2 | 0));
     if (sys.length > 2400 || bad.length) { console.log('[--check] ✗ 守护违例 — exit 1'); process.exit(1); }   // v3.9a: 升级为硬门禁
-    // 默认 mid 不能代表 high: 对红黑双方与全部等级检查实际发送的字节。
+    // 对红黑双方与两种实际等级检查发送字节, 不依赖默认值代替另一等级。
     try {
       for (const side of ['red', 'black']) {
-        for (const promptLevel of ['none', 'low', 'mid', 'high']) {
+        for (const promptLevel of ['none', 'high']) {
           const fixture = XQ.Engine.create();
           const move = fixture.generateLegalMoves(side)[0];
           let rendered;

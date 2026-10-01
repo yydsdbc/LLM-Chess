@@ -161,7 +161,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         + (e.secs ? ' | ' + e.secs + 's' : '');
     }).join('\n');
   }
-  /* v1.0.3 提示词等级徽章与决策面板 */
+  /* 新对局的 agent 等级统一为 none/high；保留 low/mid 显示映射供历史棋谱，不改历史元数据。 */
   function levelCN(s) {   // 第27轮 i18n: 档位徽章 无/低/中/高 原硬编码中文 (EN 面板徽章可见)
     var k = s === 'none' ? 'lvl_none' : s === 'low' ? 'lvl_low' : s === 'high' ? 'lvl_high' : 'lvl_mid';
     return XQ.I18N ? XQ.I18N.t(k) : (s === 'none' ? '无' : s === 'low' ? '低' : s === 'high' ? '高' : '中');
@@ -902,7 +902,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         type: document.getElementById(d.type).value,
         provider: document.getElementById(d.provider).value,
         model: document.getElementById(d.model).value,
-        style: document.getElementById(d.style) ? document.getElementById(d.style).value : 'mid',
+        style: XQ.LLMAgent.normalizePromptLevel(document.getElementById(d.style) ? document.getElementById(d.style).value : undefined),
         quick: document.getElementById(d.quick) ? document.getElementById(d.quick).checked : false,
         multi: document.getElementById(d.multi) ? document.getElementById(d.multi).value : 'off'   // 第31轮: 逐侧多 LLM 模式
       };
@@ -917,7 +917,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       document.getElementById(d.type).value = v.type || 'human';
       document.getElementById(d.provider).value = v.provider || 'deepseek';
       document.getElementById(d.model).value = v.model || '';
-      if (document.getElementById(d.style)) document.getElementById(d.style).value = v.style || 'mid';
+      if (document.getElementById(d.style)) document.getElementById(d.style).value = XQ.LLMAgent.normalizePromptLevel(v.style);
       if (document.getElementById(d.quick)) document.getElementById(d.quick).checked = !!v.quick;
       if (document.getElementById(d.multi)) document.getElementById(d.multi).value = v.multi || 'off';
     });
@@ -944,6 +944,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   function applyAgents(s) {
     Object.keys(SIDE_DEFS).forEach(function (side) {
       var v = s[side] || { type: 'human' };
+      var promptLevel = XQ.LLMAgent.normalizePromptLevel(v.style);
       if (!v.enabled || !v.type || v.type === 'human') { agents[side] = null; return; }
       if (v.type === 'random') {
         var Ts7 = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };   // 第26轮 i18n
@@ -978,7 +979,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         if (multiMode !== 'off') {
           agent = XQ.CommitteeAgent.create({
             side: side, provider: v.provider, models: specs, mode: multiMode,
-            promptLevel: v.style || 'mid', thinking: v.quick ? 'disabled' : 'enabled',
+            promptLevel: promptLevel, thinking: v.quick ? 'disabled' : 'enabled',
             onThinking: onThink, onRetry: onRetry2, onProgress: onProg,
             signal: function () { return gameAbort ? gameAbort.signal : undefined; },   // 第39轮: 取值函数 — applyAgents 先于 startRecord, 固化实例拿到的是随即被 abort 的旧代控制器 (每手请求被秒拒 → LLM 退化为随机走子)
             voterBudgetMs: 90000,
@@ -990,7 +991,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           modelsOut = specs;
         } else {
           agent = XQ.LLMAgent.create({
-            side: side, provider: v.provider, model: specs[0] || v.model, promptLevel: v.style || 'mid',
+            side: side, provider: v.provider, model: specs[0] || v.model, promptLevel: promptLevel,
             thinking: v.quick ? 'disabled' : 'enabled',
             onThinking: onThink, onRetry: onRetry2,
             signal: function () { return gameAbort ? gameAbort.signal : undefined; },   // 第39轮: 同上 — 取值函数解耦控制器换代
@@ -998,7 +999,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           });
           modelName = specs[0] || v.model;
         }
-        agents[side] = { kind: 'llm', label: modelName || 'LLM', model: modelName, provider: v.provider, quick: !!v.quick, style: v.style || 'mid', models: modelsOut, agent: agent };
+        agents[side] = { kind: 'llm', label: modelName || 'LLM', model: modelName, provider: v.provider, quick: !!v.quick, style: promptLevel, models: modelsOut, agent: agent };
       }
     });
     paintGear();

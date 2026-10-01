@@ -11,7 +11,7 @@
 ## 硬门禁（违反 = 白干）
 
 1. **测试**：`npm test`（并行 17 套件 ~20s）全绿才能 commit；单套件可 `node test/<name>.js`；改动 js 全部先 `node --check`。
-2. **system prompt**（`ai/llm_agent.js`）：≤2400 字、全中文、无特殊符号（①②③≥≤~→emoji）；提示词等级 none/low/mid/high 每级长度恒定（前缀缓存不变式）。
+2. **system prompt**（`ai/llm_agent.js`）：≤2400 字、全中文、无特殊符号（①②③≥≤~→emoji）；提示词等级仅 none/high，每级前缀恒定（前缀缓存不变式）。none 只保留任务与输出协议，high 增加策略与战术；旧 low/mid 配置统一迁移 high，旧棋谱等级元数据保留。
 3. **server.js 尽量不改**（改了用户要重启进程）；确要改必须跑 `test/check_ui.js`（只做语法检查）**以及 `test/_server_http.js`**（真正起服务的 HTTP 行为门禁：静态敏感路径/穿越/中继/CORS/限流）。
 4. **PowerShell 纪律**：每条命令后查 `$LASTEXITCODE`；严禁管道收尾（PowerShell 会伪报 exit 1）。
 5. **i18n**：改中文文案必须同步 `ui/i18n.js` 的 EN 键（i18n_check 把关）。

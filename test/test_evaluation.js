@@ -263,6 +263,16 @@ function stubEngine(cells, ply) {
     cR[7][2] = { color: 'red', type: 'knight' };   // 马 c3
     cR[7][6] = { color: 'red', type: 'knight' };   // 马 g3
     ok(/出车/.test(PE.summarize(stubEngine(cR, 10), 'red').advantages.join(';')), '三任务近完成 → 提醒出车 (v3.4)');
+    for (const side of ['red', 'black']) {
+      const engine = XQ.Engine.create();
+      const ordinary = PE.summarize(engine, side);
+      const protocol = PE.summarize(engine, side, { openingTasks: false });
+      ok(!/开局任务:|尽快架中炮|三任务近完成/.test(protocol.text), side + ' 请求摘要可省去固定开局任务');
+      ok(protocol.score === ordinary.score && protocol.phase === ordinary.phase && protocol.evaluation === ordinary.evaluation, side + ' 省略路线不改数值评价与局面阶段');
+      ok(JSON.stringify(protocol.risks) === JSON.stringify(ordinary.risks) && protocol.text.includes('阶段:') && protocol.text.includes('局面评分:'), side + ' 省略路线仍保留真实风险与阶段评分');
+      ok(/开局任务:/.test(PE.summarize(engine, side).text), side + ' 普通观战摘要默认行为保留且不被请求选项污染');
+    }
+    ok(!/三任务近完成/.test(PE.summarize(stubEngine(cR, 10), 'red', { openingTasks: false }).text), 'LLM摘要不在三任务近完成时催促固定出车');
   }
 
   // v3.9 沉底炮: 己方炮沉对方底线两翼 (b10/h10) → 攻方优势点名 + 守方风险点名; 初始局零噪音
@@ -381,9 +391,9 @@ function stubEngine(cells, ply) {
   {
     // 确认 systemPrompt 含评价原则(压缩行内联), user 含阶段摘要
     const src = fs.readFileSync(path.join(ROOT, 'ai/llm_agent.js'), 'utf8');
-    ok(src.includes('## 中国象棋评价原则: 开局重出子与车炮主动'), 'systemPrompt 内联压缩版评价原则 (v1.5.1 快棋)');
-    ok(src.includes('开局路线') && src.includes('架中炮') && src.includes('三任务') && src.includes('马脚') && src.includes('优先出车进攻'), 'systemPrompt 开局三任务 (v3.1 八步内架中炮/上马/挺兵开马脚, 任务完成后出车进攻)');
-    ok(src.includes('开局核心(前八步适用, 中残局忽略本节; 马攻为主') && src.includes('先保中兵'), 'systemPrompt 含马攻核心+中兵保护 (锚点随 v3.1 八步任务制更新)');
+    ok(src.includes('## 阶段策略:') && src.includes('中国象棋评价原则: 开局重出子与车炮主动'), 'high 固定阶段策略保留出子与攻势评价原则');
+    ok(src.includes('开局路线只是选项') && src.includes('架中炮') && src.includes('马脚') && src.includes('优先出车进攻') && !src.includes('八步内完成三任务'), 'high 提供可选开局发展方向而不要求固定三任务');
+    ok(src.includes('战术优先于开局路线') && src.includes('被将军先选合法应将') && src.includes('列表标杀/困表示一步直接取胜'), 'high 当前应将与合法胜着优先于开局路线');
     ok(src.includes('开局不要镜像'), 'systemPrompt 含反镜像指令 (v1.5.5)');
     ok(src.includes('mv.meta.reasoning = extractCN(out.reasoning'), 'llm_agent 把中文过滤后的 reasoning 挂到 mv.meta (v1.5.5)');
     ok(src.includes('禁止深度推演'), 'systemPrompt 快速决策约束 (v1.5.1)');

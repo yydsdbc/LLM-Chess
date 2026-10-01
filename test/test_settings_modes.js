@@ -5,12 +5,14 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const source = fs.readFileSync(path.join(__dirname, '..', 'ui', 'app.js'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 function part(start, end) {
   const from = source.indexOf(start), to = source.indexOf(end, from);
   assert(from >= 0 && to > from, 'production function boundary: ' + start);
   return source.slice(from, to);
 }
 const functions = part('  var SIDE_DEFS = {', '  /* 动态拉取服务商列表')
+  + part('  function levelCN(', '  function tokenStatsSuffix(')
   + part('  var PROVIDER_MODELS = {};', '  function readSettings()')
   + part('  function readSettings()', '  function fillSettings(')
   + part('  function fillSettings(', '  function saveAISettings(')
@@ -43,6 +45,17 @@ function fixture(options = {}) {
     for (const name of ['enabled', 'type', 'provider', 'model', 'multi', 'style', 'quick']) {
       const element = elements['ai-' + side + '-' + name] = domElement('ai-' + side + '-' + name);
       element.closest = selector => { assert.strictEqual(selector, '.set-col'); return columns[side]; };
+      if (name === 'style') {
+        const markup = new RegExp('<select id="ai-' + side + '-style">([\\s\\S]*?)</select>').exec(html);
+        assert(markup, 'prompt select exists for ' + side);
+        const options = [...markup[1].matchAll(/<option([^>]*)value="([^"]+)"([^>]*)>/g)];
+        const values = options.map(option => option[2]);
+        let value = (options.find(option => /\bselected\b/.test(option[1] + option[3])) || options[0])[2];
+        Object.defineProperty(element, 'value', {
+          get: () => value,
+          set: next => { value = values.indexOf(String(next)) >= 0 ? String(next) : ''; }
+        });
+      }
     }
   }
   for (const id of ['gear-toggle', 'settings-overlay', 'server-warn', 'move-log']) elements[id] = domElement(id);
@@ -63,7 +76,13 @@ function fixture(options = {}) {
   Object.values(elements).forEach(element => {
     element.focus = function () { this.focused = true; context.document.activeElement = this; };
   });
-  vm.createContext(context); vm.runInContext(functions, context, { filename: 'ui/app.js settings functions' });
+  const llmCreate = context.XQ.LLMAgent.create;
+  context.window.XQ = context.XQ;
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'ai', 'llm_agent.js'), 'utf8'), context, { filename: 'ai/llm_agent.js' });
+  assert.strictEqual(typeof context.XQ.LLMAgent.normalizePromptLevel, 'function', 'load production prompt normalization');
+  context.XQ.LLMAgent.create = llmCreate;
+  vm.runInContext(functions, context, { filename: 'ui/app.js settings functions' });
   context.fillSettings({ red: { enabled: false, type: 'human', provider: 'deepseek', model: 'red-model', style: 'high', quick: true, multi: 'roundtable' },
     black: { enabled: true, type: 'random', provider: 'openai', model: 'openai:black-model', style: 'low', quick: false, multi: 'council' } });
   context.bindSettingsModes();
@@ -164,6 +183,72 @@ test('saved enabled LLM mode remains active with all exact configuration values'
   assert.strictEqual(f.created[0].options.model, 'red-model');
   assert.strictEqual(f.created[0].options.promptLevel, 'high');
   assert.strictEqual(f.created[0].options.thinking, 'disabled');
+});
+test('both prompt selects expose only none and high, defaulting to high', () => {
+  for (const side of ['red', 'black']) {
+    const markup = new RegExp('<select id="ai-' + side + '-style">([\\s\\S]*?)</select>').exec(html);
+    assert(markup);
+    const options = [...markup[1].matchAll(/<option([^>]*)value="([^"]+)"([^>]*)>/g)];
+    assert.deepStrictEqual(options.map(option => option[2]), ['none', 'high']);
+    assert.deepStrictEqual(options.filter(option => /\bselected\b/.test(option[1] + option[3])).map(option => option[2]), ['high']);
+    assert(/data-i18n="pl_none"/.test(markup[1]) && /data-i18n="pl_high"/.test(markup[1]));
+  }
+});
+test('old, missing and unknown saved prompt levels restore as high; explicit none remains none', () => {
+  const f = fixture();
+  for (const old of ['low', 'mid', 'aggressive', 'defensive', 'balanced', 'unknown', '', undefined, null, 'high', 'none']) {
+    const saved = { red: { type: 'llm', enabled: true, style: old }, black: { type: 'llm', enabled: true, style: old } };
+    const original = JSON.stringify(saved);
+    f.context.fillSettings(saved);
+    const expected = old === 'none' ? 'none' : 'high';
+    assert.strictEqual(f.elements['ai-red-style'].value, expected);
+    assert.strictEqual(f.elements['ai-black-style'].value, expected);
+    assert.strictEqual(f.context.readSettings().red.style, expected);
+    assert.strictEqual(f.context.readSettings().black.style, expected);
+    assert.strictEqual(JSON.stringify(saved), original, 'restoring does not rewrite old metadata');
+  }
+});
+test('localStorage low/mid restoration saves high without falling into an empty select value', () => {
+  const f = fixture(); f.context.setRelayAvailable(true);
+  const saved = { red: { enabled: true, type: 'llm', provider: 'deepseek', model: 'A', style: 'low', multi: 'off' },
+    black: { enabled: true, type: 'llm', provider: 'openai', model: 'B', style: 'mid', multi: 'off' } };
+  f.storage.xq_v1_settings = JSON.stringify(saved);
+  f.context.openAISettings();
+  assert.strictEqual(f.elements['ai-red-style'].value, 'high');
+  assert.strictEqual(f.elements['ai-black-style'].value, 'high');
+  assert.strictEqual(f.storage.xq_v1_settings, JSON.stringify(saved), 'opening alone does not overwrite storage');
+  f.context.saveAISettings();
+  const persisted = JSON.parse(f.storage.xq_v1_settings);
+  assert.strictEqual(persisted.red.style, 'high'); assert.strictEqual(persisted.black.style, 'high');
+  assert.deepStrictEqual(f.created.map(entry => entry.options.promptLevel), ['high', 'high']);
+  assert.strictEqual(f.context.agents.red.style, 'high'); assert.strictEqual(f.context.agents.black.style, 'high');
+});
+test('single and all committee paths normalize direct old configuration without rewriting input', () => {
+  for (const multi of ['off', 'rotate', 'council', 'roundtable']) {
+    for (const style of ['low', 'mid', 'defensive', undefined, 'none']) {
+      const f = fixture(); f.context.setRelayAvailable(true);
+      const saved = { red: { enabled: true, type: 'llm', provider: 'deepseek', model: multi === 'off' ? 'A' : 'A,B', style, multi },
+        black: { enabled: false, type: 'human' } };
+      const original = JSON.stringify(saved); f.context.applyAgents(saved);
+      const expected = style === 'none' ? 'none' : 'high';
+      assert.strictEqual(f.created.length, 1);
+      assert.strictEqual(f.created[0].kind, multi === 'off' ? 'llm' : 'committee');
+      assert.strictEqual(f.created[0].options.promptLevel, expected);
+      assert.strictEqual(f.context.agents.red.style, expected);
+      assert.strictEqual(f.context.levelClass(f.context.agents.red.style), expected === 'none' ? 'st-none' : 'st-high');
+      assert.strictEqual(JSON.stringify(saved), original);
+    }
+  }
+});
+test('empty/missing prompt controls resolve to high and existing historical low/mid badge mappings remain', () => {
+  const f = fixture();
+  f.elements['ai-red-style'].value = 'removed-level';
+  assert.strictEqual(f.elements['ai-red-style'].value, '');
+  assert.strictEqual(f.context.readSettings().red.style, 'high');
+  delete f.elements['ai-black-style'];
+  assert.strictEqual(f.context.readSettings().black.style, 'high');
+  assert.strictEqual(f.context.levelClass('low'), 'st-low'); assert.strictEqual(f.context.levelClass('mid'), 'st-mid');
+  assert.strictEqual(f.context.levelCN('low'), 'lvl_low'); assert.strictEqual(f.context.levelCN('mid'), 'lvl_mid');
 });
 async function asyncTest(name, run) {
   await run(); passed++; console.log('  [PASS] ' + name);
