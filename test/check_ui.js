@@ -523,6 +523,21 @@ if (!bodyBg) wire44.push('未从 index.html 取到生效的首屏底色 (守卫�
 else if (String(mf.background_color).toLowerCase() !== bodyBg.toLowerCase()) {
   wire44.push('manifest background_color (' + mf.background_color + ') 与首屏生效底色 (' + bodyBg + ') 不一致 (冷启动闪色)');
 }
+// (c6) 第81轮: 离线壳资产清单与 index.html 必须一一对应 — 并行 agent 加 ui/ui_batch80.js 时就差点漏掉
+//      SHELL (漏一个脚本, 离线模式该模块静默 404, 无任何报错直到断网才暴露)。两个方向都钉:
+//      index 引了壳没有 (离线缺失) 与壳里有 index 没引 (预缓存浪费或资源已下线)。
+const htmlScripts = (html.match(/src="[^"]+\.js"/g) || []).map(function (s) { return s.slice(5, -1); });
+const shellAssets = (swCode.match(/'\.\/[^']+'/g) || []).map(function (s) { return s.slice(3, -1); }).filter(function (u) { return u !== 'index.html'; });
+const htmlAssets = htmlScripts.concat(['manifest.json', 'ui/icon.svg']);
+shellAssets.forEach(function (a) { if (htmlAssets.indexOf(a) < 0) wire44.push('sw.js SHELL 多余条目 (index.html 未引用, 预缓存浪费或资源已下线): ' + a); });
+htmlAssets.forEach(function (a) { if (shellAssets.indexOf(a) < 0) wire44.push('index.html 引用但 sw.js SHELL 缺失 (离线模式该脚本静默 404): ' + a); });
+// (c7) 第81轮: theme-color meta 必须与 manifest theme_color 一致 (安卓安装后浏览器框/任务切换器配色,
+//      与 18节 manifest 底色守卫同一形态的冷启动闪色问题)。
+const metaTheme = (html.match(/<meta[^>]*name="theme-color"[^>]*content="([^"]+)"/) || (html.match(/<meta[^>]*content="([^"]+)"[^>]*name="theme-color"/) || []))[1];
+if (!metaTheme) wire44.push('index.html 缺 theme-color meta (移动端浏览器框配色回退默认色)');
+else if (String(mf.theme_color || '').toLowerCase() !== metaTheme.toLowerCase()) {
+  wire44.push('theme-color meta (' + metaTheme + ') 与 manifest theme_color (' + mf.theme_color + ') 不一致 (安装后框色与启动页闪色)');
+}
 (mf.screenshots || []).forEach(function (s) {
   let buf; try { buf = fs.readFileSync(__dirname + '/../' + s.src); } catch (e) { wire44.push('manifest 截图不存在: ' + s.src); return; }
   const real = buf.readUInt32BE(16) + 'x' + buf.readUInt32BE(20);
@@ -530,7 +545,7 @@ else if (String(mf.background_color).toLowerCase() !== bodyBg.toLowerCase()) {
 });
 const iconPurposes = (mf.icons || []).map(function (i) { return i.purpose; });
 if (iconPurposes.indexOf('any') < 0 || iconPurposes.indexOf('maskable') < 0) wire44.push('manifest 图标 purpose 未同时覆盖 any + maskable');
-console.log('第18节 a11y/i18n/热路径/PWA 守卫:', wire44.length ? wire44.join(' | ') : 'OK (工具条可访问名 + 下拉/跳转/翻页名 + aria-pressed + 试连 live region + 模态让位 + 焦点归还 + 表格语义 + 展示文本走字典 + 拖拽/分隔条/音量/进度条热路径 + sw 作用域相对与 waitUntil + manifest 底色/截图尺寸)');
+console.log('第18节 a11y/i18n/热路径/PWA 守卫:', wire44.length ? wire44.join(' | ') : 'OK (工具条可访问名 + 下拉/跳转/翻页名 + aria-pressed + 试连 live region + 模态让位 + 焦点归还 + 表格语义 + 展示文本走字典 + 拖拽/分隔条/音量/进度条热路径 + sw 作用域相对与 waitUntil + manifest 底色/截图尺寸 + 壳清单对账/theme-color)');
 if (wire44.length) process.exit(1);
 
 // 19) 第45轮 源串/结构守卫 — 本轮三类缺陷的共同形态:

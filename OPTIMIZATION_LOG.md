@@ -2298,3 +2298,11 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 修复③连带: declaredHuge 挪到独立实例 server2 的第80轮块 — 主实例分钟窗 30 已满 (第48轮注释口径: 16 单发 + 5 req POST + 9 连发), 并行 agent 加的这条 POST 把后续 tRes 的 postChat 推成 429。此前一直被穿越断言的 5s 超时掩盖 (超时把滑动窗整体后移 5 秒让 tRes 逃出窗口), 修复③消掉超时后 429 立即暴露 — 两个 bug 互相掩护, 各修各的。断言同时钉住 413 + Connection: close 双要素。
 - 门禁: npm run check ALL PASS (58 语法 + 提示词长度/禁符号/dump 新鲜度); npm test 21/21 PASS (含 _server_http 133/133); _server_http 单套件连跑 3 次全绿 (原失败为确定性复现, 非抖动)。
 - 收编说明: 并行 agent 的 batch80 工作 (UI 运行时防护/数据边界回归/静态缓存 LRU+ETag 复用/中继 URL 加固/端口参数校验/密钥缓存 size 校验) 在同一工作树完成但未提交; 本轮与其改动共同验证 21/21 后一并入库, 保持工作树干净以便后续轮次基线可判。
+
+## 2026-10-31 13:55 第81轮 (zcode — 离线壳对账守卫 + 回放进度键自愈 + theme-color 守卫)
+
+- 开工基线: main / 1c0610d (第80轮), 门禁全绿。本轮延续「继续优化」, 从三个已实证的薄弱点入手。
+- ① check_ui 18节新增壳清单双向对账 (c6): sw.js SHELL 与 index.html 的 src/href 资产必须一一对应 — 并行 agent 加 ui/ui_batch80.js 时就差点漏掉 SHELL, 而 SHELL 漏一个脚本 = 离线模式该模块静默 404 (无任何报错, 断网才暴露)。两个方向都钉: index 引了壳没有 (离线缺失) 与壳里有 index 没引 (预缓存浪费/资源已下线)。变异探针: 临时删 SHELL 的 ./ui/i18n.js → 当场红且只报对应条目, 还原后绿 — 守卫可证伪。
+- ② check_ui 18节新增 theme-color 守卫 (c7): meta theme-color 必须与 manifest theme_color 一致 (安卓安装后浏览器框/任务切换器配色, 与 manifest 底色守卫同形态的冷启动闪色问题)。
+- ③ app.js rpFillPicker 打开回放时对账清理孤儿进度键: xq_replay_pos_<id> 每局残留一键, 棋谱被删除/导入去重/容量裁剪后对应 id 永久失效但键还在 (record.js 的孤儿清理只管自家命名空间)。填充选择列表时存档已在手, 顺手清掉失效键 — 只在冷路径扫描, 有界、零额外读取, 全程 try/catch 不影响列表填充。
+- 门禁: npm run check ALL PASS; npm test 21/21 PASS (守卫新增两条探针验证后入列)。无新依赖, 无提示词改动, server.js 未动。

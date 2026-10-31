@@ -2277,6 +2277,19 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   function rpFillPicker() {
     var sel = rpEl.pick;
     var list = XQ.Replay.listLocal();
+    /* 第81轮: 残局进度键对账 — xq_replay_pos_<id> 每局残留一键, 棋谱被删除/导入去重/容量裁剪后
+       对应 id 永久失效但键还在 (record.js 的孤儿清理只管自家命名空间)。填充选择列表时存档已在手,
+       顺手清掉失效键; 只在打开回放的冷路径扫描, 有界且零额外读取。 */
+    try {
+      var liveIds = {};
+      list.forEach(function (s) { liveIds[s.id] = 1; });
+      var deadKeys = [];
+      for (var pi = 0; pi < localStorage.length; pi++) {
+        var pk = localStorage.key(pi);
+        if (pk && pk.indexOf('xq_replay_pos_') === 0 && !liveIds[pk.slice(14)]) deadKeys.push(pk);
+      }
+      for (var di = 0; di < deadKeys.length; di++) localStorage.removeItem(deadKeys[di]);
+    } catch (ePrune) {}
     sel.innerHTML = '';
     if (!list.length) {
       var o0 = document.createElement('option');
