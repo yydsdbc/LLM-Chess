@@ -24,13 +24,15 @@ Chinese Chess (Xiangqi) + LLM battle platform. v1.5 decision-card live spectatin
 | Re-watch / share a finished game | 🎬 **Watch replay** from the end-game card — no LLM calls, includes decision-card export |
 | Benchmark a model headlessly | `node test/match_headless.js <provider> <model>` → feed [LEADERBOARD.md](LEADERBOARD.md) |
 
-Local install:
+Local install (Windows: double-click `Start.cmd` — it checks Node for you; everyone else):
 
 ```bash
-git clone https://github.com/yydsdbc/LLM-Chess.git
+git clone --depth 1 https://github.com/yydsdbc/LLM-Chess.git   # zero dependencies — nothing to npm install
 cd LLM-Chess
-npm start            # or double-click Start.cmd — needs Node.js 18+
+npm start            # needs Node.js 18+
 ```
+
+No build step, no dependencies: cloning + Node 18 is the whole install. First run auto-generates `config/keys.json`; double-click `Stop.cmd` (or `npm stop`) to stop.
 
 Your browser opens http://localhost:8788 automatically.
 

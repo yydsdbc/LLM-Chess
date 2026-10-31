@@ -32,10 +32,12 @@
 本地安装：
 
 ```bash
-git clone <本仓库>
+git clone --depth 1 <本仓库>   # 零依赖 — 无需 npm install
 cd LLM-chess
-双击 Start.cmd        # 或: npm start (需 Node.js 18+)
+双击 Start.cmd        # 或: npm start (需 Node.js 18+; Start.cmd 会自检 Node)
 ```
+
+无构建步骤、零依赖：克隆 + Node 18 就是全部安装。首跑自动生成 `config/keys.json`；双击 `Stop.cmd` (或 `npm stop`) 停止。
 启动后浏览器自动打开 http://localhost:8788。
 
 - **零配置试玩**: 齿轮设置 → 执方选「随机AI」→ 开战 — 无需任何 API Key

@@ -368,7 +368,7 @@ h1{color:var(--t1);font-size:clamp(20px,2vw,30px);font-weight:650;letter-spacing
 .btn:hover{background:#354153;color:#fff;border-color:#8396b2;box-shadow:none}
 input[type=checkbox],input[type=range]{accent-color:var(--accent)}
 #settings-overlay{background:rgba(7,10,15,.78);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
-.set-card{width:820px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 48px);padding:24px;background:var(--surface);border:1px solid #596170;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.6);scrollbar-width:thin;scrollbar-color:#596170 transparent}
+.set-card{width:820px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 48px);padding:24px;background:var(--surface);border:1px solid #596170;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.6);scrollbar-width:thin;scrollbar-color:#596170 transparent};animation:setIn .22s ease-out
 .set-card h3{font-size:20px;color:var(--t1);text-align:left;letter-spacing:.5px;margin-bottom:20px}
 .set-cols{gap:16px;margin-bottom:16px;align-items:flex-start}
 .set-col{padding:16px;border:1px solid var(--line);border-radius:10px}
@@ -471,6 +471,13 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
 @media(max-width:1020px){.think-panel{width:100%}#panel-splitter-r{display:none}}
 /* 第33轮: 最新决策卡入场 (仅新卡动画, rebuild 旧卡不动) */
 @keyframes dcardIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes setIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}   /* 第90轮: 设置弹层入场 (reduced-motion 全局闸门已兜底) */
+.preset-chips{display:flex;flex-wrap:wrap;gap:8px}   /* 第90轮: 一键对局预选 — 中继可用时按已配 Key 服务商生成, 零 Key 也有随机对局 */
+.preset-chips .chip{padding:5px 12px;border-radius:999px;font-size:12px;letter-spacing:.3px;cursor:pointer;color:var(--t1);background:var(--surface);border:1px solid #596170;transition:border-color .15s,box-shadow .15s,transform .15s}
+.preset-chips .chip:hover{border-color:#C28A20;box-shadow:0 0 10px rgba(194,138,32,.35);transform:translateY(-1px)}
+.preset-chips .chip:focus-visible{outline:2px solid #C28A20;outline-offset:1px}
+.btn:hover{transform:translateY(-1px)}   /* 第90轮: 按钮悬停微抬升 */
+#btn-star:hover{box-shadow:0 0 12px rgba(194,138,32,.45);border-color:#C28A20}   /* 第90轮: Star 入口金色呼吸 */
 .d-new{animation:dcardIn .18s ease-out}
 /* 第33轮: 走法行内中文记谱 */
 .log-cn{color:#8a7550;margin-left:4px;font-family:"KaiTi","STKaiti",serif}
@@ -559,6 +566,10 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
     <div id="settings-overlay">
         <div class="set-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">   <!-- 第23轮 a11y: 对话语义 — 读屏以「对战设置」宣告进入弹层 -->
             <h3 id="settings-title" data-i18n="settings_title">Game Settings</h3>
+            <div class="set-row" id="preset-row">
+                <label for="preset-chips" data-i18n="preset_label">One-click matchup</label>
+                <div id="preset-chips" class="preset-chips"></div>
+            </div>
             <div class="set-cols">
                 <!-- 第47轮 a11y: 红/黑两栏此前是无语义 div, 两侧控件可访问名完全相同 (「对手类型」「服务商…」
                      「模型名称」各出现两次), 读屏用户无从分辨在配哪一方 — WCAG 1.3.1 要求分组可由程序判定。
@@ -575,7 +586,7 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
                         <span id="ai-red-testres" role="status" aria-live="polite" style="font-size:11px"></span>
                     </div>
                     <div class="set-row llm-only"><label for="ai-red-model" data-i18n="model">Model</label>
-                        <input type="text" id="ai-red-model" list="model-datalist" data-i18n="model_placeholder" placeholder="Select or type a model name">
+                        <input type="text" id="ai-red-model" list="model-datalist-red" data-i18n="model_placeholder" placeholder="Select or type a model name"><datalist id="model-datalist-red"></datalist>
                     </div>
                     <div class="set-row llm-only"><label for="ai-red-multi" data-i18n="multi_label">Multi-LLM per side (comma-separate models; provider:model allowed)</label><select id="ai-red-multi"><option value="off" data-i18n="multi_off">Off (single model)</option><option value="rotate" data-i18n="multi_rotate">Rotation (model per move)</option><option value="council" data-i18n="multi_council">Council (parallel vote)</option><option value="roundtable" data-i18n="multi_roundtable">Roundtable (see &amp; revote)</option></select></div>
                     <div class="set-row llm-only"><label for="ai-red-style" data-i18n="prompt_level">Prompt level</label><select id="ai-red-style"><option value="none" data-i18n="pl_none">None (base protocol)</option><option value="high" selected data-i18n="pl_high">High (strategy &amp; tactics)</option></select></div>
@@ -593,7 +604,7 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
                         <span id="ai-black-testres" role="status" aria-live="polite" style="font-size:11px"></span>
                     </div>
                     <div class="set-row llm-only"><label for="ai-black-model" data-i18n="model">Model</label>
-                        <input type="text" id="ai-black-model" list="model-datalist" data-i18n="model_placeholder" placeholder="Select or type a model name">
+                        <input type="text" id="ai-black-model" list="model-datalist-black" data-i18n="model_placeholder" placeholder="Select or type a model name"><datalist id="model-datalist-black"></datalist>
                     </div>
                     <div class="set-row llm-only"><label for="ai-black-multi" data-i18n="multi_label">Multi-LLM per side (comma-separate models; provider:model allowed)</label><select id="ai-black-multi"><option value="off" data-i18n="multi_off">Off (single model)</option><option value="rotate" data-i18n="multi_rotate">Rotation (model per move)</option><option value="council" data-i18n="multi_council">Council (parallel vote)</option><option value="roundtable" data-i18n="multi_roundtable">Roundtable (see &amp; revote)</option></select></div>
                     <div class="set-row llm-only"><label for="ai-black-style" data-i18n="prompt_level">Prompt level</label><select id="ai-black-style"><option value="none" data-i18n="pl_none">None (base protocol)</option><option value="high" selected data-i18n="pl_high">High (strategy &amp; tactics)</option></select></div>

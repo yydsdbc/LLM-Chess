@@ -2377,3 +2377,12 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - demo 页转化入口: 终局按钮行 (#btn-row) 末尾新增 a.btn#btn-star → GitHub 仓库 (target=_blank rel=noopener; 无 JS/无内联事件, 过 CSP 与无静态 onclick 守卫); 文案双语键 btn_star / btn_star_title (EN 「⭐ Star on GitHub」/ zh 「⭐ Star 项目」, title 讲明「star 是给作者最直接的反馈」); a.btn 与 button 同形 (去下划线/inline-flex 基线对齐)。时机: 终局卡出现 = 好感峰值时刻, btn-row flex 布局零重叠风险; 对局中不出现, 不干扰观战。
 - 守卫互动: i18n_check I7 把 CSS 注释里的字面 <a> 误判为未挂载标签 (扫到假元素) — 注释改写为 a.btn 回避; 守卫语义本身正确, 不改守卫。
 - 门禁: npm run check ALL PASS; npm test 27/27 PASS。浏览器验收: EN/zh 热切即时生效, href/title/offsetWidth 断言通过。
+
+## 2026-10-31 20:40 第90轮 (zcode — 设置面板: 一键对局预选 + 逐侧模型建议 + 视觉打磨 + 安装体验)
+
+- 一键对局预选 (#preset-row/#preset-chips, 设置标题正下方): 服务商列表就绪后生成 chips — 「🤖 随机 vs 随机」恒在 (零 Key 即玩), 已配 Key 服务商给「<名> 镜像」(双侧同模型) 与前两家「<A> × <B>」交叉 chip; 单击双侧落值 (checkbox/type/provider/models[0]) + syncSettingsModes, 仍由「保存并开局」确认生效 (不偷跑对局)。语言热切经 xq:i18n 监听幂等重建; 监听注册带 typeof 守卫 — vm 测试的 DOM 桩无 addEventListener (与本文件 localStorage 桩容忍同口径)。i18n 键 preset_label/preset_random/preset_mirror/preset_cross 双语 (391 键, I3 占位符对齐)。
+- 逐侧模型建议: 旧实现红黑共用一个 datalist — 红方模型框会冒出黑方服务商的候选 (真 UX 瑕疵)。拆为 model-datalist-red/-black, fillModelDatalist(side) 各按本侧 provider 填充; 静态 #model-datalist 保留为无 JS 兜底源 (v3.9 契约不变)。
+- 自定义模型可发现性: 自由输入本就支持 (keys.json custom 条目 + BYOK custom 预设), 但文案没讲清 — model_placeholder 升级为「选列表或直接输入任意模型名 / Pick a suggestion or type any model name」。
+- 视觉: 设置弹层入场动画 setIn (.22s; 全局 prefers-reduced-motion 闸门已兜底); 预选 chips 悬停金色描边 + 微抬升 + focus-visible 环; .btn 悬停微抬升; #btn-star 金色 hover 辉光。
+- 安装体验: Start.cmd 增加 Node 版本行打印 (项目需 18+); 双 README 安装段改 --depth 1 浅克隆 + 「零依赖, 无需 npm install」明示 + Start.cmd 自检说明。
+- 门禁: npm run check ALL PASS; npm test 27/27 PASS。浏览器验收: chips 生成 (本机仅 TokenRhythm 配 Key → 随机+镜像两枚)、镜像 chip 单击双侧落值正确 (tokenrhythm/glm-5.3-flash, 逐侧 datalist 3 项)、关闭不保存。

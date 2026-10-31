@@ -22,7 +22,8 @@
     enabled: '启用非人类棋手',
     type: '类型', type_human: '人类', type_random: '随机AI', type_llm: 'LLM',
     provider: '服务商', model: '模型',
-    model_placeholder: '选或填模型名',
+    model_placeholder: '选列表或直接输入任意模型名',
+    preset_label: '一键对局预选', preset_random: '🤖 随机 vs 随机', preset_mirror: '{name} 镜像', preset_cross: '{a} × {b}',   // 第90轮: 预选 chips (中继已配 Key 的服务商生成, 免逐侧配置)
     prompt_level: '提示词等级', pl_none: '无（基础协议）', pl_low: '低 (一句话)', pl_mid: '中 (标准)', pl_high: '高（策略与战术）',
     quick_mode: '快答模式 (关闭深度思考, 直出决策+原因)',
     btn_start: '开始对局', btn_reset: '重开', btn_save_settings: '保存并开局', btn_restart_confirm: '重开当前对局? 进度将丢失。',
@@ -255,7 +256,8 @@
     enabled: 'Enable non-human player',
     type: 'Type', type_human: 'Human', type_random: 'Random AI', type_llm: 'LLM',
     provider: 'Provider', model: 'Model',
-    model_placeholder: 'Select or type a model name',
+    model_placeholder: 'Pick a suggestion or type any model name',
+    preset_label: 'One-click matchup', preset_random: '🤖 Random × Random', preset_mirror: '{name} mirror', preset_cross: '{a} × {b}',   // round 90: matchup preset chips (built from keyed relay providers)
     prompt_level: 'Prompt level', pl_none: 'None (base protocol)', pl_low: 'Low (one-liner)', pl_mid: 'Mid (standard)', pl_high: 'High (strategy & tactics)',
     quick_mode: 'Quick mode (skip deep thinking, output decision + reason directly)',
     btn_start: 'Start Game', btn_reset: 'Reset', btn_save_settings: 'Save & Start', btn_restart_confirm: 'Restart the current game? Progress will be lost.',

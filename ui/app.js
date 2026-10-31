@@ -868,10 +868,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       urlIn.value = p.baseUrl;
       if (!modelIn.value.trim() && p.models.length) modelIn.value = p.models[0];
       XQ.BYOK.save(cfgFromInputs());
-      fillModelDatalist();
+      fillAllModelDatalists();
     });
     [urlIn, keyIn, modelIn].forEach(function (el) {
-      el.addEventListener('change', function () { XQ.BYOK.save(cfgFromInputs()); fillModelDatalist(); });
+      el.addEventListener('change', function () { XQ.BYOK.save(cfgFromInputs()); fillAllModelDatalists(); });
     });
     document.getElementById('byok-test').addEventListener('click', function () {
       var cfg = cfgFromInputs();
@@ -887,19 +887,58 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
 
   /* 动态拉取服务商列表 (中继可用时覆盖静态 options) */
   var PROVIDER_MODELS = {};
-  function fillModelDatalist() {
-    var dl = document.getElementById('model-datalist');
-    if (!dl) return;
-    var opts = [];
-    var seen = {};
-    Object.keys(SIDE_DEFS).forEach(function (side) {
-      var pid = document.getElementById(SIDE_DEFS[side].provider).value;
-      (PROVIDER_MODELS[pid] || []).forEach(function (m) {
-        if (seen[m]) return; seen[m] = 1; opts.push(m);
+  var AVAILABLE_PROVIDERS = [];   // 第90轮: 预选 chips 数据源 (id/name/models/hasKey)
+  function applyLLMSide(side, p) {   // 第90轮: 预选 chip 单侧落值 (checkbox/type/provider/model)
+    var d = SIDE_DEFS[side];
+    document.getElementById(d.checkbox).checked = true;
+    document.getElementById(d.type).value = 'llm';
+    var sel = document.getElementById(d.provider);
+    for (var i = 0; i < sel.options.length; i++) { if (sel.options[i].value === p.id) { sel.value = p.id; break; } }
+    document.getElementById(d.model).value = (PROVIDER_MODELS[p.id] || [])[0] || (p.models || [])[0] || '';
+  }
+  function buildMatchupPresets() {   // 第90轮: 一键对局预选 — 随机×2 恒在; 已配 Key 服务商给「镜像」与「交叉」chips, 免逐侧配置
+    var row = document.getElementById('preset-row');
+    var box = document.getElementById('preset-chips');
+    if (!row || !box) return;
+    var T = XQ.I18N ? XQ.I18N.tArgs : function (k) { return k; };
+    var keyed = AVAILABLE_PROVIDERS.filter(function (p) { return p.hasKey && p.models.length; });
+    var chips = [{ label: T('preset_random', {}), apply: function () {
+      ['red', 'black'].forEach(function (side) {
+        var d = SIDE_DEFS[side];
+        document.getElementById(d.checkbox).checked = true;
+        document.getElementById(d.type).value = 'random';
       });
+      syncSettingsModes();
+    } }];
+    if (keyed[0]) chips.push({ label: T('preset_mirror', { name: keyed[0].name }), apply: function () {
+      applyLLMSide('red', keyed[0]); applyLLMSide('black', keyed[0]); syncSettingsModes(); fillAllModelDatalists();
+    } });
+    if (keyed[1]) chips.push({ label: T('preset_cross', { a: keyed[0].name, b: keyed[1].name }), apply: function () {
+      applyLLMSide('red', keyed[0]); applyLLMSide('black', keyed[1]); syncSettingsModes(); fillAllModelDatalists();
+    } });
+    box.innerHTML = '';
+    chips.forEach(function (c) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.textContent = c.label;
+      b.addEventListener('click', c.apply);
+      box.appendChild(b);
     });
+    row.hidden = false;
+  }
+  if (typeof document.addEventListener === 'function') {   // 第90轮: DOM 桩环境 (vm 测试) 无 addEventListener — 与本文件 localStorage 桩容忍同口径
+    document.addEventListener('xq:i18n', function () { buildMatchupPresets(); });   // 语言热切后 chips 文案随语言重建 (幂等)
+  }
+  function fillModelDatalist(side) {
+    /* 第90轮: 红黑两侧各自一份 datalist — 旧实现共用一个, 红方模型框会冒出黑方服务商的建议 */
+    var dl = document.getElementById('model-datalist-' + side);
+    if (!dl) return;
+    var pid = document.getElementById(SIDE_DEFS[side].provider).value;
+    var opts = (PROVIDER_MODELS[pid] || []).slice();
     /* v3.9: 中继不可用/当前服务商无 models 时保留 index.html 静态兑底模型名 (与 config/keys.json 核对去重), 不再清空 */
-    if (!opts.length) return;
+    if (!opts.length) {
+      var staticDl = document.getElementById('model-datalist');
+      if (staticDl) opts = Array.prototype.map.call(staticDl.options, function (o) { return o.value; });
+    }
     dl.innerHTML = '';
     opts.forEach(function (m) {
       var opt = document.createElement('option');
@@ -907,6 +946,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       dl.appendChild(opt);
     });
   }
+  function fillAllModelDatalists() { fillModelDatalist('red'); fillModelDatalist('black'); }
   function refreshModelDefaults() {
     Object.keys(SIDE_DEFS).forEach(function (side) {
       var pid = document.getElementById(SIDE_DEFS[side].provider).value;
@@ -914,10 +954,11 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var inp = document.getElementById(SIDE_DEFS[side].model);
       if (!inp.value.trim() && recs.length) inp.value = recs[0];
     });
-    fillModelDatalist();
+    fillAllModelDatalists();
   }
   function loadProviderOptions() {
     if (!relayAvailable) { PROVIDER_MODELS['direct'] = byokModelOptions(); return Promise.resolve(false); }   // 第82轮: 静态托管下直连模型源仍可用
+    buildMatchupPresets();   // 第90轮: 无中继也给「随机 vs 随机」chip
     return fetch('api/providers').then(function (r) { return r.json(); })
       .then(function (j) {
         var list = j && Array.isArray(j.providers) ? j.providers : [];
@@ -927,6 +968,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         PROVIDER_MODELS = {};
         list.forEach(function (p) { PROVIDER_MODELS[p.id] = p.models || []; });
         PROVIDER_MODELS['direct'] = byokModelOptions();   // 第82轮: 直连条目复用同一模型源机制
+        AVAILABLE_PROVIDERS = list.map(function (p) { return { id: p.id, name: p.name, models: p.models || [], hasKey: !!p.hasKey }; });   // 第90轮: 预选 chips 数据源
         Object.keys(SIDE_DEFS).forEach(function (side) {
           var sel = document.getElementById(SIDE_DEFS[side].provider);
           var cur = sel.value;
@@ -955,13 +997,14 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             if (recs.length) modelInput.value = recs[0];
           }
         });
-        fillModelDatalist();
-        // 换服务商时同步默认模型 + datalist
+        fillAllModelDatalists();
+        buildMatchupPresets();   // 第90轮: 服务商列表就绪后生成预选 chips
+        // 换服务商时同步默认模型 + datalist (仅本侧 — 第90轮 datalist 已逐侧拆分)
         Object.keys(SIDE_DEFS).forEach(function (side) {
           document.getElementById(SIDE_DEFS[side].provider).addEventListener('change', function () {
             var recs = PROVIDER_MODELS[this.value] || [];
             document.getElementById(SIDE_DEFS[side].model).value = recs[0] || '';
-            fillModelDatalist();
+            fillModelDatalist(side);
           });
         });
         return true;
