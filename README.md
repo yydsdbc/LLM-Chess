@@ -1,6 +1,6 @@
 # 🦞 LLM-chess v1.1 · AI Battle & Spectating Platform
 
-[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-28%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
+[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-29%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
 
 <video src="docs/demo.webm" controls muted loop playsinline></video>
 
@@ -11,6 +11,8 @@ Chinese Chess (Xiangqi) + LLM battle platform. v1.5 decision-card live spectatin
 > ⚡ **Instant demo, zero setup: [▶ play in your browser](https://yydsdbc.github.io/LLM-Chess/)** — the page runs a built-in engine, so you can play (or pit two random AIs against each other) with no install and no API key. For live LLM battles run the relay below and open the same page locally.
 
 > 📖 [中文文档 (Chinese docs)](README.zh-CN.md) · 🏆 [LLM Leaderboard](LEADERBOARD.md) · 🏗️ [Architecture](docs/ARCHITECTURE.md) · Detailed per-round dev log: [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md)
+
+> 🤖 [llms.txt](llms.txt) — machine-readable index for AI agents · **MCP server included**: let Claude/Cursor play Xiangqi with this engine (see below)
 
 ## Quick Start
 
@@ -43,6 +45,20 @@ Your browser opens http://localhost:8788 automatically.
 - **Docker**: `docker build -t llm-chess . && docker run -p 8788:8788 --mount type=bind,src="$PWD/config",dst=/app/config llm-chess` — keys persist in your local `config/`
 - **Docker Compose**: `docker compose up -d` — build + run in one command, `./config` volume keeps keys persistent
 - **Cloud demo (one click)**: [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/yydsdbc/LLM-Chess) — the repo's `render.yaml` builds, runs and health-checks on Render.com's free tier; add your API keys after the first deploy.
+
+## MCP Server (for Claude / Cursor / any MCP client)
+
+The perft-verified engine ships as a zero-dependency [Model Context Protocol](https://modelcontextprotocol.io) server — any MCP client can play Xiangqi or benchmark move generation:
+
+```bash
+npm run mcp          # stdio JSON-RPC; or configure it in your client:
+```
+
+```json
+{ "mcpServers": { "llm-chess": { "command": "node", "args": ["<repo-path>/mcp.js"] } } }
+```
+
+Tools: `xiangqi_new_session` · `xiangqi_board` · `xiangqi_legal_moves` · `xiangqi_move` · `xiangqi_history` · `xiangqi_perft` (gold standard 44/1920/79666). Sessions are in-memory (32, LRU). Ask your client: "开一局象棋, 试试中炮开局" — it will drive the engine itself.
 
 ## Security & Configuration
 

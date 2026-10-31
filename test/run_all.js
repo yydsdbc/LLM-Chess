@@ -34,6 +34,7 @@ const SUITES = [   // 第18轮 +_replay_edge / 第19轮 +_logic_layer / 第23轮
   'test_byok.js',
   'test_leaderboard.js',
   'test_elo_trend.js',
+  'test_mcp.js',
   'test_debate_export.js',
   'test_share_card.js',
   'test_data_batch80.js',

@@ -7,10 +7,11 @@
     "start": "node tools/start.js",
     "stop": "node tools/stop.js",
     "server": "node server.js",
+    "mcp": "node mcp.js",
     "check": "node tools/check.js",
     "match": "node test/match_headless.js",
     "test": "node test/run_all.js",
-    "test:serial": "node test/run_tests.js && node test/test_evaluation.js && node test/test_record_edges.js && node test/test_engine_cache.js && node test/test_match_lifecycle.js && node test/test_settings_modes.js && node test/test_spectator.js && node test/test_thinking_visual.js && node test/test_llm_convo.js && node test/replay_smoke.js && node test/_clean_reason_check.js && node test/cn_notation_check.js && node test/i18n_check.js && node test/link_check.js && node test/check_ui.js && node test/_replay_edge.js && node test/_logic_layer.js && node test/_prompt_level_smoke.js && node test/replay_risk_check.js && node test/_committee_agent.js && node test/_server_http.js && node test/test_byok.js && node test/test_data_batch80.js && node test/test_ui_batch80.js && node test/test_share_card.js && node test/test_leaderboard.js && node test/test_debate_export.js && node test/test_elo_trend.js"
+    "test:serial": "node test/run_tests.js && node test/test_evaluation.js && node test/test_record_edges.js && node test/test_engine_cache.js && node test/test_match_lifecycle.js && node test/test_settings_modes.js && node test/test_spectator.js && node test/test_thinking_visual.js && node test/test_llm_convo.js && node test/replay_smoke.js && node test/_clean_reason_check.js && node test/cn_notation_check.js && node test/i18n_check.js && node test/link_check.js && node test/check_ui.js && node test/_replay_edge.js && node test/_logic_layer.js && node test/_prompt_level_smoke.js && node test/replay_risk_check.js && node test/_committee_agent.js && node test/_server_http.js && node test/test_byok.js && node test/test_data_batch80.js && node test/test_ui_batch80.js && node test/test_share_card.js && node test/test_leaderboard.js && node test/test_debate_export.js && node test/test_elo_trend.js && node test/test_mcp.js"
   },
   "engines": {
     "node": ">=18"

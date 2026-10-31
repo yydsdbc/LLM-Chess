@@ -1,0 +1,24 @@
+# LLM-Chess
+
+> Spectate LLMs playing Xiangqi (Chinese chess) — zero-dependency Node.js + static frontend, 16 LLM providers behind a same-origin relay, live decision cards, committee debates, replay system, Elo ladder. Ships a Model Context Protocol (MCP) server exposing the perft-verified engine to any MCP client.
+
+## Docs
+
+- [README](README.md): quick start, five ways to play, 16 providers, security model, MCP setup
+- [Architecture](docs/ARCHITECTURE.md): module map, LLM turn data flow, prompt cache contract (do-not-break), test map
+- [Chinese docs](README.zh-CN.md): 中文文档 (README 镜像)
+- [Architecture (Chinese)](docs/ARCHITECTURE.zh-CN.md): 架构地图中文版
+- [Leaderboard](LEADERBOARD.md): public Elo methodology + headless reproduction protocol + known limits
+- [Benchmark](docs/BENCHMARK.md): headless matches and batch games
+- [Agent handbook](AGENTS.md): rules for AI agents working in this repo (round numbering, hard gates)
+
+## Engine / MCP
+
+- Engine core (`core/`): perft gold standard 44/1920/79666, Asian rules closures enforced at engine level
+- MCP server (`mcp.js`): stdio JSON-RPC; tools xiangqi_new_session / xiangqi_board / xiangqi_legal_moves / xiangqi_move / xiangqi_history / xiangqi_perft; run with `npm run mcp`
+
+## Optional
+
+- [CHANGELOG](CHANGELOG.md): release milestones
+- [Promotion ammo](docs/promotion.md): maintainer-only post drafts (zh)
+- [Optimization log](OPTIMIZATION_LOG.md): per-round dev log (zh, 90+ rounds)

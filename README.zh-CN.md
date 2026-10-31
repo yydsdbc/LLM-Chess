@@ -2,7 +2,7 @@
 
 # 🦞 LLM-chess v1.1 · AI 对战直播平台
 
-[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-28%20suites-brightgreen)
+[![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-29%20suites-brightgreen)
 
 中国象棋 + LLM 对战平台。v1.5 决策卡片流/棋风对垒/观战动效；v1.6 回放系统（不调 LLM 快速重看对局）；v1.7 HUD 观战仪表盘（被吃托盘/中文记谱/评值走势/终局结算）；v2 赛博暗金主题。核心引擎可独立用于搜索算法（alpha-beta / MCTS）与 Agent 研发。
 
@@ -16,6 +16,8 @@
 观战时可查看模型返回的计划、候选与最终决策，以及真实的响应阶段。红黑血量式对抗条将静态局面评分映射为百分比，明确标注为未经校准的估计，与模型选着信心分开；终局显示实际赛果。
 
 > 🏆 [LLM 象棋天梯 · 方法论与公开数据 (中文版)](LEADERBOARD.zh-CN.md) — 无头基准协议 + leaderboard.json · 🏗️ [架构地图 (中文版)](docs/ARCHITECTURE.zh-CN.md)
+
+> 🤖 [llms.txt](llms.txt) — 面向 AI agent 的机器可读索引 · **内置 MCP server**: 让 Claude/Cursor 直接用本引擎下象棋 (见下)
 
 ## 快速开始
 
@@ -47,6 +49,20 @@ cd LLM-chess
 - **Docker**: `docker build -t llm-chess . && docker run -p 8788:8788 --mount type=bind,src="$PWD/config",dst=/app/config llm-chess` — 密钥持久化在本地 `config/`
 - **Docker Compose**: `docker compose up -d` — 构建+运行一条命令, `./config` 卷挂载密钥持久化
 - **云端演示 (一键)**: [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/yydsdbc/LLM-Chess) — 仓库自带 `render.yaml`, 自动构建/运行/健康检查 (Render 免费档可用); 首次部署后请自行填入 API Key
+
+## MCP Server (给 Claude / Cursor / 任意 MCP 客户端)
+
+perft 金标准引擎以零依赖 [Model Context Protocol](https://modelcontextprotocol.io) server 形式内置 — 任何 MCP 客户端都能直接下象棋或跑走法生成基准:
+
+```bash
+npm run mcp          # stdio JSON-RPC; 或在你的客户端里配置:
+```
+
+```json
+{ "mcpServers": { "llm-chess": { "command": "node", "args": ["<仓库路径>/mcp.js"] } } }
+```
+
+工具: `xiangqi_new_session` · `xiangqi_board` · `xiangqi_legal_moves` · `xiangqi_move` · `xiangqi_history` · `xiangqi_perft` (金标准 44/1920/79666)。会话仅存内存 (32 个, LRU)。对客户端说「开一局象棋, 试试中炮开局」即可。
 
 ## 安全与配置
 

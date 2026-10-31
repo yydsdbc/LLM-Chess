@@ -59,9 +59,9 @@ console.log('localStorage keys:', lsLiteral.size, 'literal | 非 xq_ 前缀:', b
 if (missingSrc.length || badLs.length) process.exit(1);
 
 // 7) 发布文件存在性守护 (v1.0.daily 第14轮: 四件套扩容 4→6, +CHANGELOG/SUPPORT)
-const pubFiles = ['.gitignore', 'LICENSE', 'package.json', 'config/keys.example.json', 'CHANGELOG.md', '.github/SUPPORT.md', 'manifest.json', 'sw.js'];
+const pubFiles = ['.gitignore', 'LICENSE', 'package.json', 'config/keys.example.json', 'CHANGELOG.md', '.github/SUPPORT.md', 'manifest.json', 'sw.js', 'mcp.js', 'llms.txt'];   // 第93轮: +MCP server / llms.txt
 const missingPub = pubFiles.filter(f => !fs.existsSync(__dirname + '/../' + f));
-console.log('发布文件:', missingPub.length ? '缺失 ' + missingPub.join(', ') : '8/8 (gitignore/LICENSE/package.json/keys.example/CHANGELOG/SUPPORT/manifest/sw)');
+console.log('发布文件:', missingPub.length ? '缺失 ' + missingPub.join(', ') : '10/10 (gitignore/LICENSE/package.json/keys.example/CHANGELOG/SUPPORT/manifest/sw/mcp.js/llms.txt)');
 if (missingPub.length) process.exit(1);
 
 // 8) v1.0.daily README 双语版本一致性 + package.json 版本对齐 (防主/中文档版本漂移)

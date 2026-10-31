@@ -2405,3 +2405,14 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 测试: 新增 test/test_elo_trend.js 15 断言 (空输入/非数组/update 逐位一致/和局不动/人类跳过/未完局 vs 和局的 result 判据/镜像局/时序续算+乱序重排/纯函数不变异/坏记录空名); 注册 run_all + test:serial (28 套件)。T6/T10 首版两处断言错误被实现行为当场纠正 (helper 无法表达 result null; ? 是结算同口径而非缺陷)。
 - 欠账清偿: README 双语徽章 tests-21→28 (第80/82轮扩容时漏更, 违反「三处同步」规范的历史欠账)。
 - 门禁: npm run check ALL PASS; npm test 28/28 PASS。
+
+## 2026-10-31 22:40 第93轮 (zcode — 对标爆火项目: MCP server + llms.txt)
+
+- 调研 (WebSearch 2026-10 快照): MCP (Model Context Protocol) 已是爆火 agent 项目的标准配置 (Grok Build / agent 框架 / awesome 榜单均以 MCP 支持为核心卖点); llms.txt 规范 2026-03 已 40,000+ 实现, 定位「API 的机器可读门面」, 与 MCP 构成发现层组合。两者与本仓高度契合: 引擎是 perft 金标准级资产, 缺一个 agent 可直接调用的工具面。
+- MCP server (mcp.js, 零依赖): stdio newline-delimited JSON-RPC 2.0, 实现协议核心子集 — initialize (版本协商: 客户端请求在支持列表内则原样返回, 否则回退 2024-11-05) / ping / tools/list / tools/call; 通知 (无 id) 不回包; 坏 JSON -32700 / 未知方法 -32601, 单行故障不终止服务。装载链与 index.html script 顺序一致。
+- 工具 6 枚: xiangqi_new_session / xiangqi_board (字母格大写红小写黑 + 分色清单双视图 — 车马同字靠分组消歧) / xiangqi_legal_moves (开局 44 金标准) / xiangqi_move (h3 形坐标, 非法给中文原因: game_over/empty_square/not_your_turn/illegal_move) / xiangqi_history / xiangqi_perft (44/1920/79666)。会话仅内存 32 个 LRU 淘汰; 无网络无文件写入。
+- 测试: test_mcp.js spawn 真实子进程 22 断言 (协议协商/回退/工具清单/44 金标准/中炮落子/非法+原因/LRU 淘汰/history/坏 JSON 存活/stderr 干净); 注册 run_all + test:serial (29 套件)。首版 3 处断言错误被实现当场纠正 (黑方回合动红炮应报 not_your_turn; -32700 响应 id:null 需按 code 扫描)。
+- llms.txt (仓库根): H1 + 一段摘要 + Docs/Engine-MCP/Optional 三节链接 — GitHub Pages 整仓部署后 https://yydsdbc.github.io/LLM-Chess/llms.txt 自动可用。
+- README 双语: 导航行加 llms.txt 入口 + 新增 MCP Server 章节 (npm run mcp + 客户端配置 JSON + 工具清单 + 提示词示例「开一局象棋, 试试中炮开局」)。
+- 门禁同步: check_ui 发布文件守护 8→10 (+mcp.js/llms.txt); 徽章 28→29。
+- 门禁: npm run check ALL PASS; npm test 29/29 PASS。手测 + 协议级子进程测试双通过; 真实客户端 (Claude Desktop) 装载待维护者按 README 配置后验收。
