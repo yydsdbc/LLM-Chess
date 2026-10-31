@@ -40,5 +40,30 @@ jobs:
       - name: Syntax + prompt gate (npm run check)
         run: npm run check
 
-      - name: Run full test suite (15 suites)
+      - name: Run full test suite
         run: npm test
+
+  # 第83轮: GitHub Pages 部署 — legacy Jekyll 构建连续卡死 (status building 无错误信息),
+  # 改 Actions 构建模式: 静态文件原样上传 (本项目零打包步骤), 日志透明可查。
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
