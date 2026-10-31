@@ -30,7 +30,8 @@
               }
             : (idx === 0 ? opts.onThinking : null),
           onRetry: opts.onRetry, signal: opts.signal,   // 第61轮修复: 传递原始 getter (llm_agent 内每请求重新求值; 委员会不提前执行 — 换局后子代理拿旧已中止信号 → 全拒退化随机)
-          jitter: opts.jitter, timeoutMs: opts.timeoutMs, maxTokens: opts.maxTokens, temperature: opts.temperature
+          jitter: opts.jitter, timeoutMs: opts.timeoutMs, maxTokens: opts.maxTokens, temperature: opts.temperature,
+          direct: opts.direct   // 第82轮: BYOK 直连透传 (委员会全体选民走同一直连端点)
         })
       };
     });

@@ -31,6 +31,9 @@ const SUITES = [   // 第18轮 +_replay_edge / 第19轮 +_logic_layer / 第23轮
   'replay_risk_check.js',
   '_committee_agent.js',
   '_server_http.js',
+  'test_byok.js',
+  'test_data_batch80.js',
+  'test_ui_batch80.js',
 ];
 
 const root = path.join(__dirname, '..');

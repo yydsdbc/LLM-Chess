@@ -570,7 +570,7 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
                         <select id="ai-red-type"><option value="human" data-i18n="type_human">人类</option><option value="random" data-i18n="type_random">随机AI</option><option value="llm" data-i18n="type_llm">LLM</option></select>
                     </div>
                     <div class="set-row llm-only"><label for="ai-red-provider" data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
-                        <select id="ai-red-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
+                        <select id="ai-red-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option><option value="direct">直连 BYOK</option></select>
                         <button type="button" class="btn" id="ai-red-testconn" data-i18n="test_conn" style="margin-top:5px;width:100%;font-size:11px">⚡ 试连</button>
                         <span id="ai-red-testres" role="status" aria-live="polite" style="font-size:11px"></span>
                     </div>
@@ -588,7 +588,7 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
                         <select id="ai-black-type"><option value="human" data-i18n="type_human">人类</option><option value="random" data-i18n="type_random">随机AI</option><option value="llm" data-i18n="type_llm">LLM</option></select>
                     </div>
                     <div class="set-row llm-only"><label for="ai-black-provider" data-i18n="provider">服务商 (密钥在服务端 config/keys.json)</label>
-                        <select id="ai-black-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option></select>
+                        <select id="ai-black-provider"><option value="deepseek">DeepSeek</option><option value="moonshot">Moonshot Kimi</option><option value="zhipu">智谱 GLM</option><option value="openai">OpenAI</option><option value="direct">直连 BYOK</option></select>
                         <button type="button" class="btn" id="ai-black-testconn" data-i18n="test_conn" style="margin-top:5px;width:100%;font-size:11px">⚡ 试连</button>
                         <span id="ai-black-testres" role="status" aria-live="polite" style="font-size:11px"></span>
                     </div>
@@ -613,6 +613,16 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
                 </div>
                 <div class="set-row"><label for="ui-lang" data-i18n="language_label">语言</label><select id="ui-lang"><option value="zh">中文</option><option value="en">English</option></select></div>
                 <div class="set-row"><label for="ui-pieces" data-i18n="pieces_label">棋子显示</label><select id="ui-pieces"><option value="cn" data-i18n="pieces_cn">汉字</option><option value="en" data-i18n="pieces_en">Letters</option></select></div>
+                <div class="set-row llm-only" id="byok-block">
+                    <label for="byok-preset" data-i18n="byok_title">🔌 直连模式 (自带 Key · 无中继时用)</label>
+                    <select id="byok-preset"></select>
+                    <input type="text" id="byok-baseurl" data-i18n="byok_baseurl_ph" placeholder="服务商 API 根地址 (…/v1)" style="margin-top:5px" autocomplete="off" spellcheck="false">
+                    <input type="password" id="byok-key" data-i18n="byok_key_ph" placeholder="API Key (只存本机浏览器)" style="margin-top:5px" autocomplete="off" spellcheck="false">
+                    <input type="text" id="byok-model" data-i18n="byok_model_ph" placeholder="模型名" style="margin-top:5px" autocomplete="off" spellcheck="false">
+                    <button type="button" class="btn" id="byok-test" data-i18n="byok_test" style="margin-top:5px;width:100%;font-size:11px">⚡ 测试直连</button>
+                    <span id="byok-testres" role="status" aria-live="polite" style="font-size:11px"></span>
+                    <small data-i18n="byok_hint" style="color:#a08858;font-size:11px;line-height:1.5">Key 只存本机浏览器, 仅发往上方服务商端点; 想不填 Key 请本地运行中继。红黑双方服务商选「直连 BYOK」即生效。</small>
+                </div>
             </div>
             <details class="set-tools">
                 <summary tabindex="0" data-i18n="set_tools">棋谱与操作</summary>
@@ -686,6 +696,7 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
 <script src="evaluation/xiangqi_knowledge.js"></script>
 <script src="evaluation/position.js"></script>
 <script src="ai/random_agent.js"></script>
+<script src="ai/byok.js"></script>
 <script src="ai/llm_agent.js"></script>
 <script src="ai/committee_agent.js"></script>
 <script src="benchmark/record.js"></script>

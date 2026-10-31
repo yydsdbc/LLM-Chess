@@ -505,21 +505,31 @@ function create(opts) {
           _lastThinkEmit = Date.now();
           try { opts.onThinking(side, full); } catch (e) {}
         } : null;
-        fetch('api/chat', {
+        /* 第82轮: BYOK 直连 (静态托管无中继) — opts.direct {baseUrl, apiKey} 时浏览器直连 OpenAI 兼容
+           端点; 中继本来就是 openai SSE 归一化出口, 直连同形状响应 → 流解析/重试/中止零改动。
+           thinking 字段只有 GLM 系容忍, 直连时仅 bigmodel/zhipu 域名注入 (与中继同口径)。 */
+        var directCfg = opts.direct && opts.direct.baseUrl ? opts.direct : null;
+        var reqUrl = directCfg ? String(directCfg.baseUrl).replace(/\/+$/, '') + '/chat/completions' : 'api/chat';
+        var reqHeaders = { 'Content-Type': 'application/json' };
+        if (directCfg && directCfg.apiKey) reqHeaders['Authorization'] = 'Bearer ' + directCfg.apiKey;
+        var reqBody = {
+          model: model, messages: messages,
+          /* 重试降温: attempt≥2 时 temperature 收敛到 0.1 — 格式重试要的是确定性, 同温重试常复制同一错误 */
+          temperature: typeof tempOverride === 'number' ? tempOverride : temperature, max_tokens: maxTokens,
+          stream: true, stream_options: { include_usage: true }
+        };
+        if (!directCfg) reqBody.provider = provider;
+        var thinkPayload = (function () {
+          if (!thinkingMode) return undefined;
+          if (thinkingMode === 'enabled' || thinkingMode === 'disabled') return { type: thinkingMode };
+          if (thinkingMode === 'low' || thinkingMode === 'medium' || thinkingMode === 'high') return { type: 'enabled', effort: thinkingMode };
+          return { type: 'enabled' };   // 未知值兑底
+        })();
+        if (thinkPayload && (!directCfg || /bigmodel|zhipu/i.test(reqUrl))) reqBody.thinking = thinkPayload;
+        fetch(reqUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            provider: provider, model: model, messages: messages,
-            /* 重试降温: attempt≥2 时 temperature 收敛到 0.1 — 格式重试要的是确定性, 同温重试常复制同一错误 */
-            temperature: typeof tempOverride === 'number' ? tempOverride : temperature, max_tokens: maxTokens,
-            thinking: (function () {
-              if (!thinkingMode) return undefined;
-              if (thinkingMode === 'enabled' || thinkingMode === 'disabled') return { type: thinkingMode };
-              if (thinkingMode === 'low' || thinkingMode === 'medium' || thinkingMode === 'high') return { type: 'enabled', effort: thinkingMode };
-              return { type: 'enabled' };   // 未知值兑底
-            })(),
-            stream: true, stream_options: { include_usage: true }
-          }),
+          headers: reqHeaders,
+          body: JSON.stringify(reqBody),
           signal: ctrl ? ctrl.signal : undefined
         }).then(function (res) {
           if (settled || stopIfCancelled()) return;

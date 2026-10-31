@@ -814,6 +814,56 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     relayAvailable = !!available;
     syncSettingsModes();
   }
+  /* 第82轮: BYOK 直连 — 面板接线 (预设填充/保存/试连) + provider 下拉的直连模型源 */
+  function byokModelOptions() {
+    var out = [], seen = {};
+    if (XQ.BYOK) {
+      XQ.BYOK.PRESETS.forEach(function (p) { p.models.forEach(function (m) { if (!seen[m]) { seen[m] = 1; out.push(m); } }); });
+      var cfg = XQ.BYOK.load();
+      if (cfg && cfg.model && !seen[cfg.model]) out.unshift(cfg.model);
+    }
+    return out;
+  }
+  function initByokBlock() {
+    var presetSel = document.getElementById('byok-preset');
+    if (!presetSel || !XQ.BYOK || presetSel.options.length) return;   // 幂等
+    var urlIn = document.getElementById('byok-baseurl'), keyIn = document.getElementById('byok-key'),
+        modelIn = document.getElementById('byok-model'), res = document.getElementById('byok-testres');
+    XQ.BYOK.PRESETS.forEach(function (p) {
+      var o = document.createElement('option');
+      o.value = p.id; o.textContent = p.label;
+      presetSel.appendChild(o);
+    });
+    function cfgFromInputs() {
+      return { preset: presetSel.value, baseUrl: urlIn.value.trim(), apiKey: keyIn.value, model: modelIn.value.trim() };
+    }
+    function paint(cfg) {
+      if (!cfg) return;
+      presetSel.value = cfg.preset || 'custom';
+      urlIn.value = cfg.baseUrl || ''; keyIn.value = cfg.apiKey || ''; modelIn.value = cfg.model || '';
+    }
+    paint(XQ.BYOK.load());
+    presetSel.addEventListener('change', function () {
+      var p = XQ.BYOK.presetOf(presetSel.value);
+      urlIn.value = p.baseUrl;
+      if (!modelIn.value.trim() && p.models.length) modelIn.value = p.models[0];
+      XQ.BYOK.save(cfgFromInputs());
+      fillModelDatalist();
+    });
+    [urlIn, keyIn, modelIn].forEach(function (el) {
+      el.addEventListener('change', function () { XQ.BYOK.save(cfgFromInputs()); fillModelDatalist(); });
+    });
+    document.getElementById('byok-test').addEventListener('click', function () {
+      var cfg = cfgFromInputs();
+      if (!cfg.baseUrl || !cfg.apiKey || !cfg.model) { res.textContent = XQ.I18N ? XQ.I18N.t('byok_need_all') : '端点 / Key / 模型名 都要填'; return; }
+      XQ.BYOK.save(cfg);
+      res.textContent = XQ.I18N ? XQ.I18N.t('test_run') : '试连中…';
+      XQ.BYOK.testConnection(cfg).then(function (r) {
+        var TA = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
+        res.textContent = r.ok ? ('✓ ' + TA('test_ok', { ms: r.ms })) : ('✗ ' + (r.error || TA('test_fail', {})));
+      });
+    });
+  }
 
   /* 动态拉取服务商列表 (中继可用时覆盖静态 options) */
   var PROVIDER_MODELS = {};
@@ -847,7 +897,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     fillModelDatalist();
   }
   function loadProviderOptions() {
-    if (!relayAvailable) return Promise.resolve(false);
+    if (!relayAvailable) { PROVIDER_MODELS['direct'] = byokModelOptions(); return Promise.resolve(false); }   // 第82轮: 静态托管下直连模型源仍可用
     return fetch('api/providers').then(function (r) { return r.json(); })
       .then(function (j) {
         var list = j && Array.isArray(j.providers) ? j.providers : [];
@@ -856,6 +906,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         if (!list.length) return false;
         PROVIDER_MODELS = {};
         list.forEach(function (p) { PROVIDER_MODELS[p.id] = p.models || []; });
+        PROVIDER_MODELS['direct'] = byokModelOptions();   // 第82轮: 直连条目复用同一模型源机制
         Object.keys(SIDE_DEFS).forEach(function (side) {
           var sel = document.getElementById(SIDE_DEFS[side].provider);
           var cur = sel.value;
@@ -866,8 +917,12 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             opt.textContent = p.name + (p.hasKey ? '' : ' (' + (XQ.I18N ? XQ.I18N.t('provider_no_key') : '未配Key') + ')');   // 第30轮 i18n
             sel.appendChild(opt);
           });
+          var dOpt = document.createElement('option');   // 第82轮: 中继在/不在都保留直连项
+          dOpt.value = 'direct';
+          dOpt.textContent = XQ.I18N ? XQ.I18N.t('byok_opt') : '直连 BYOK';
+          sel.appendChild(dOpt);
           // 保留原选择; 若已不存在则回退到第一个已配Key的项
-          var has = list.some(function (p) { return p.id === cur; });
+          var has = list.some(function (p) { return p.id === cur; }) || cur === 'direct';
           if (has) { sel.value = cur; }
           else {
             var keyed = list.filter(function (p) { return p.hasKey; });
@@ -951,7 +1006,15 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         var Ts7 = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };   // 第26轮 i18n
         agents[side] = { kind: 'random', label: Ts7('agent_random', { side: (XQ.I18N ? XQ.I18N.t(side === 'red' ? 'rp_red_short' : 'rp_black_short') : (side === 'red' ? '红' : '黑')) }), agent: XQ.RandomAgent.create({ side: side, name: 'Random-' + side }) };
       } else if (v.type === 'llm') {
-        if (!relayAvailable) {
+        /* 第82轮: BYOK 直连 — provider=direct 时无需本地中继 (GitHub Pages 等静态托管也能跑真 LLM 对战) */
+        var directSide = null;
+        if (v.provider === 'direct') {
+          directSide = XQ.BYOK ? XQ.BYOK.load() : null;
+          if (!directSide || !directSide.baseUrl || !directSide.apiKey || !directSide.model) {
+            warnBanner(XQ.I18N ? XQ.I18N.t('warn_byok_missing') : '⚠️ 直连未配置完整: 设置 → 直连模式, 填端点/Key/模型名');
+            agents[side] = null; return;
+          }
+        } else if (!relayAvailable) {
           warnBanner((XQ.I18N ? XQ.I18N.t('warn_llm_no_server') : '⚠️ LLM 需要本地服务: 请运行 node server.js 后访问本页地址') + ' http://' + location.host);   // v1.0.daily: 端口随实际服务端口 (server.js 支持 argv 端口)
           agents[side] = null; return;
         }
@@ -998,7 +1061,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             voterBudgetMs: 90000,
             jitter: true,
             fastMajority: specs.length >= 3,   // 第49轮: 3+ 选民启用快速多数决
-            weightByElo: true                   // 第49轮: Elo 加权投票                                         // 第38轮: 退避抖动 (多选民错峰不撞限流窗)
+            weightByElo: true,                  // 第49轮: Elo 加权投票                                         // 第38轮: 退避抖动 (多选民错峰不撞限流窗)
+            direct: directSide   // 第82轮: BYOK 直连透传
           });
           modelName = specs.join('+');
           modelsOut = specs;
@@ -1008,7 +1072,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             thinking: v.quick ? 'disabled' : 'enabled',
             onThinking: onThink, onRetry: onRetry2,
             signal: function () { return gameAbort ? gameAbort.signal : undefined; },   // 第39轮: 同上 — 取值函数解耦控制器换代
-            jitter: true
+            jitter: true,
+            direct: directSide   // 第82轮: BYOK 直连透传
           });
           modelName = specs[0] || v.model;
         }
@@ -1929,6 +1994,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         return loadProviderOptions();
       })
       .then(function () {
+        initByokBlock();   // 第82轮: 直连面板接线 (幂等, 与中继探测结果无关)
         var saved;
         try { saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); } catch (e) { saved = {}; }
         fillSettings(saved);

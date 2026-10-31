@@ -2306,3 +2306,15 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - ② check_ui 18节新增 theme-color 守卫 (c7): meta theme-color 必须与 manifest theme_color 一致 (安卓安装后浏览器框/任务切换器配色, 与 manifest 底色守卫同形态的冷启动闪色问题)。
 - ③ app.js rpFillPicker 打开回放时对账清理孤儿进度键: xq_replay_pos_<id> 每局残留一键, 棋谱被删除/导入去重/容量裁剪后对应 id 永久失效但键还在 (record.js 的孤儿清理只管自家命名空间)。填充选择列表时存档已在手, 顺手清掉失效键 — 只在冷路径扫描, 有界、零额外读取, 全程 try/catch 不影响列表填充。
 - 门禁: npm run check ALL PASS; npm test 21/21 PASS (守卫新增两条探针验证后入列)。无新依赖, 无提示词改动, server.js 未动。
+
+## 2026-10-31 16:40 第82轮 (zcode — BYOK 直连模式: 静态托管也能跑真 LLM 对战)
+
+- 传播冲刺 D2 (GitHub 十天计划): GitHub Pages 已上线 (静态托管无 /api/chat 中继 → 此前只能玩随机 AI)。本轮新增 BYOK 直连 (Bring Your Own Key): 访客在设置 → 直连模式 填自己的端点/Key/模型名, 浏览器**直连** OpenAI 兼容端点观看/进行真 LLM 对战 — 传播核心钩子「打开 demo 就能看模型互吵」成立。
+- 架构口径: 中继本就是 openai SSE 归一化出口, llm_agent 只消费一种形状 → 直连复用同一套流解析/重试/中止, 零协议转换。v1 支持 OpenAI/DeepSeek/OpenRouter (可代连 Claude/Gemini/Grok)/GLM/Moonshot/SiliconFlow/Groq/自定义 (Ollama/vLLM/LM Studio)。
+- 新增 `ai/byok.js`: 预设表 (id/label/baseUrl/推荐模型) + localStorage 'xq_byok' 存取 (逐字段类型校验, 坏 JSON → null) + isConfigured + testConnection (1 token 最小补全; Failed to fetch 附 CORS 拦截提示 — 直连失败最常见原因)。
+- `ai/llm_agent.js`: opts.direct {baseUrl, apiKey} 时 fetch 直连 baseUrl 去尾斜杠 + /chat/completions, Authorization: Bearer 携带访客 key, body 剥离 provider 字段; thinking 字段仅 bigmodel/zhipu 域名注入 (严格校验的上游会 400, 与中继同口径); 无 direct 时默认路径逐字节不变 (api/chat + provider 字段 + 无 Authorization)。
+- `ai/committee_agent.js`: direct 透传全体选民; `ui/app.js`: 设置面板新增共享 BYOK 配置块 (预设下拉/端点/Key/模型/试连), provider 下拉在「中继在/不在」两态都保留直连项 (loadProviderOptions 重建后追加), PROVIDER_MODELS['direct'] 复用同一模型源机制, applyAgents 在 provider=direct 时校验四要素、缺一则 banner 提示不启动; 未配 key 的访客仍可玩随机 AI。
+- 安全边界: key 只存访客浏览器 localStorage, 仅随请求发往用户自填的服务商端点; 本项目无自建服务器参与该链路。
+- i18n: byok_* 10 键双语 (364 键); I8 守卫纠正 3 处 placeholder 挂载写法 (data-i18n= 而非 data-i18n-placeholder= — apply() 对 input 特判写 placeholder 的既有约定)。
+- 测试: 新增 test/test_byok.js 24 断言 (预设表/存取校验/直连 URL+Authorization+provider 剥离+thinking 注入口径/默认路径零变化/委员会透传/testConnection 成功与 CORS 提示); 修复 runner 注册缺口 — test_data_batch80/test_ui_batch80 (并行 agent 第80轮新套件) 此前从未注册, 一并加入 run_all SUITES 与 test:serial (24/24)。
+- 门禁: npm run check ALL PASS; npm test 24/24 PASS。sw.js SHELL 已加 ./ai/byok.js (第81轮壳清单对账守卫强制)。index.html script 标签同步。

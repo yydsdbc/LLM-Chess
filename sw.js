@@ -43,7 +43,7 @@ var SHELL = [                         // 相对路径: 子路径部署同样成�
   './core/piece.js', './core/move.js', './core/board.js', './core/rules.js', './core/generator.js',
   './core/judge.js', './core/engine.js',
   './evaluation/xiangqi_knowledge.js', './evaluation/position.js',
-  './ai/random_agent.js', './ai/llm_agent.js', './ai/committee_agent.js',
+  './ai/random_agent.js', './ai/byok.js', './ai/llm_agent.js', './ai/committee_agent.js',
   './benchmark/record.js', './benchmark/elo.js', './benchmark/match.js',
   './replay/replay.js', './replay/replay_controller.js',
   './ui/spectator.js', './ui/renderer.js', './ui/i18n.js', './ui/app.js', './ui/ui_batch80.js'
