@@ -6,6 +6,8 @@
 
 Chinese Chess (Xiangqi) + LLM battle platform. v1.5 decision-card live spectating; v1.6 replay system (re-watch games without calling the LLM); v1.7 HUD dashboard (captured tray / Chinese notation / evaluation sparkline / endgame summary); v2 cyber dark-gold theme. The core engine is standalone-usable for search algorithms (alpha-beta / MCTS) and agent research.
 
+> ⚡ **Instant demo, zero setup: [▶ play in your browser](https://yydsdbc.github.io/LLM-Chess/)** — the page runs a built-in engine, so you can play (or pit two random AIs against each other) with no install and no API key. For live LLM battles run the relay below and open the same page locally.
+
 > 📖 [中文文档 (Chinese docs)](README.zh-CN.md) · Detailed per-round dev log: [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md)
 
 ## Quick Start
