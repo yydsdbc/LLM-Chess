@@ -2327,3 +2327,13 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - i18n: share_title / eo_share_btn 双语 (366 键); index.html script 标签 + sw.js SHELL 同步 (第81轮壳清单对账守卫强制)。
 - 测试: 新增 test/test_share_card.js 16 断言 (几何 90 交点界内 + 楚河汉界间距 + 越界取模回绕 / buildData 截断清洗格式缺省 / collectPieces 起始 32 子且帅将分处两侧 / 无引擎空数组); 修一处测试自身字段名错 (title vs titleText)。注册进 run_all + test:serial (25 套件)。
 - 门禁: npm run check ALL PASS; npm test 25/25 PASS (check_ui 在并行高负载下出现过一次 0xC0000409 Windows 进程崩溃 — 非断言失败, 单独运行与随后两轮全量均绿, 判定为环境抖动; 若复现再查)。
+
+## 2026-10-31 19:10 第84轮 (zcode — LLM 象棋天梯: 公开数据 + 可复现基准协议)
+
+- 传播冲刺 D5-6 (研究性支柱): 新增 LEADERBOARD.md (双语, 方法论/当前榜/无头协议/数据边界/贡献流程) + leaderboard.json (schema 1: entries[{model,games,win,draw,loss,points,scoreRate,illegal,avgMsPerMove}] + source/skipped 溯源)。
+- 新增 `tools/leaderboard_export.js`: 无头对局日志 (logs/match_*.json) → 聚合天梯数据。口径: 侧名去 (红)/(黑) 后缀; 胜1/和0.5/负0; winner null 按 and局口径; 非法着法整局双侧同记; 排序 points→wins→name。纯函数 (parseSide/sideName/applyMatch/aggregate) 导出直测, CLI 薄封装。aggregate 对坏 JSON 文件跳过并在 skipped 报告 (部分失败不阻塞)。
+- 测试抓到真 bug 并修复: 侧字段 {name:''} 时 `name || 对象` 回退 → String(obj)='[object Object]' 入表 — sideName() 区分 string/object 形态且 name 为空必须返回空串 (不回退对象)。
+- test_leaderboard.js 16 断言: parseSide 清洗 (含多后缀防御) / 计分对称口径 / 畸形记录不计入 / 排序 tiebreak / 得分率 / 坏文件跳过 / schema。修复一处测试自身算术错 (A 实际 2.0 分非 1.0)。
+- LEADERBOARD.md 诚实边界: 当前样本 = 2 局镜像验证局 (全和), 明确标注「不是棋力排名」; TODO 注明历史对局未存 temperature; 贡献流程要求经导出工具重生成 (不手工编辑数字)。
+- README 双语链接区加 LEADERBOARD 入口; test_leaderboard 注册进 run_all + test:serial (26 套件)。
+- 门禁: npm run check ALL PASS; npm test 26/26 PASS。

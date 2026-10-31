@@ -8,7 +8,7 @@ Chinese Chess (Xiangqi) + LLM battle platform. v1.5 decision-card live spectatin
 
 > ⚡ **Instant demo, zero setup: [▶ play in your browser](https://yydsdbc.github.io/LLM-Chess/)** — the page runs a built-in engine, so you can play (or pit two random AIs against each other) with no install and no API key. For live LLM battles run the relay below and open the same page locally.
 
-> 📖 [中文文档 (Chinese docs)](README.zh-CN.md) · Detailed per-round dev log: [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md)
+> 📖 [中文文档 (Chinese docs)](README.zh-CN.md) · 🏆 [LLM Leaderboard + methodology](LEADERBOARD.md) · Detailed per-round dev log: [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md)
 
 ## Quick Start
 

@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-10-31T07:50:00.266Z",
+  "source": [
+    "match_headless.json",
+    "match_test1.json"
+  ],
+  "skipped": [],
+  "entries": [
+    {
+      "model": "deepseek-v4-flash-0731",
+      "games": 2,
+      "win": 0,
+      "draw": 2,
+      "loss": 0,
+      "points": 1,
+      "scoreRate": 0.5,
+      "illegal": 0,
+      "avgMsPerMove": 56970
+    },
+    {
+      "model": "glm-5.3-flash",
+      "games": 2,
+      "win": 0,
+      "draw": 2,
+      "loss": 0,
+      "points": 1,
+      "scoreRate": 0.5,
+      "illegal": 0,
+      "avgMsPerMove": 0
+    }
+  ]
+}
