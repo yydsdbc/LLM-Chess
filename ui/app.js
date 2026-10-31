@@ -2050,6 +2050,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '  <label style="color:#c4a56e;font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="rp-autoplay" style="accent-color:#e0a030"><span data-i18n="rp_autoplay_label"> 自动播放</span></label>'
       + '  <button class="btn" id="rp-next-record" data-i18n-title="rp_nextrecord_title" data-i18n-aria="rp_nextrecord_title" aria-label="下一局" title="下一局">▶▶</button>'
       + '  <button class="btn" id="rp-export-pgn" data-i18n-title="rp_export_pgn_title" data-i18n-aria="rp_export_pgn_title" aria-label="导出 PGN" title="导出 PGN">💾 PGN</button>'
+      + '  <button class="btn" id="rp-debate" data-i18n-title="debate_title" data-i18n-aria="debate_title" aria-label="辩论实录" title="辩论实录 (LLM 决策 Markdown)">📄</button>'
       + '  <button class="btn" id="rp-elo" data-i18n-title="elo_title" data-i18n-aria="elo_title" aria-label="Elo 天梯" title="Elo 天梯">🏆</button>'
       + '  <button class="btn" id="rp-backup" data-i18n-title="backup_btn" data-i18n-aria="backup_btn" aria-label="备份" title="备份全部数据">📦</button>'
       + '  <button class="btn" id="rp-restore" data-i18n-title="restore_btn" data-i18n-aria="restore_btn" aria-label="恢复" title="恢复备份">📥</button>'
@@ -2183,6 +2184,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     rpEl.btnNextCap.onclick = function () { rpCtrl && rpCtrl.stepNextCapture(); };
     rpEl.btnNextRecord.onclick = rpGotoNextRecord;
     rpEl.btnExportPGN.onclick = rpExportPGN;
+    ov.querySelector('#rp-debate').onclick = rpExportDebate;   // 第85轮: 辩论实录下载
     rpEl.btnDel.onclick = rpDeleteRecord;
     ov.querySelector('#rp-elo').onclick = rpShowElo;      // 第30轮: 天梯浮层
     ov.querySelector('#rp-backup').onclick = rpBackupAll; // 第30轮: 一键备份
@@ -2626,6 +2628,24 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     sel.value = opts[idx + 1].value;
     rpPickLoad();
   }
+  /* 第85轮: 辩论实录下载 — 委员会/圆桌每手投票/计划/候选 转 Markdown (纯装配在 ui/debate_export.js) */
+  function rpExportDebate() {
+    if (!rpSession || !XQ.Debate) return;
+    var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    var L = {
+      title: T('debate_title'), red: T('debate_red'), black: T('debate_black'),
+      move: T('debate_move'), captured: T('debate_captured'), finalPick: T('debate_final'),
+      unanim: T('debate_unanim'), plan: T('debate_plan'), summary: T('debate_summary'),
+      evaln: T('debate_eval'), conf: T('debate_conf'), vModel: T('debate_v_model'),
+      vProp: T('debate_v_prop'), vConf: T('debate_v_conf'), vChg: T('debate_v_chg'),
+      cands: T('debate_cands'), empty: T('debate_empty'), footer: T('debate_footer')
+    };
+    var rec = rpSession.record;
+    var md = XQ.Debate.buildMarkdown(rec, L);
+    var stamp = String(rec.date || Date.now()).replace(/[^\w-]/g, '').slice(0, 18);
+    XQ.Debate.download(md, 'llm-chess-debate-' + stamp + '.md');
+  }
+
   function rpExportPGN() {
     if (!rpSession) return;
     var rec = rpSession.record;

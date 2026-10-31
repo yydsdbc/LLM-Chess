@@ -2337,3 +2337,12 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - LEADERBOARD.md 诚实边界: 当前样本 = 2 局镜像验证局 (全和), 明确标注「不是棋力排名」; TODO 注明历史对局未存 temperature; 贡献流程要求经导出工具重生成 (不手工编辑数字)。
 - README 双语链接区加 LEADERBOARD 入口; test_leaderboard 注册进 run_all + test:serial (26 套件)。
 - 门禁: npm run check ALL PASS; npm test 26/26 PASS。
+
+## 2026-10-31 20:05 第85轮 (zcode — 委员会辩论实录导出: 「模型吵架」本身成为可传播内容)
+
+- 传播冲刺 D6: 回放层工具条新增「📄 辩论实录」— 把棋谱里每手的 LLM 决策元数据转成 Markdown 下载 (终选模型/全票/计划/决策摘要/局面评价/信心/投票明细表含改票与被拒删除线/候选列表)。娱乐性卖点: 「两个模型为一个马位吵了几轮」的原始记录本身就是社交内容。
+- 新增 `ui/debate_export.js`: buildMarkdown(record, L) 纯函数 (L = 调用方 t() 解析好的标签表, 模块零 i18n 依赖, Node 直测); moveBlock 人类手跳过、裸手只出标题行; captured 取 move 顶层字段 (record.js 落谱口径, 首版误读 meta.captured 被测试当场抓到); download() Blob→<a download>。
+- 数据源 (第34轮落谱的 meta): summary/plan/evaluation/confidence/candidates[]/votes[{model,from,to,conf,weight,changed,ok}]/unanimity/committeeMode/voterName — 无新存储, 纯导出视角。
+- i18n: debate_* 19 键双语 (383 键); index.html script + sw.js SHELL 同步。
+- test_debate_export.js 14 断言: 标题/对阵/人类手剔除/插值/终选全票/三行元数据/信心百分化/表头/正常与被拒投票行/候选/裸手/空局兜底/null 不抛。注册进 run_all + test:serial (27 套件)。
+- 门禁: npm run check ALL PASS; npm test 27/27 PASS。
