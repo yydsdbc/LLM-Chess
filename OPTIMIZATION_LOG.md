@@ -2416,3 +2416,4 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - README 双语: 导航行加 llms.txt 入口 + 新增 MCP Server 章节 (npm run mcp + 客户端配置 JSON + 工具清单 + 提示词示例「开一局象棋, 试试中炮开局」)。
 - 门禁同步: check_ui 发布文件守护 8→10 (+mcp.js/llms.txt); 徽章 28→29。
 - 门禁: npm run check ALL PASS; npm test 29/29 PASS。手测 + 协议级子进程测试双通过; 真实客户端 (Claude Desktop) 装载待维护者按 README 配置后验收。
+- CI 修正 (同轮): 首版 test_mcp 用固定 sleep 断言 — windows CI (29 套件并行, stdio 往返慢) 竞态挂, ubuntu ×4 全绿。改为 expect(id) 响应驱动轮询 (默认 15s, perft/LRU 30s), 消除全部时序依赖; 本地复跑 + push 后 CI 全平台绿。教训入册: spawn 子进程类测试严禁固定 sleep, 一律按响应到达驱动。
