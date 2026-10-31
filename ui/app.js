@@ -450,13 +450,33 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '<br>' + eoLine('🔴', 'red')
       + '<br>' + eoLine('⚫', 'black') + endEloHtml;
     // v2.4 终局一键回放本局 (对局→录像闭环, 免去回放选择器翻找; Record 已在上方落 localStorage)
-    eo.insertAdjacentHTML('beforeend', '<div style="margin-top:8px"><button class="btn" id="eo-replay">' + Te('eo_replay_btn') + '</button></div>');   // 第26轮 i18n
+    eo.insertAdjacentHTML('beforeend', '<div style="margin-top:8px"><button class="btn" id="eo-replay">' + Te('eo_replay_btn') + '</button> <button class="btn" id="eo-share">' + Te('eo_share_btn') + '</button></div>');   // 第26轮 i18n; 第83轮 分享卡
     var eob = eo.querySelector('#eo-replay');
     if (eob) eob.onclick = function () { rpWatchRecord(); };
+    var eos2 = eo.querySelector('#eo-share');
+    if (eos2) eos2.onclick = function () { shareCard(); };
     /* 第42轮: 终局「💾 导出本局」的宿主是终局卡 (.eo-card), 与 #eo-stats 是兄弟节点; 原实现从 eo (=#eo-stats)
        子树里 querySelector('#eo-export') 恒为 null → 该按钮自第33轮加入起从未生效 (点了没有任何反应)。 */
     var eox = document.getElementById('eo-export');
     if (eox) eox.onclick = function () { if (currentRecord) XQ.Record.downloadFile(currentRecord); };   // 第33轮: 终局一键导出
+  }
+  /* 第83轮: 终局分享卡 — 战报图 (双方模型/赛果/手数/终局盘面/天梯变化/项目水印) 一键下载 PNG。
+     文案在调用时用 t 家族解析后传纯字符串, 绘制在 ui/share_card.js (Node 可测的纯装配 + canvas 绘制)。 */
+  function shareCard() {
+    if (!currentRecord || !XQ.ShareCard || !XQ.ShareCard.draw) return;
+    var Ts9 = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+    var r2 = engine.result();
+    var winner = r2 && (r2.winner === 'red' || r2.winner === 'black') ? r2.winner : 'draw';
+    var resultText = Ts9(winner === 'red' ? 'rp_tag_red_win' : winner === 'black' ? 'rp_tag_black_win' : 'rp_tag_over');
+    var metaText = (XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; })('eo_stats_total', { n: engine.ply(), s: endElapsedSec });
+    var eloText = String(endEloHtml || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    var data = XQ.ShareCard.buildData({
+      record: currentRecord, winner: winner, resultText: resultText, metaText: metaText, eloText: eloText,
+      titleText: Ts9('share_title'), moves: engine.ply(), elapsedSec: endElapsedSec,
+      footerText: 'github.com/yydsdbc/LLM-Chess'
+    });
+    var canvas = XQ.ShareCard.draw({ data: data, pieces: XQ.ShareCard.collectPieces(engine) });
+    XQ.ShareCard.download(canvas, 'llm-chess-' + (data.stamp || 'share') + '.png');
   }
 
   function refresh() {

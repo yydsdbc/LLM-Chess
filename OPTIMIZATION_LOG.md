@@ -2318,3 +2318,12 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - i18n: byok_* 10 键双语 (364 键); I8 守卫纠正 3 处 placeholder 挂载写法 (data-i18n= 而非 data-i18n-placeholder= — apply() 对 input 特判写 placeholder 的既有约定)。
 - 测试: 新增 test/test_byok.js 24 断言 (预设表/存取校验/直连 URL+Authorization+provider 剥离+thinking 注入口径/默认路径零变化/委员会透传/testConnection 成功与 CORS 提示); 修复 runner 注册缺口 — test_data_batch80/test_ui_batch80 (并行 agent 第80轮新套件) 此前从未注册, 一并加入 run_all SUITES 与 test:serial (24/24)。
 - 门禁: npm run check ALL PASS; npm test 24/24 PASS。sw.js SHELL 已加 ./ai/byok.js (第81轮壳清单对账守卫强制)。index.html script 标签同步。
+
+## 2026-10-31 17:35 第83轮 (zcode — 对局结果分享卡: 打完棋的人有东西可发)
+
+- 传播冲刺 D3: 终局卡新增「📸 生成分享卡」— canvas 绘制战报 PNG 一键下载 (双方模型/赛果/手数用时/终局盘面/天梯变化/项目地址水印), 社交发图自带回流链接。娱乐性传播闭环的实体产物。
+- 新增 `ui/share_card.js` 三段式: buildData() 纯数据装配 (名称≤24/赛果≤60/统计≤90 截断 + 防 canvas 画出 HTML 标签字面量的去标签清洗 + stamp 文件名安全清洗 + 时长 65s→'1m 5s' 格式, 非法负数 → 空串不渲染); draw() 浏览器绘制 (暗金主题 1000x1500, 9x10 交点棋盘 + 楚河汉界 + 90 子圆形棋子, 红暖金/黑墨蓝双色, 胜方着色对阵行); download() toBlob→临时 <a download>→revoke。文案由 app.js 调用时用 t 家族解析传入, 模块零 i18n 依赖。
+- app.js: paintEndStats 的按钮行加 #eo-share (与回放/导出同区); shareCard() 单出口 — 胜方文案复用 rp_tag_* 既有键, 统计行复用 eo_stats_total, Elo 文本取终局定格的 endEloHtml 去标签。
+- i18n: share_title / eo_share_btn 双语 (366 键); index.html script 标签 + sw.js SHELL 同步 (第81轮壳清单对账守卫强制)。
+- 测试: 新增 test/test_share_card.js 16 断言 (几何 90 交点界内 + 楚河汉界间距 + 越界取模回绕 / buildData 截断清洗格式缺省 / collectPieces 起始 32 子且帅将分处两侧 / 无引擎空数组); 修一处测试自身字段名错 (title vs titleText)。注册进 run_all + test:serial (25 套件)。
+- 门禁: npm run check ALL PASS; npm test 25/25 PASS (check_ui 在并行高负载下出现过一次 0xC0000409 Windows 进程崩溃 — 非断言失败, 单独运行与随后两轮全量均绿, 判定为环境抖动; 若复现再查)。
