@@ -456,7 +456,8 @@ if (!/id="rp-jump"[^>]*data-i18n-aria=/.test(rpEnsureSrc)) wire44.push('#rp-jump
 if (/class="pg-btn pg-prev"(?!\s+data-i18n-aria)/.test(renCode)) wire44.push('思考面板翻页 ‹ 按钮无可访问名');
 if (!/data-i18n-aria="pg_next"/.test(renCode)) wire44.push('思考面板翻页 › 按钮无可访问名');
 // (a4) 切换式按钮补 aria-pressed (翻转/全屏), 且全屏状态随 fullscreenchange 同步 (Esc 退出也走该事件)
-if (!/aria-pressed="false">⇅ 翻转/.test(html)) wire44.push('翻转按钮缺 aria-pressed 初值 (切换式按钮无开关态)');
+// 第88轮: 静态文案翻英文 (UI 默认语言 zh→en), 源串断言同步 — 语义不变 (aria-pressed 初值仍紧跟按钮文案)
+if (!/aria-pressed="false">⇅ Flip board/.test(html)) wire44.push('翻转按钮缺 aria-pressed 初值 (切换式按钮无开关态)');
 if (!/id="btn-fullscreen"[^>]*aria-pressed=/.test(html)) wire44.push('全屏按钮缺 aria-pressed 初值');
 if (!/function paintFullscreenPressed\(on\)/.test(appCode)) wire44.push('缺全屏 aria-pressed 同步出口 (Esc 原生退全屏后状态停在「已全屏」)');
 if (!/bfP\.setAttribute\('aria-pressed'/.test(appCode)) wire44.push('翻转按钮的 aria-pressed 未随 applyFlip 同步');

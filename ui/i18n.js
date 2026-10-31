@@ -1,4 +1,4 @@
-/* ui/i18n.js — 轻量 UI i18n 框架 (零依赖, 中文默认, English 可切)
+/* ui/i18n.js — 轻量 UI i18n 框架 (零依赖, English 默认 [第88轮], 中文可切)
  * 用法:  标记: <span data-i18n="key">默认中文</span><button data-i18n-title="key" title="默认中文">...</button>
  * 动态:  XQ.I18N.t('key') 或 XQ.I18N.tArgs('key', {name:'x'}) 占位符 {name}
  * 切换:  XQ.I18N.setLang('en'|'zh', true)  (第二参 true = 持久化到 localStorage 'xq_lang')
@@ -474,8 +474,8 @@
     rp_hk_main: 'Main UI keys: M mute · R reset · F fullscreen · U undo · arrows move the cursor + Enter/Space select & move + Esc cancel (replay takes over when open)'
   };
   var STRINGS = { zh: ZH, en: EN };
-  function has(l) { return l && LANGS.indexOf(l) !== -1 ? l : 'zh'; }
-  var cur = 'zh';
+  function has(l) { return l && LANGS.indexOf(l) !== -1 ? l : 'en'; }   /* 第88轮: 默认语言 zh→en (国际化首屏; 中文仍可一键切换) */
+  var cur = 'en';
   try { var _s = root.localStorage && root.localStorage.getItem(LS_KEY); if (_s) cur = has(_s); } catch (e) {}
   function t(k) {
     var dict = STRINGS[cur] || STRINGS.zh;

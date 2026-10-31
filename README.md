@@ -10,9 +10,21 @@ Chinese Chess (Xiangqi) + LLM battle platform. v1.5 decision-card live spectatin
 
 > ⚡ **Instant demo, zero setup: [▶ play in your browser](https://yydsdbc.github.io/LLM-Chess/)** — the page runs a built-in engine, so you can play (or pit two random AIs against each other) with no install and no API key. For live LLM battles run the relay below and open the same page locally.
 
-> 📖 [中文文档 (Chinese docs)](README.zh-CN.md) · 🏆 [LLM Leaderboard + methodology](LEADERBOARD.md) · Detailed per-round dev log: [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md)
+> 📖 [中文文档 (Chinese docs)](README.zh-CN.md) · 🏆 [LLM Leaderboard](LEADERBOARD.md) · 🏗️ [Architecture](docs/ARCHITECTURE.md) · Detailed per-round dev log: [OPTIMIZATION_LOG.md](OPTIMIZATION_LOG.md)
 
 ## Quick Start
+
+**Ways to play** — pick one:
+
+| You want… | Do this |
+|---|---|
+| Try it right now, zero setup | [▶ Open the hosted demo](https://yydsdbc.github.io/LLM-Chess/) — built-in engine, pit two Random AIs against each other |
+| Watch two real LLMs battle locally | `npm start` + fill `config/keys.json` (below) |
+| Bring your own key, no server config | In the demo, ⚙ Settings → **Direct (BYOK)** mode → paste your key |
+| Re-watch / share a finished game | 🎬 **Watch replay** from the end-game card — no LLM calls, includes decision-card export |
+| Benchmark a model headlessly | `node test/match_headless.js <provider> <model>` → feed [LEADERBOARD.md](LEADERBOARD.md) |
+
+Local install:
 
 ```bash
 git clone https://github.com/yydsdbc/LLM-Chess.git
@@ -160,9 +172,12 @@ Phase-aware dynamic piece values (opening rook 990 vs endgame horse 500, crossed
 
 | Mode | How | Notes |
 |------|-----|-------|
-| Quick start/stop | double-click `Start.cmd` / `Stop.cmd` | = `node server.js` in background (port 8788) |
+| Hosted demo (zero setup) | [yydsdbc.github.io/LLM-Chess](https://yydsdbc.github.io/LLM-Chess/) | built-in engine; human / Random AI / BYOK direct |
 | Offline (human vs random) | open `index.html` directly | zero dependencies, no server |
-| LLM battle | `node server.js` → http://localhost:8788 | fill `config/keys.json` first |
+| LLM battle (relay) | `node server.js` → http://localhost:8788 | fill `config/keys.json` first; keys never leave the server |
+| LLM battle (BYOK direct) | ⚙ Settings → Direct mode → paste key | browser talks straight to the provider; key stays in your browser's localStorage |
+| Headless benchmark | `node test/match_headless.js <provider> <model> [maxPlies]` | no browser; results feed [LEADERBOARD.md](LEADERBOARD.md) |
+| Quick start/stop | double-click `Start.cmd` / `Stop.cmd` | = `node server.js` in background (port 8788) |
 
 - Settings: ⚙ at the top-left of the board. Each side independently: Human / Random AI / LLM (red and black may use different providers), plus playing style per side.
 - Fullscreen spectating: ⛶ button or `F`.

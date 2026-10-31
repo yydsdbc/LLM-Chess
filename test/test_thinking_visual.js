@@ -237,6 +237,7 @@ test('only explicit cards/text rendering removes the initial body translation bi
   for (const opts of [{ stat: '1 move' }, { name: 'Red' }, { active: false }, { info: 'model' }]) {
     f.UI.thinkPanel('red', opts); assert.strictEqual(m.body.getAttribute('data-i18n'), 'status_idle');
   }
+  f.context.XQ.I18N.setLang('zh', false); // 第88轮默认语言 zh→en: 先落到 zh 再切 en, 保证这次 setLang 是真实语言变更 (同值早退不触发 apply)
   f.context.XQ.I18N.setLang('en', false);
   assert.strictEqual(m.body.textContent, f.context.XQ.I18N.t('status_idle'));
   f.UI.thinkPanel('red', { text: 'provider dynamic text' });

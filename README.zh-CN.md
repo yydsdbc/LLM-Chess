@@ -15,9 +15,21 @@
 
 观战时可查看模型返回的计划、候选与最终决策，以及真实的响应阶段。红黑血量式对抗条将静态局面评分映射为百分比，明确标注为未经校准的估计，与模型选着信心分开；终局显示实际赛果。
 
-> 🏆 [LLM 象棋天梯 · 方法论与公开数据 (LEADERBOARD.md)](LEADERBOARD.md) — 无头基准协议 + leaderboard.json
+> 🏆 [LLM 象棋天梯 · 方法论与公开数据 (中文版)](LEADERBOARD.zh-CN.md) — 无头基准协议 + leaderboard.json · 🏗️ [架构地图 (中文版)](docs/ARCHITECTURE.zh-CN.md)
 
 ## 快速开始
+
+**玩法速选** — 挑一条路：
+
+| 你想… | 这样做 |
+|---|---|
+| 立刻就玩，零安装 | [▶ 打开在线 demo](https://yydsdbc.github.io/LLM-Chess/) — 页面自带引擎，双随机 AI 自动对垒 |
+| 本地看两个真 LLM 实时对战 | `npm start` + 填 `config/keys.json`（见下） |
+| 自带 key，不配服务端 | 在 demo 里 ⚙ 设置 → **直连 (BYOK) 模式** → 粘贴自己的 key |
+| 重看/分享下完的棋 | 终局卡点 🎬 **回放** — 不调 LLM，支持决策卡实录导出 |
+| 无头基准测模型 | `node test/match_headless.js <provider> <model>` → 结果进 [天梯](LEADERBOARD.zh-CN.md) |
+
+本地安装：
 
 ```bash
 git clone <本仓库>
@@ -141,12 +153,21 @@ LLM-chess/
 ## 同方多 LLM (v1.0.daily)
 同一方可以配置多个 LLM 协同推理：模型框逗号分隔多个模型（`glm-a, glm-b`，或跨厂商 `deepseek:deepseek-chat, qwen:qwen3-max`），每侧独立选择模式 — **轮换**（每手换下一个模型，各自独立前缀缓存；连续两次失败的选民自动跳过）或 **会诊**（全体并行作答，按落点投票决胜，平票比信心和；多数落点若静态净损明显会被**安全否决**改选静态最优；思考按选民分区直播 `【模型】…`，思考卡实时显示选民标记与实时票型，落子卡片标注胜出选民；个别选民失败不影响出招，全灭才走随机兑底，每选民 90s 预算），或 **圆桌**（先各自提案 → 互看同侪建议后独立终判 → 再投票；讨论注记并入该手请求，前缀缓存契约保持）。
 
-## 运行
+## 运行模式速查
+
+| 模式 | 怎么进 | 说明 |
+|------|--------|------|
+| 在线 demo (零安装) | [yydsdbc.github.io/LLM-Chess](https://yydsdbc.github.io/LLM-Chess/) | 自带引擎; 人机 / 双随机 / BYOK 直连 |
+| 离线 (人 vs 随机) | 直接双击打开 `index.html` | 零依赖, 不起服务 |
+| LLM 对战 (中继) | `node server.js` → http://localhost:8788 | 先填 `config/keys.json`; 密钥不出服务端 |
+| LLM 对战 (BYOK 直连) | ⚙ 设置 → 直连模式 → 粘贴 key | 浏览器直连供应商; key 只存本机浏览器 |
+| 无头基准 | `node test/match_headless.js <provider> <model> [maxPlies]` | 不开浏览器; 结果喂 [天梯](LEADERBOARD.zh-CN.md) |
+| 一键起停 | 双击 `Start.cmd` / `Stop.cmd` | = 后台运行 `node server.js` (端口 8788) |
 
 ## 快速上手 (三步)
 
 1. **解压后双击 `Start.cmd`** — 自动后台启动服务并打开浏览器 (需已安装 Node.js 18+；未安装会给出下载地址)
-2. **首次使用**: 编辑 `config/keys.json`, 在你用的服务商下填入 `apiKey` (模板已含 tokenrhythm 在内的全部服务商)，保存后重启一次
+2. **首次使用**: 编辑 `config/keys.json`, 在你用的服务商下填入 `apiKey` (模板已含全部 16 家服务商)，保存后重启一次
 3. **开棋**: 棋盘左上角 ⚙ 选双方模型/提示词等级 → 开始对局；`Stop.cmd` 一键停止
 
 > 默认端口 8788 (启动时可用参数覆盖)；服务默认仅本机可访问，局域网访问设环境变量 `LLMCHESS_HOST=0.0.0.0` 后重启。

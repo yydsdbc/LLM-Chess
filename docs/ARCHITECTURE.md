@@ -1,8 +1,10 @@
-# Architecture / 架构
+# Architecture
 
-> Contributor-facing map of LLM-chess v1.1: what each module does, how an LLM turn flows, and which invariants the test suite guards. 面向贡献者的模块地图、LLM 单手数据流与测试守护的约定。
+> Contributor-facing map of LLM-chess v1.1: what each module does, how an LLM turn flows, and which invariants the test suite guards.
+>
+> 🀄 中文版: [ARCHITECTURE.zh-CN.md](../docs/ARCHITECTURE.zh-CN.md)
 
-## Overview / 总览
+## Overview
 
 ```mermaid
 flowchart LR
@@ -34,7 +36,7 @@ flowchart LR
 - **ui/** + **replay/** — spectating HUD, decision cards, i18n (zh/en), full replay system that re-drives a saved record without calling the LLM. Board flip (black perspective, round 34), drag-move (round 33), keyboard travel + resizable think panels, undo (U), auto-save + resume, PGN import/export, backup/restore, Elo ladder (rounds 30–36).
 - **benchmark/** + **test/** — headless matches, ELO/record tooling, and the test suites.
 
-## LLM turn data flow / 单手数据流
+## LLM turn data flow
 
 1. `engine.snapshot()` → board text + legal moves (annotated: capture / mate / losing-tag).
 2. `llm_agent` builds the prompt under the **cache contract** (below) and POSTs to `server.js` relay.
@@ -43,7 +45,7 @@ flowchart LR
 5. Code-level guards (opening cannon-capture ban, hanging-piece guard) may reject a move before it is applied; rejections are counted in `usage.blocked`.
 6. `engine.applyPlayerMove()`; clocks, repetition, HUD and record update.
 
-## Prompt cache contract / 提示词缓存契约 (do not break)
+## Prompt cache contract (do not break)
 
 - `system` prompt is **byte-identical for the whole game** (no per-move trimming). The two levels are `none` (task/output protocol) and `high` (adds strategy/tactics, the default); other setting values normalize to `high`. Both share position summaries and engine safety guards; existing record metadata is not rewritten. LLM requests call `summarize` with `openingTasks: false` to omit legacy fixed opening routes; default spectator summaries and numerical evaluation remain unchanged.
 - Conversation grows **append-only** as (user request, assistant raw JSON) pairs; each request's prefix ⊇ the previous one.
@@ -51,7 +53,7 @@ flowchart LR
 - `HIST_CAP` (default 10 pairs) trims from the head and re-injects the task header.
 - Guard: `npm run check` runs the prompt hard gate (`test/dump_prompts.js --check`: system ≤ 2400 chars, no special symbols ①②③≥≤~→⚠).
 
-## Test map / 测试地图
+## Test map
 
 | Suite | What it guards |
 |---|---|
@@ -78,7 +80,7 @@ flowchart LR
 
 Run everything with `npm test` (21 suites) — CI runs `npm run check` + `npm test` on Node 18/20/22/24 (ubuntu) and Node 22 (windows).
 
-## Conventions / 约定
+## Conventions
 
 - **Zero dependencies.** Browser modules attach to the `XQ.*` namespace and must not use `require()`; Node-only code lives in `server.js`, `tools/`, `test/`.
 - Static UI files are hot-reloadable (F5); only `server.js` changes need a restart.

@@ -2361,3 +2361,11 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - README.md 与 README.zh-CN.md 首屏嵌入 <video src="docs/demo.webm" controls muted loop playsinline> (GitHub 2021 起支持仓库相对路径 video 元素渲染); 原 docs/ui.png 静态截图紧随其后保留, 作为不支持 video 的渲染器降级回退。中文档此前无首屏媒体, 与英文档对齐补齐。
 - 教训入册: ①录屏产物验证必须走 ffprobe/抽帧, 严禁 Read 视频原件 (会话卡死根因); ②IAB 原生录制在本环境不可用, 需要动图时走「截图序列+ffmpeg 合成」管线。
 - 门禁: npm run check ALL PASS; npm test 27/27 PASS。
+
+## 2026-10-31 19:20 第88轮 (zcode — v1.1.5 发版准备: 文档英文化拆分 + UI 默认英文 + README 使用方式优化)
+
+- 文档拆分 (面向国际推广): README 保持英文主文档; LEADERBOARD.md 与 docs/ARCHITECTURE.md 原英中混排拆为英文主文件 + 独立中文版 (LEADERBOARD.zh-CN.md / docs/ARCHITECTURE.zh-CN.md); AGENTS.md 译为英文主文件, 中文原版原样保留为 AGENTS.zh-CN.md; 交叉链接全部改线 (zh README 天梯链指向 zh 版; docs/ 内互链用 ../docs/ 形态 — 同目录写法会被 link_check 的 ../ 前缀守卫拒绝, ../ 再进目录在 GitHub 与本地均正确解析)。promotion.md (中文平台发帖弹药) 与 OPTIMIZATION_LOG.md (逐轮开发台账) 保持中文 — 前者内容本质面向知乎/B站, 后者是多 agent 协作记录。
+- UI 默认语言 zh→en (第88轮): i18n.js cur 初值与 has() 兜底改 'en' (中文仍一键切换, xq_lang 持久化不变); index.html 静态兜底文案 71 个文本节点 + 21 个属性 (title/aria-label/placeholder) 全部按字典翻英文 — 三轮脚本修正: 贪婪回溯只翻到同标签最后一个 data-i18n-* 标记 (title 漏网), 另翻 provider 选项 智谱 GLM→Zhipu GLM / 直连 BYOK→Direct BYOK 与 meta description; <html lang> 静态值 zh-CN→en; 语言选择器「中文」选项保留 (语言自称不翻)。浏览器实测: 清 xq_lang 首访 → lang=en + 全英文界面 (棋子汉字是记谱偏好, 属游戏特性)。CSS/HTML 内代码注释按选择保持中文 (只翻用户可见层)。
+- 守卫同步: check_ui 第18节翻转按钮源串断言随静态文案更新 (⇅ 翻转→⇅ Flip board, 语义不变); test_thinking_visual 一处 setLang('en') 前补 setLang('zh') (默认已 en 时同值早退不触发 apply — 测试需要真实语言变更才覆盖到 apply 路径)。
+- README 使用方式优化 (双语同步): Quick Start 顶部加「玩法速选」表 (在线 demo / 本地中继 / BYOK 直连 / 回放分享 / 无头基准 五条路各配动作); Running Modes 表 3 行补全 6 行 (此前缺 BYOK 直连/在线 demo/无头基准); zh 版修一处陈旧文案 (「tokenrhythm」并不在 16 家服务商之列) 并补同款运行模式速查表。
+- 门禁: npm run check ALL PASS; npm test 27/27 PASS。
