@@ -32,6 +32,7 @@
     btn_jump_start: '⏮⏮ 跳到开头', btn_jump_end: '⏭⏭ 跳到结尾',
     btn_skip_back5: '⏪ -5', btn_skip_fwd5: '⏪ +5',
     btn_fullscreen: '⛶ 全屏', btn_help: '? 帮助', btn_close: '关闭',
+    btn_star: '⭐ Star 项目', btn_star_title: '在 GitHub 打开仓库 (新标签页) — 觉得有意思, 一个 Star 就是给作者最直接的反馈',   // 第89轮: 终局按钮行的转化入口 (demo 访客 → 仓库 Star)
     btn_again: '🔁 再来一局', btn_watch_replay: '🎬 观看回放', btn_save_short: '💾 存棋谱',   // 第23轮 i18n 漏挂回补 (原静态文本无 data-i18n)
     btn_watch_replay_title: '不调用LLM, 回放已保存棋谱', btn_fullscreen_title: '全屏观战 (F 键)',   // 第24轮: title 错挂修复 — 原挂 nav_replay('🎬')/btn_fullscreen('⛶ 全屏') 会把描述性提示抹成图标
     keys_note: '密钥仅保存在服务端 config/keys.json，前端永不接触。双方可各配不同类型/服务商。',
@@ -264,6 +265,7 @@
     btn_jump_start: '⏮⏮ Start', btn_jump_end: '⏭⏭ End',
     btn_skip_back5: '⏪ -5', btn_skip_fwd5: '⏩ +5',
     btn_fullscreen: '⛶ Fullscreen', btn_help: '? Help', btn_close: 'Close',
+    btn_star: '⭐ Star on GitHub', btn_star_title: 'Open the repo in a new tab — if you find this fun, a star is the most direct feedback for the author',   // round 89: endgame-row conversion entry (demo visitor → repo star)
     btn_again: '🔁 Play again', btn_watch_replay: '🎬 Watch replay', btn_save_short: '💾 Save',   // round-23 i18n gap fix (was static text without data-i18n)
     btn_watch_replay_title: 'No LLM calls — replays a saved game', btn_fullscreen_title: 'Fullscreen spectating (F)',   // round-24: title key fix — nav_replay/btn_fullscreen glyphs were erasing the descriptive tooltip
     keys_note: 'API keys live only in server-side config/keys.json — the browser never sees them. Each side can use a different type/provider.',

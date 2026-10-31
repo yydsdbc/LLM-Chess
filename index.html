@@ -90,7 +90,7 @@ h1{color:#f0d9a0;font-size:24px;margin-bottom:4px;text-shadow:0 2px 4px rgba(0,0
 #ai-banner.warn{display:flex;background:rgba(231,76,60,.15);color:#f08578;border:1px solid rgba(231,76,60,.4)}
 #btn-row{margin-top:6px;display:flex;gap:10px;justify-content:center;opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s;pointer-events:none}   /* 第42轮 a11y: 原仅 opacity:0 — 不可见按钮仍在 Tab 序内且可被 Enter 激活 (第23轮给两个遮罩补 visibility 时漏了这条工具条) */
 #btn-row.visible{opacity:1;visibility:visible;pointer-events:auto}
-.btn{padding:6px 16px;border:none;border-radius:5px;font-size:12px;font-weight:bold;cursor:pointer;letter-spacing:1px;transition:all .2s;color:#f0d9a0;background:rgba(240,217,160,.08);border:1px solid rgba(240,217,160,.2)}
+.btn{padding:6px 16px;border:none;border-radius:5px;font-size:12px;font-weight:bold;cursor:pointer;letter-spacing:1px;transition:all .2s;color:#f0d9a0;background:rgba(240,217,160,.08);border:1px solid rgba(240,217,160,.2)}a.btn{text-decoration:none;display:inline-flex;align-items:center}   /* 第89轮: btn-row 内 a.btn (GitHub Star 入口) 与 button 同形 */
 .btn:hover{background:rgba(240,217,160,.18);border-color:rgba(240,217,160,.4)}
 .btn:active{transform:scale(.96)}
 #archive-row{margin-top:6px;display:flex;gap:8px}
@@ -626,7 +626,7 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
             </div>
             <details class="set-tools">
                 <summary tabindex="0" data-i18n="set_tools">Game tools &amp; records</summary>
-                <div id="btn-row"><button class="btn" id="btn-flip" data-i18n="btn_flip" aria-pressed="false">⇅ Flip board</button><button class="btn" id="btn-undo" data-i18n="btn_undo" data-i18n-title="undo_tip" title="↩ Undo (shortcut U)">↩ Undo</button><button class="btn" id="btn-restart" data-i18n="btn_reset">Reset</button><button class="btn" id="btn-replay-watch" data-i18n="btn_watch_replay" data-i18n-title="btn_watch_replay_title" title="No LLM calls — replays a saved game">🎬 Watch replay</button><button class="btn" id="btn-fullscreen" data-i18n="btn_fullscreen" data-i18n-title="btn_fullscreen_title" aria-pressed="false" title="Fullscreen spectating (F)">⛶ Fullscreen</button></div>
+                <div id="btn-row"><button class="btn" id="btn-flip" data-i18n="btn_flip" aria-pressed="false">⇅ Flip board</button><button class="btn" id="btn-undo" data-i18n="btn_undo" data-i18n-title="undo_tip" title="↩ Undo (shortcut U)">↩ Undo</button><button class="btn" id="btn-restart" data-i18n="btn_reset">Reset</button><button class="btn" id="btn-replay-watch" data-i18n="btn_watch_replay" data-i18n-title="btn_watch_replay_title" title="No LLM calls — replays a saved game">🎬 Watch replay</button><button class="btn" id="btn-fullscreen" data-i18n="btn_fullscreen" data-i18n-title="btn_fullscreen_title" aria-pressed="false" title="Fullscreen spectating (F)">⛶ Fullscreen</button><a class="btn" id="btn-star" href="https://github.com/yydsdbc/LLM-Chess" target="_blank" rel="noopener" data-i18n="btn_star" data-i18n-title="btn_star_title" title="Open the GitHub repo (new tab)">⭐ Star on GitHub</a></div>
                 <div id="archive-row">
                     <button class="btn" id="btn-save" data-i18n="btn_save_short" data-i18n-title="btn_save" title="💾 Save Game" disabled>💾 Save</button>
                     <button class="btn" id="btn-load" data-i18n="btn_load" data-i18n-title="btn_load" title="📂 Load Game">📂 Load Game</button>

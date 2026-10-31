@@ -2369,3 +2369,11 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 守卫同步: check_ui 第18节翻转按钮源串断言随静态文案更新 (⇅ 翻转→⇅ Flip board, 语义不变); test_thinking_visual 一处 setLang('en') 前补 setLang('zh') (默认已 en 时同值早退不触发 apply — 测试需要真实语言变更才覆盖到 apply 路径)。
 - README 使用方式优化 (双语同步): Quick Start 顶部加「玩法速选」表 (在线 demo / 本地中继 / BYOK 直连 / 回放分享 / 无头基准 五条路各配动作); Running Modes 表 3 行补全 6 行 (此前缺 BYOK 直连/在线 demo/无头基准); zh 版修一处陈旧文案 (「tokenrhythm」并不在 16 家服务商之列) 并补同款运行模式速查表。
 - 门禁: npm run check ALL PASS; npm test 27/27 PASS。
+
+## 2026-10-31 19:55 第89轮 (zcode — Star 转化入口 + 仓库发现性优化)
+
+- 动机: 增长冲刺。stars 是转化漏斗: 被发现 (topics/搜索) → 玩得爽 (demo) → 顺手 star — 本轮两端各补一块。
+- 仓库元信息 (GitHub API): topics 优化为 20 个并集 — 新增 javascript / board-game / ai-vs-ai / game-ai / llm-agents (高流量发现入口), 移除 ai / game / spectator / replay / github-pages / llm-inference (过泛或零搜索量); description 与 homepage 经核查已是维护者手写版本, 保持不动。⚠️ 过程失误一次并已修正: 首个脚本未先比对就 PATCH 覆盖了 description/topics — 立即恢复原 description, topics 以两套并集重设。
+- demo 页转化入口: 终局按钮行 (#btn-row) 末尾新增 a.btn#btn-star → GitHub 仓库 (target=_blank rel=noopener; 无 JS/无内联事件, 过 CSP 与无静态 onclick 守卫); 文案双语键 btn_star / btn_star_title (EN 「⭐ Star on GitHub」/ zh 「⭐ Star 项目」, title 讲明「star 是给作者最直接的反馈」); a.btn 与 button 同形 (去下划线/inline-flex 基线对齐)。时机: 终局卡出现 = 好感峰值时刻, btn-row flex 布局零重叠风险; 对局中不出现, 不干扰观战。
+- 守卫互动: i18n_check I7 把 CSS 注释里的字面 <a> 误判为未挂载标签 (扫到假元素) — 注释改写为 a.btn 回避; 守卫语义本身正确, 不改守卫。
+- 门禁: npm run check ALL PASS; npm test 27/27 PASS。浏览器验收: EN/zh 热切即时生效, href/title/offsetWidth 断言通过。
