@@ -1475,7 +1475,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (!rec) return;
       var T = XQ.I18N ? XQ.I18N.t : function (k) { return k; }, TA = XQ.I18N ? XQ.I18N.tArgs : function (k, a) { return k; };
       var bar = document.createElement('div');
-      bar.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:250;background:rgba(20,14,6,.95);border:1px solid #C28A20;border-radius:10px;padding:8px 14px;display:flex;gap:10px;align-items:center;color:#FFE8A3;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.6)';
+      /* 第92轮: z-index 250→65 — 恢复横幅曾压在设置弹层 (z-70) 之上, 「保存并开局」被遮挡 (第91轮实测); 65 高于内容/终局层 (≤60), 低于一切模态 (70+/200+/290+) */
+      bar.style.cssText = 'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:65;background:rgba(20,14,6,.95);border:1px solid #C28A20;border-radius:10px;padding:8px 14px;display:flex;gap:10px;align-items:center;color:#FFE8A3;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.6)';
       /* 第45轮 a11y: 这条「有未完对局, 是否续下」的横幅是异步插进 body 的, 却没有任何 live 语义 —
          读屏用户永远不知道页面上多了一个可操作提示 (只能靠 Tab 偶然撞到)。文本走 role=status 播报;
          注意必须「先把空区域插入 DOM, 再写文本」: 带着内容一起插入时部分读屏不会播报该内容。 */
@@ -2796,12 +2797,37 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     try { var sk = localStorage.getItem('xq_elo_sort'); if (sk) sortKey = sk; } catch (eSK) {}   // 第53轮: 排序列持久化
     function paint() {
       var rows = XQ.Elo.leaderboard();
+      /* 第92轮: 趋势列 — 每个名字的评分轨迹 sparkline (本地棋谱重放, 结算同口径; 棋谱池裁剪后终值可能偏离当前分, 见脚注) */
+      var TA92 = XQ.I18N ? XQ.I18N.tArgs : function (k) { return k; };
+      var trend = (XQ.Elo.trendFromRecords && XQ.Record && XQ.Record.list)
+        ? XQ.Elo.trendFromRecords(XQ.Record.list()) : { series: {}, games: 0 };
+      function trendSpark(pts) {
+        if (!pts || pts.length < 2) return '<span style="color:#8a7a5a">—</span>';
+        var w = 110, h = 26, pad = 2;
+        var min = Math.min.apply(null, pts), max = Math.max.apply(null, pts);
+        var span = (max - min) || 1;
+        var step = (w - pad * 2) / (pts.length - 1);
+        var poly = pts.map(function (v, i) {
+          var x = (pad + i * step).toFixed(1);
+          var y = (h - pad - ((v - min) / span) * (h - pad * 2)).toFixed(1);
+          return x + ',' + y;
+        }).join(' ');
+        var delta = Math.round((pts[pts.length - 1] - pts[0]) * 10) / 10;
+        var color = delta > 0 ? '#58d68d' : delta < 0 ? '#ff8a7a' : '#c4a56e';
+        return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" aria-hidden="true" style="display:block"><polyline points="' + poly + '" fill="none" stroke="' + color + '" stroke-width="1.6"/></svg>';
+      }
+      var trendCell = function (name) {
+        var pts = trend.series[name] || [];
+        var delta = pts.length >= 2 ? Math.round((pts[pts.length - 1] - pts[0]) * 10) / 10 : null;
+        var tip = TA92('elo_trend_title', { n: trend.games }) + (delta === null ? '' : ' · ' + (delta > 0 ? '+' : '') + delta);
+        return '<td style="padding:2px 10px;text-align:center" title="' + String(tip).replace(/"/g, '&quot;') + '">' + trendSpark(pts) + '</td>';
+      };
       rows.sort(function (a, b) { return (b[sortKey] || 0) - (a[sortKey] || 0) || (a.name < b.name ? -1 : 1); });
       var body = rows.length
         ? rows.map(function (r2) {
-            return '<tr><td style="padding:2px 10px">' + esc2(r2.name) + '</td><td style="padding:2px 10px;text-align:right;color:#f0d9a0"><b>' + r2.rating + '</b></td><td style="padding:2px 10px;text-align:right">' + r2.games + '</td><td style="padding:2px 10px;text-align:right;color:#58d68d">' + r2.win + '</td><td style="padding:2px 10px;text-align:right">' + r2.draw + '</td><td style="padding:2px 10px;text-align:right;color:#ff8a7a">' + r2.loss + '</td></tr>';
+            return '<tr><td style="padding:2px 10px">' + esc2(r2.name) + '</td><td style="padding:2px 10px;text-align:right;color:#f0d9a0"><b>' + r2.rating + '</b></td><td style="padding:2px 10px;text-align:right">' + r2.games + '</td><td style="padding:2px 10px;text-align:right;color:#58d68d">' + r2.win + '</td><td style="padding:2px 10px;text-align:right">' + r2.draw + '</td><td style="padding:2px 10px;text-align:right;color:#ff8a7a">' + r2.loss + '</td>' + trendCell(r2.name) + '</tr>';
           }).join('')
-        : '<tr><td colspan="6" style="text-align:center;padding:10px;color:#c4a56e">' + T('elo_empty') + '</td></tr>';
+        : '<tr><td colspan="7" style="text-align:center;padding:10px;color:#c4a56e">' + T('elo_empty') + '</td></tr>';
       var ov = document.getElementById('rp-elo-overlay');
       if (!ov) return;   // 已关闭 (paint 由排序/清空触发, 可能晚于 Esc 关闭)
       ov.querySelector('#rp-elo-body').innerHTML = body;
@@ -2824,8 +2850,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '<th scope="col" style="text-align:left;padding:2px 10px">' + T('elo_th_model') + '</th>'
       + '<th scope="col" id="elo-s-rating" aria-sort="none" style="text-align:right;padding:2px 10px">' + sortBtn('rating', T('elo_th_rating')) + '</th>'
       + '<th scope="col" id="elo-s-games" aria-sort="none" style="text-align:right;padding:2px 10px">' + sortBtn('games', T('elo_th_games')) + '</th>'
-      + '<th scope="col" colspan="3" style="text-align:right;padding:2px 10px">' + T('elo_th_wdl') + '</th></tr></thead>'
-      + '<tbody id="rp-elo-body"></tbody></table></div></div>';
+      + '<th scope="col" colspan="3" style="text-align:right;padding:2px 10px">' + T('elo_th_wdl') + '</th>'
+      + '<th scope="col" style="text-align:center;padding:2px 10px">' + T('elo_trend') + '</th></tr></thead>'
+      + '<tbody id="rp-elo-body"></tbody></table>'
+      + '<div style="margin-top:8px;font-size:11px;color:#c4a56e">' + T('elo_trend_note') + '</div></div></div>';
     var d = document.createElement('div');
     d.innerHTML = html;
     var ov = d.firstChild;

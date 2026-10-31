@@ -198,6 +198,40 @@
     return values.length ? { min: Math.min.apply(Math, values), max: Math.max.apply(Math, values), count: values.length } : { min: null, max: null, count: 0 };
   }
 
+  /* ── 第92轮: 从本地棋谱重放评分轨迹 (纯函数, 不触碰评分表) ──
+   * 口径与终局结算一致: 双方 kind 均非 human 才记账 (app.js 终局 Elo 分支同条件), result 缺失跳过;
+   * 按棋谱 date 时序重放 update(), 输出每个名字在每局后的评分序列。
+   * 诚实边界: 棋谱池有容量裁剪 — 序列终值未必等于当前 ratingOf (只有历史完整时一致), UI 需注明「重放」。 */
+  function trendFromRecords(records) {
+    var series = {};   // 普通对象: 序列会被 JSON 序列化/跨环境传递
+    var games = 0;
+    var list = Array.isArray(records) ? records.slice() : [];
+    list.sort(function (a, b) {
+      var ta = a && typeof a.date === 'string' ? a.date : '';
+      var tb = b && typeof b.date === 'string' ? b.date : '';
+      return ta < tb ? -1 : ta > tb ? 1 : 0;
+    });
+    list.forEach(function (rec) {
+      if (!rec || !rec.red || !rec.black) return;
+      /* 已终局判据 = result 为字符串 (Record.finish 落 'checkmate'|... ); 未完局 result/winner 均为 null —
+         和局也是 winner null, 只能靠 result 区分 (测试当场抓到的口径错误) */
+      if (typeof rec.result !== 'string') return;
+      if (rec.red.kind === 'human' || rec.black.kind === 'human') return;             // 人类参与局不入 Elo 表 (结算同口径)
+      var nameR = normalizeName(rec.red.name), nameB = normalizeName(rec.black.name);
+      if (!nameR || !nameB) return;
+      var scoreR = rec.winner === 'red' ? 1 : rec.winner === 'black' ? 0 : 0.5;      // winner null = 和局
+      var sR = series[nameR] || (series[nameR] = []);
+      var sB = series[nameB] || (series[nameB] = []);
+      var ra = sR.length ? sR[sR.length - 1] : BASE;
+      var rb = sB.length ? sB[sB.length - 1] : BASE;
+      var out = update({ ra: ra, rb: rb, scoreA: scoreR });
+      sR.push(out.ra);
+      sB.push(out.rb);
+      games++;
+    });
+    return { series: series, games: games };
+  }
+
   XQ.Elo = {
     BASE: BASE, DEFAULT_K: DEFAULT_K,
     expected: expected, update: update,
@@ -205,6 +239,6 @@
     leaderboard: leaderboard, leaderboardPage: leaderboardPage, rankOf: rankOf, compare: compare,
     statsOf: statsOf, ratingRange: ratingRange, applyResultOnce: applyResultOnce, forgetResult: forgetResult,
     resetAll: resetAll, normalizeName: normalizeName, normalizeScore: normalizeScore, normalizeK: normalizeK,
-    exportTable: exportTable, importTable: importTable
+    exportTable: exportTable, importTable: importTable, trendFromRecords: trendFromRecords
   };
 })(typeof window !== 'undefined' ? window : globalThis);

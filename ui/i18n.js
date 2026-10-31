@@ -23,6 +23,7 @@
     type: '类型', type_human: '人类', type_random: '随机AI', type_llm: 'LLM',
     provider: '服务商', model: '模型',
     model_placeholder: '选列表或直接输入任意模型名',
+    elo_trend: '趋势', elo_trend_title: '评分轨迹 (基于本地棋谱 {n} 局重放)', elo_trend_note: '趋势 = 按时序重放本地棋谱的评分轨迹; 棋谱池有容量裁剪, 序列终值未必等于当前评分',   // 第92轮: 天梯趋势列 (纯函数重放, 与结算同口径)
     preset_label: '一键对局预选', preset_random: '🤖 随机 vs 随机', preset_mirror: '{name} 镜像', preset_cross: '{a} × {b}',   // 第90轮: 预选 chips (中继已配 Key 的服务商生成, 免逐侧配置)
     prompt_level: '提示词等级', pl_none: '无（基础协议）', pl_low: '低 (一句话)', pl_mid: '中 (标准)', pl_high: '高（策略与战术）',
     quick_mode: '快答模式 (关闭深度思考, 直出决策+原因)',
@@ -257,6 +258,7 @@
     type: 'Type', type_human: 'Human', type_random: 'Random AI', type_llm: 'LLM',
     provider: 'Provider', model: 'Model',
     model_placeholder: 'Pick a suggestion or type any model name',
+    elo_trend: 'Trend', elo_trend_title: 'Rating trajectory (replayed from {n} local records)', elo_trend_note: 'Trend = rating trajectory replayed from local records; the record pool is trimmed, so the last point may differ from the current rating',   // round 92: ladder trend column (pure replay, settlement-faithful)
     preset_label: 'One-click matchup', preset_random: '🤖 Random × Random', preset_mirror: '{name} mirror', preset_cross: '{a} × {b}',   // round 90: matchup preset chips (built from keyed relay providers)
     prompt_level: 'Prompt level', pl_none: 'None (base protocol)', pl_low: 'Low (one-liner)', pl_mid: 'Mid (standard)', pl_high: 'High (strategy & tactics)',
     quick_mode: 'Quick mode (skip deep thinking, output decision + reason directly)',
