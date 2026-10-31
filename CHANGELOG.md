@@ -8,6 +8,7 @@ Format based on Keep a Changelog; versions follow SemVer.
 
 ### Added
 - Visualize live LLM response stages and the returned plan, candidates and decision; add a red/black battle bar from static position scores, explicitly labeled as an uncalibrated estimate rather than measured win probability.
+- Embed a first-screen spectating demo video (docs/demo.webm, 22.5s) in both READMEs, with the static screenshot kept below as a no-video fallback.
 
 ### Changed
 - Reduce prompt selection to None (task/output protocol) and High (strategy/tactics, the default), with clearer tactical checks and flexible opening choices; migrate legacy settings to High while preserving historical game metadata.

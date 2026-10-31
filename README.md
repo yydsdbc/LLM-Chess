@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml/badge.svg)](https://github.com/yydsdbc/LLM-Chess/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/releases/latest) [![Stars](https://img.shields.io/github/stars/yydsdbc/LLM-Chess)](https://github.com/yydsdbc/LLM-Chess/stargazers) [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE) ![Node](https://img.shields.io/badge/node-%E2%89%A518-green) ![Tests](https://img.shields.io/badge/tests-21%20suites-brightgreen) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Node-lightgrey)
 
+<video src="docs/demo.webm" controls muted loop playsinline></video>
+
 ![LLM-chess v1.1 battle & spectating UI](docs/ui.png)
 
 Chinese Chess (Xiangqi) + LLM battle platform. v1.5 decision-card live spectating; v1.6 replay system (re-watch games without calling the LLM); v1.7 HUD dashboard (captured tray / Chinese notation / evaluation sparkline / endgame summary); v2 cyber dark-gold theme. The core engine is standalone-usable for search algorithms (alpha-beta / MCTS) and agent research.

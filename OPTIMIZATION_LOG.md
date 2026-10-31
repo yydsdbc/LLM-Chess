@@ -2353,3 +2353,11 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - Discussions 已通过 API 开启 (has_discussions: true — 此前 PATCH homepage 失败是字段级权限缺失, 但 has_discussions 字段可用); 新增 .github/DISCUSSION_TEMPLATE/ideas.yml (想法/方法论) + show-and-tell.yml (战报分享, 强制附可复现数据、禁止贴真实 key)。
 - 新增 docs/promotion.md 五平台弹药: Show HN (作者发帖规则/评论守则/「为什么象棋不是国象」答法) / r/LocalLLaMA (「非法着法率」角度) / 知乎文章 (三个发现: 格式分水岭/模型改票/吵得起来) / B站短视频分镜脚本 (改票是情绪点) / X thread 5 推。附 D8-D10 发帖节奏与「承认样本量小」话术 — 强调由维护者亲手发, 不同日齐发。
 - 门禁: npm run check ALL PASS; npm test 27/27 PASS。
+
+## 2026-10-31 17:50 第87轮 (zcode 代 sess_d6c5ccb2 收尾 — 传播冲刺 D4: README 内嵌对局演示视频)
+
+- 背景: 上一会话录制 docs/demo.webm 时用 Read 直读 .webm, 后端报 [1210] 视频输入格式/解析错误, 视频附件进入会话历史后每轮请求全部被拒 (会话卡死; 已修复会话历史后由本会话代为完成任务)。且核查发现该录屏本身是废品: 浏览器面板后台化导致合成器帧不推进, 12s 录制实际只有 8 帧 ≈0.3s。
+- 重录方案 (不依赖原生录制 API — 本环境 recording.start 后 ~0.9s 即自行走完 completed, 两会话复现): 本地起服 :8788 → 预置 xq_v1_settings 双 random 自动开局 → 先清 xq_records_v1 中的未完局 (13→4 条), 避免「恢复对局」横幅入镜 → IAB 截图序列 45 帧 (~0.73s/帧, 33s 墙钟, 覆盖第 2 手至第 90 手) → ffmpeg (imageio-ffmpeg 自带静态二进制, 仅本机验证用, 零依赖原则不进仓库) 合成 VP8 1280x720 @2fps 22.5s 769KB → 抽 3 帧目检 (开局/中盘/末段全部清晰, 天平 48/52→33/67→83/17 走势可见)。
+- README.md 与 README.zh-CN.md 首屏嵌入 <video src="docs/demo.webm" controls muted loop playsinline> (GitHub 2021 起支持仓库相对路径 video 元素渲染); 原 docs/ui.png 静态截图紧随其后保留, 作为不支持 video 的渲染器降级回退。中文档此前无首屏媒体, 与英文档对齐补齐。
+- 教训入册: ①录屏产物验证必须走 ffprobe/抽帧, 严禁 Read 视频原件 (会话卡死根因); ②IAB 原生录制在本环境不可用, 需要动图时走「截图序列+ffmpeg 合成」管线。
+- 门禁: npm run check ALL PASS; npm test 27/27 PASS。

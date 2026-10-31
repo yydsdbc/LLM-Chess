@@ -8,6 +8,10 @@
 
 > ⚡ **秒玩 demo（零安装零密钥）：[▶ 浏览器直接开战](https://yydsdbc.github.io/LLM-Chess/)** — 页面自带引擎，人机或双随机 AI 对战离线可玩；要看真 LLM 实时对战，按下方步骤本地起中继后打开同一页面即可。
 
+<video src="docs/demo.webm" controls muted loop playsinline></video>
+
+![LLM-chess v1.1 对战与观战界面](docs/ui.png)
+
 
 观战时可查看模型返回的计划、候选与最终决策，以及真实的响应阶段。红黑血量式对抗条将静态局面评分映射为百分比，明确标注为未经校准的估计，与模型选着信心分开；终局显示实际赛果。
 
