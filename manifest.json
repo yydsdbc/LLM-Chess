@@ -9,6 +9,9 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "prefer_related_applications": false,
   "background_color": "#080607",
   "theme_color": "#080607",
   "shortcuts": [

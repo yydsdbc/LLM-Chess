@@ -352,11 +352,185 @@
     return { added: added, skipped: Math.max(0, bak.records.length - added), failedParts: failedParts };
   }
 
+  /* 第80轮数据契约层：回放、备份和研究脚本共用的轻量归一化工具。
+   * 这些函数不改变旧存储格式，只在调用方明确请求时复制并收敛外部数据，避免
+   * 导入一个带巨大/循环引用元数据的对象后污染后续统计或拖慢回放。 */
+  var SAFE_RESULTS = { checkmate: 1, stalemate: 1, perpetual: 1, repetition: 1, natural: 1, resign: 1, max_plies: 1, error: 1, draw: 1, agree: 1 };
+  var SAFE_PIECES = { king: 1, advisor: 1, bishop: 1, knight: 1, cannon: 1, rook: 1, pawn: 1 };
+  var MAX_DATA_TEXT = 4096;
+  function dataText(value, max, fallback) {
+    if (value == null) return fallback == null ? '' : fallback;
+    var s;
+    try { s = String(value); } catch (e) { return fallback == null ? '' : fallback; }
+    s = s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '');
+    return s.slice(0, max || MAX_DATA_TEXT);
+  }
+  function finiteNonNegative(value, fallback, cap) {
+    var n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return fallback == null ? 0 : fallback;
+    return Math.min(n, cap == null ? 2147483647 : cap);
+  }
+  function validRecordId(value) { return typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,160}$/.test(value); }
+  function validSquare(value) { return typeof value === 'string' && /^[a-i](?:10|[1-9])$/.test(value); }
+  function plainClone(value, depth) {
+    if (depth > 8 || value == null || typeof value !== 'object') return value;
+    if (Array.isArray(value)) return value.slice(0, 64).map(function (v) { return plainClone(v, depth + 1); });
+    var out = {};
+    Object.keys(value).slice(0, 128).forEach(function (key) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') return;
+      var v = value[key];
+      if (typeof v !== 'function' && typeof v !== 'symbol') out[key] = plainClone(v, depth + 1);
+    });
+    return out;
+  }
+  function normalizePlayerData(value, fallbackName) {
+    value = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    return {
+      name: dataText(value.name, 120, fallbackName),
+      kind: dataText(value.kind, 32, 'unknown'),
+      model: value.model == null ? null : dataText(value.model, 160, null),
+      style: value.style == null ? null : dataText(value.style, 80, null),
+      models: Array.isArray(value.models) ? value.models.slice(0, 16).map(function (m) { return dataText(m, 160, ''); }).filter(Boolean) : null
+    };
+  }
+  function normalizeMoveData(value, index) {
+    value = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    var out = {
+      n: index + 1,
+      side: value.side === 'black' ? 'black' : value.side === 'red' ? 'red' : null,
+      piece: SAFE_PIECES[value.piece] ? value.piece : null,
+      from: typeof value.from === 'string' ? value.from.toLowerCase().trim().slice(0, 3) : null,
+      to: typeof value.to === 'string' ? value.to.toLowerCase().trim().slice(0, 3) : null,
+      name: dataText(value.name, 80, ''),
+      captured: SAFE_PIECES[value.captured] ? value.captured : null,
+      timeMs: finiteNonNegative(value.timeMs, 0, 86400000)
+    };
+    ['summary', 'plan', 'evaluation', 'voterName'].forEach(function (key) {
+      if (value[key] != null) out[key] = dataText(value[key], key === 'summary' ? 240 : 120, '');
+    });
+    if (typeof value.confidence === 'number' && Number.isFinite(value.confidence)) out.confidence = Math.max(0, Math.min(1, value.confidence));
+    if (Array.isArray(value.candidates)) out.candidates = value.candidates.slice(0, 8).map(function (candidate) {
+      candidate = candidate && typeof candidate === 'object' ? candidate : {};
+      return { move: dataText(candidate.move, 40, ''), score: dataText(candidate.score, 24, '') };
+    });
+    if (Array.isArray(value.votes)) out.votes = value.votes.slice(0, 16).map(function (vote) {
+      vote = vote && typeof vote === 'object' ? vote : {};
+      return { model: dataText(vote.model, 80, ''), from: dataText(vote.from, 3, ''), to: dataText(vote.to, 3, ''),
+        conf: Number.isFinite(Number(vote.conf)) ? Math.max(0, Math.min(1, Number(vote.conf))) : null,
+        weight: Number.isFinite(Number(vote.weight)) ? Math.max(0, Number(vote.weight)) : null,
+        changed: vote.changed === true, ok: vote.ok !== false };
+    });
+    if (typeof value.unanimity === 'boolean') out.unanimity = value.unanimity;
+    if (['rotate', 'council', 'roundtable'].indexOf(value.committeeMode) >= 0) out.committeeMode = value.committeeMode;
+    return out;
+  }
+  function normalizeRecordData(value, opts) {
+    opts = opts || {};
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    var maxMoves = Number.isInteger(opts.maxMoves) && opts.maxMoves >= 0 ? Math.min(opts.maxMoves, 100000) : 10000;
+    var moves = Array.isArray(value.moves) ? value.moves.slice(0, maxMoves).map(normalizeMoveData) : [];
+    var date = new Date(value.date);
+    var out = {
+      id: validRecordId(value.id) ? value.id : 'normalized-' + Date.now().toString(36),
+      date: Number.isNaN(date.getTime()) ? new Date(0).toISOString() : date.toISOString(),
+      red: normalizePlayerData(value.red, 'Red'), black: normalizePlayerData(value.black, 'Black'), moves: moves,
+      result: value.result == null ? null : (SAFE_RESULTS[value.result] ? value.result : 'error'),
+      winner: value.winner === 'red' || value.winner === 'black' ? value.winner : null,
+      durationMs: finiteNonNegative(value.durationMs, 0, 315360000000),
+      illegal: Math.floor(finiteNonNegative(value.illegal, 0, 1000000)),
+      tokens: plainClone(value.tokens, 0) || { red: null, black: null }
+    };
+    if (value.note != null) out.note = dataText(value.note, 1000, '');
+    return out;
+  }
+  function validateRecordData(value, opts) {
+    var errors = [], warnings = [], normalized = normalizeRecordData(value, opts);
+    if (!normalized) return { ok: false, errors: ['record must be an object'], warnings: [], record: null };
+    if (!validRecordId(value.id)) errors.push('invalid id');
+    if (!Array.isArray(value.moves)) errors.push('moves must be an array');
+    (Array.isArray(value.moves) ? value.moves : []).forEach(function (move, i) {
+      if (!move || !validSquare(typeof move.from === 'string' ? move.from.toLowerCase().trim() : move.from)
+        || !validSquare(typeof move.to === 'string' ? move.to.toLowerCase().trim() : move.to)) errors.push('move ' + (i + 1) + ' has invalid coordinates');
+      if (move && move.side != null && move.side !== 'red' && move.side !== 'black') warnings.push('move ' + (i + 1) + ' has unknown side');
+    });
+    if (value.result != null && !SAFE_RESULTS[value.result]) warnings.push('unknown result normalized to error');
+    if (value.winner != null && value.winner !== 'red' && value.winner !== 'black') warnings.push('unknown winner normalized to draw');
+    return { ok: errors.length === 0, errors: errors, warnings: warnings, record: normalized };
+  }
+  function canonicalValue(value, stack) {
+    if (value == null || typeof value !== 'object') return value;
+    stack = stack || [];
+    if (stack.indexOf(value) >= 0) return '[Circular]';
+    stack.push(value);
+    if (Array.isArray(value)) { var arr = value.map(function (item) { return canonicalValue(item, stack); }); stack.pop(); return arr; }
+    var out = {};
+    Object.keys(value).sort().forEach(function (key) {
+      if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') out[key] = canonicalValue(value[key], stack);
+    });
+    stack.pop();
+    return out;
+  }
+  function canonicalJSON(value) { return JSON.stringify(canonicalValue(value)); }
+  function fingerprint(value) {
+    var s = canonicalJSON(value), h = 2166136261;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return ('00000000' + (h >>> 0).toString(16)).slice(-8);
+  }
+  function recordStats(value) {
+    var rec = value && Array.isArray(value.moves) ? value : normalizeRecordData(value) || { moves: [] }, moves = rec.moves || [], captures = 0, totalMs = 0;
+    moves.forEach(function (move) { if (move && move.captured) captures++; totalMs += finiteNonNegative(move && move.timeMs, 0, 86400000); });
+    return { plies: moves.length, captures: captures, quiet: Math.max(0, moves.length - captures), durationMs: finiteNonNegative(rec.durationMs, 0), moveTimeMs: totalMs,
+      averageTimeMs: moves.length ? Math.round(totalMs / moves.length * 100) / 100 : 0, illegal: Math.floor(finiteNonNegative(rec.illegal, 0)) };
+  }
+  function sortRecords(records, descending) {
+    return (Array.isArray(records) ? records : []).slice().sort(function (a, b) {
+      var ad = new Date(a && a.date).getTime(), bd = new Date(b && b.date).getTime();
+      ad = Number.isFinite(ad) ? ad : 0; bd = Number.isFinite(bd) ? bd : 0;
+      if (ad !== bd) return descending === false ? ad - bd : bd - ad;
+      return String(a && a.id || '').localeCompare(String(b && b.id || ''));
+    });
+  }
+  function dedupeRecords(records) {
+    var byId = Object.create(null);
+    (Array.isArray(records) ? records : []).forEach(function (rec) {
+      if (!rec || !validRecordId(rec.id)) return;
+      var old = byId['$' + rec.id];
+      if (!old || new Date(rec.date).getTime() >= new Date(old.date).getTime()) byId['$' + rec.id] = rec;
+    });
+    return sortRecords(Object.keys(byId).map(function (key) { return byId[key]; }));
+  }
+  function mergeRecords(left, right) { return dedupeRecords((Array.isArray(left) ? left : []).concat(Array.isArray(right) ? right : [])); }
+  function estimateRecordBytes(value) { return canonicalJSON(value).length * 2; }
+  function compactRecord(value) {
+    var rec = normalizeRecordData(value);
+    if (!rec) return null;
+    rec.moves = rec.moves.map(function (move) { return { n: move.n, side: move.side, piece: move.piece, from: move.from, to: move.to, captured: move.captured, timeMs: move.timeMs }; });
+    return rec;
+  }
+  function parseRecordJSON(text, opts) {
+    if (typeof text !== 'string' || text.length > 10 * 1024 * 1024) throw new Error('record JSON exceeds 10MB');
+    var value;
+    try { value = JSON.parse(text); } catch (e) { throw new Error('invalid record JSON'); }
+    var checked = validateRecordData(value, opts);
+    if (!checked.ok) throw new Error(checked.errors.join('; '));
+    return checked.record;
+  }
+  function moveAt(value, ply) {
+    var rec = value && Array.isArray(value.moves) ? value : null, n = Math.trunc(Number(ply));
+    return rec && Number.isFinite(n) && n >= 1 && n <= rec.moves.length ? rec.moves[n - 1] || null : null;
+  }
+  function resultLabel(value) { return RESULT_CN[value] || (value == null ? '' : dataText(value, 40, '未知')); }
+
   XQ.Record = {
     blank: blank, addMove: addMove, finish: finish,
     save: save, list: list, get: get, remove: remove,
     saveImported: saveImported, summarize: summarize, importFromPGN: importFromPGN,
     exportAll: exportAll, importAllBackup: importAllBackup, storageUsage: storageUsage, exportCSV: exportCSV,
-    toPrettyJSON: toPrettyJSON, downloadFile: downloadFile, importFromFile: importFromFile
+    toPrettyJSON: toPrettyJSON, downloadFile: downloadFile, importFromFile: importFromFile,
+    validRecordId: validRecordId, normalize: normalizeRecordData, validate: validateRecordData,
+    canonicalJSON: canonicalJSON, fingerprint: fingerprint, stats: recordStats,
+    sortRecords: sortRecords, dedupeRecords: dedupeRecords, mergeRecords: mergeRecords,
+    estimateBytes: estimateRecordBytes, compact: compactRecord, parseJSON: parseRecordJSON,
+    moveAt: moveAt, resultLabel: resultLabel, clone: plainClone
   };
 })(typeof window !== 'undefined' ? window : globalThis);

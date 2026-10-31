@@ -12,34 +12,47 @@
     opts = opts || {};
     var timer = null;
     var playing = false;
-    var speed = 1;
+    var generation = 0;
+    var ticks = 0;
+    var baseMs = Number.isFinite(Number(opts.baseMs)) && Number(opts.baseMs) >= 0 ? Math.min(86400000, Number(opts.baseMs)) : BASE_MS;
+    var speed = SPEEDS.indexOf(Number(opts.speed)) >= 0 ? Number(opts.speed) : 1;
     var loop = !!opts.loop;
     var onState = opts.onState || function () {};
     var onPlayState = opts.onPlayState || function () {};   // (playing)
+    var onError = typeof opts.onError === 'function' ? opts.onError : function () {};
 
-    function emit() { onState(session.state(), session); }
-    function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
-    function delay() { return BASE_MS / speed; }
+    function report(err, phase) { try { onError(err, phase); } catch (ignored) {} }
+    function emit() { try { onState(session.state(), session); } catch (err) { report(err, 'state'); } }
+    function playState(value) { try { onPlayState(value); } catch (err) { report(err, 'play-state'); } }
+    function clearTimer() { generation++; if (timer) { clearTimeout(timer); timer = null; } }
+    function delay() { return baseMs / speed; }
 
     function schedule() {
       clearTimer();
       if (!playing) return;
+      var token = generation;
       timer = setTimeout(function () {
-        if (!playing) return;
-        if (!session.next()) {
-          if (loop) { session.goto(0); emit(); schedule(); return; }   // v1.6.1 循环: 末尾自动重置
-          playing = false; onPlayState(false); emit(); return;
+        timer = null;
+        if (!playing || token !== generation) return;
+        try {
+          ticks++;
+          if (!session.next()) {
+            if (loop) { session.goto(0); emit(); schedule(); return; }   // v1.6.1 循环: 末尾自动重置
+            playing = false; playState(false); emit(); return;
+          }
+          emit();
+          schedule();
+        } catch (err) {
+          playing = false; clearTimer(); playState(false); report(err, 'tick'); emit();
         }
-        emit();
-        schedule();
       }, delay());
     }
 
     function play() {
       if (playing) return;
-      if (session.idx() >= session.total()) session.goto(0);   // 播完再按 → 从头
+      try { if (session.idx() >= session.total()) session.goto(0); } catch (err) { report(err, 'play'); return; }   // 播完再按 → 从头
       playing = true;
-      onPlayState(true);
+      playState(true);
       emit();
       schedule();
     }
@@ -47,7 +60,7 @@
       if (!playing) return;
       playing = false;
       clearTimer();
-      onPlayState(false);
+      playState(false);
       emit();
     }
     function toggle() { playing ? pause() : play(); }
@@ -55,7 +68,7 @@
     /* 手动导航: 统一暂停 (可预测), 走完发一次状态 */
     function manual(fn) {
       pause();
-      if (fn() !== false) emit();
+      try { if (fn() !== false) emit(); } catch (err) { report(err, 'navigation'); }
     }
     function stepNext() { manual(function () { return session.next(); }); }
     function stepPrev() { manual(function () { return session.prev(); }); }
@@ -64,9 +77,19 @@
     function toEnd() { gotoPly(session.total()); }
 
     function setSpeed(x) {
-      if (SPEEDS.indexOf(x) < 0) return;
+      x = Number(x);
+      if (SPEEDS.indexOf(x) < 0) return false;
       speed = x;
       if (playing) schedule();   // 按新间隔重排
+      return true;
+    }
+
+    function setBaseMs(value) {
+      var n = Number(value);
+      if (!Number.isFinite(n) || n < 0) return false;
+      baseMs = Math.min(86400000, n);
+      if (playing) schedule();
+      return true;
     }
 
     function setLoop(v) { loop = !!v; }
@@ -75,6 +98,12 @@
     /* v3.9.2 跳到下一手吃子 / 上一手吃子: 从当前 idx 对应的下一手向后扫, 找首个 .captured 非空手;
        没吃子 (整局零吃子) 时跳末尾/起点。手动导航语义: 同样 pause + emit。 */
     function findCaptureIdx(fromIdx, dir) {
+      var cached = typeof session.capturePlies === 'function' ? session.capturePlies() : null;
+      if (cached && cached.length) {
+        if (dir > 0) for (var c = 0; c < cached.length; c++) if (cached[c] > fromIdx) return cached[c];
+        if (dir < 0) for (var d = cached.length - 1; d >= 0; d--) if (cached[d] < fromIdx) return cached[d];
+        return -1;
+      }
       var moves = session.record.moves || [];
       var n = moves.length;
       var i = dir > 0 ? fromIdx : fromIdx - 1;
@@ -111,10 +140,13 @@
       stepNextCapture: stepNextCapture, stepPrevCapture: stepPrevCapture,   // v3.9.2: 跳到下一手/上一手吃子
       gotoPly: gotoPly, toStart: toStart, toEnd: toEnd,
       setSpeed: setSpeed,
+      setBaseMs: setBaseMs,
       setLoop: setLoop,
       isLooping: isLooping,
       delay: delay,
       speed: function () { return speed; },
+      baseMs: function () { return baseMs; },
+      ticks: function () { return ticks; },
       isPlaying: function () { return playing; },
       dispose: dispose
     };

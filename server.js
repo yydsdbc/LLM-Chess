@@ -15,7 +15,8 @@ const net = require('net');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = parseInt(process.argv[2] || process.env.PORT || '8788', 10);
+const PORT_CANDIDATE = parseInt(process.argv[2] || process.env.PORT || '8788', 10);
+const PORT = Number.isInteger(PORT_CANDIDATE) && PORT_CANDIDATE >= 1 && PORT_CANDIDATE <= 65535 ? PORT_CANDIDATE : 8788;
 const ROOT = __dirname;
 const KEYS_PATH = process.env.LLMCHESS_KEYS || path.join(ROOT, 'config', 'keys.json');   // 第29轮: 测试可注入独立密钥文件 (不触用户真实 keys.json)
 let VERSION = 'unknown';
@@ -23,17 +24,18 @@ try { VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf
 
 /* ── 密钥配置加载 ── */
 /* v1.0.3: mtime 缓存 — keys.json 未改动时复用上次解析 (热加载语义不变: 文件一改立即生效, 省每请求磁盘 IO/JSON 解析) */
-let _keysCache = null, _keysMtime = 0;
+let _keysCache = null, _keysMtime = 0, _keysSize = -1;
 function loadKeys() {
   try {
     const st = fs.statSync(KEYS_PATH);
-    if (_keysCache && st.mtimeMs === _keysMtime) return _keysCache;
+    if (_keysCache && st.mtimeMs === _keysMtime && st.size === _keysSize) return _keysCache;
     _keysCache = JSON.parse(fs.readFileSync(KEYS_PATH, 'utf8'));
     _keysMtime = st.mtimeMs;
+    _keysSize = st.size;
     return _keysCache;
   } catch (e) {
     if (_keysCache && (e.code === 'ENOENT' || e instanceof SyntaxError)) return _keysCache;   // 编辑器半写/临时删除容错: 保留上次有效配置
-    _keysCache = null; _keysMtime = 0;
+    _keysCache = null; _keysMtime = 0; _keysSize = -1;
     const template = {
       _说明: '在此填入各服务商 apiKey 后重启 server.js。此文件不要提交到任何仓库。',
       providers: {
@@ -70,6 +72,7 @@ const MIME = {
   '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8'
 };
 var _staticCache = new Map();   // 第37轮: 静态内容缓存 (mtime 校验, 命中不回读磁盘; 上限 64 文件)
+const STATIC_CACHE_MAX = 64;
 /* 第47轮: 静态托管敏感目录黑名单 — 只挡「穿越」不足以挡「点名取密钥」(见 serveStatic 内注释) */
 const DENY_DIRS = new Set(['config', 'logs', 'node_modules']);
 function serveStatic(req, res, urlPath) {
@@ -99,21 +102,22 @@ function serveStatic(req, res, urlPath) {
   for (const seg of relSegs) {
     if (seg.charAt(0) === '.' || DENY_DIRS.has(seg.toLowerCase())) { res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('forbidden'); }
   }
-  function sendBuf(buf) {
-    const etag = '"' + require('crypto').createHash('sha1').update(buf).digest('hex').slice(0, 16) + '"';
+  function sendBuf(buf, entry) {
+    const etag = entry && entry.etag || '"' + require('crypto').createHash('sha1').update(buf).digest('hex').slice(0, 16) + '"';
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, { ETag: etag }); return res.end(); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache', ETag: etag });
-    res.end(buf);
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache', 'Content-Length': buf.length, ETag: etag });
+    res.end(req.method === 'HEAD' ? undefined : buf);
   }
   fs.stat(full, (errS, st) => {
     if (errS) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('404 Not Found'); }
     const hit = _staticCache.get(full);
-    if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) { sendBuf(hit.buf); return; }   // 第37轮: 命中零磁盘 IO
+    if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) { _staticCache.delete(full); _staticCache.set(full, hit); sendBuf(hit.buf, hit); return; }   // 第37轮: 命中零磁盘 IO; 第80轮: LRU触碰并复用ETag
     fs.readFile(full, (err, buf) => {
       if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('404 Not Found'); }
-      if (_staticCache.size > 64) _staticCache.clear();
-      _staticCache.set(full, { mtime: st.mtimeMs, size: st.size, buf: buf });
-      sendBuf(buf);
+      const entry = { mtime: st.mtimeMs, size: st.size, buf: buf, etag: '"' + require('crypto').createHash('sha1').update(buf).digest('hex').slice(0, 16) + '"' };
+      if (_staticCache.size >= STATIC_CACHE_MAX) _staticCache.delete(_staticCache.keys().next().value);
+      _staticCache.set(full, entry);
+      sendBuf(buf, entry);
     });
   });
 }
@@ -128,7 +132,15 @@ const MAX_UPSTREAM_BYTES = 16 * 1024 * 1024;
 function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 传入 (v1.0.3 起函数内引用 req 但不在作用域, 真实中继调用上游响应时 ReferenceError 崩进程)
   const base = (providerCfg.baseUrl || '').replace(/\/+$/, '');
   const path = providerCfg.chatPath || '/chat/completions';
-  const url = new URL(base + path);
+  let url;
+  try { url = new URL(base + path); } catch (eUrl) {
+    res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
+    return res.end(JSON.stringify({ error: 'relay provider URL invalid' }));
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
+    return res.end(JSON.stringify({ error: 'relay provider protocol invalid' }));
+  }
   const mod = url.protocol === 'https:' ? https : http;
   const wantStream = !!payload.stream;
   const body = JSON.stringify({
@@ -202,6 +214,7 @@ function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 
   upReq.on('timeout', () => upReq.destroy(new Error('upstream timeout(180s)')));
   res.on('close', () => { try { upReq.destroy(new Error('client closed')); } catch (e2) {} });   // v3.4: 浏览器断开即销毁上游请求 (免浪费 token)
   upReq.on('error', e => {
+    if (res.writableEnded) return;
     if (!res.headersSent) {
       res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
     }
@@ -217,7 +230,15 @@ function relay(providerCfg, payload, res, req) {   // 第29轮关键修复: req 
  */
 function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
   const base = (providerCfg.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '');
-  const url = new URL(base + (providerCfg.chatPath || '/v1/messages'));
+  let url;
+  try { url = new URL(base + (providerCfg.chatPath || '/v1/messages')); } catch (eUrl) {
+    res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
+    return res.end(JSON.stringify({ error: 'relay provider URL invalid' }));
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) });
+    return res.end(JSON.stringify({ error: 'relay provider protocol invalid' }));
+  }
   const mod = url.protocol === 'https:' ? https : http;
   const msgsIn = Array.isArray(payload.messages) ? payload.messages : [];
   let system = '';
@@ -312,7 +333,7 @@ function relayAnthropic(providerCfg, payload, res, req) {   // 第29轮: 同上
   });
   beat = setInterval(() => { try { if (!res.headersSent) res.writeHead(200, sseHeaders); res.write(': ping\n\n'); } catch (eB) {} }, 15000);   // v3.5: SSE 心跳防 streamIdle 误杀; 提前提交合法 SSE 头
   upReq.on('timeout', () => upReq.destroy(new Error('anthropic timeout(180s)')));
-  upReq.on('error', e3 => { clearInterval(beat); const msg = 'relay upstream error: ' + e3.message; if (!res.headersSent) { res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) }); res.end(JSON.stringify({ error: msg })); } else writeSseError(msg); });   // 第46轮: 补 ACAO; 心跳已提交时用 SSE 错误帧收尾
+  upReq.on('error', e3 => { clearInterval(beat); if (res.writableEnded) return; const msg = 'relay upstream error: ' + e3.message; if (!res.headersSent) { res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8', ...cors_headers(req) }); res.end(JSON.stringify({ error: msg })); } else writeSseError(msg); });   // 第46轮: 补 ACAO; 心跳已提交时用 SSE 错误帧收尾
   res.on('close', () => { clearInterval(beat); try { upReq.destroy(new Error('client closed')); } catch (e4) {} });
   upReq.write(body);
   upReq.end();
@@ -338,7 +359,7 @@ function req_origin_safe(req) {
 }
 function cors_headers(req) {
   const origin = req_origin_safe(req);
-  return origin ? { 'Access-Control-Allow-Origin': origin } : {};
+  return origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {};
 }
 
 // LLMCHESS_TRUSTED_PROXIES: 配置直接连接本服务的可信代理精确 IP (不支持 CIDR), 多个 IP 用逗号分隔; 默认空表示忽略所有 X-Forwarded-For。
@@ -465,8 +486,19 @@ const server = http.createServer(async (req, res) => {
     // 第28轮: Content-Type 门禁 (显式声明非 JSON 直接 415; 无声明宽松放行兼容旧行为)
     const ct = (req.headers['content-type'] || '').toLowerCase();
     if (ct && ct.indexOf('application/json') < 0) {
-      res.writeHead(415, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...cors_headers(req) });
+      res.writeHead(415, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Connection': 'close', ...cors_headers(req) });
       return res.end(JSON.stringify({ error: 'unsupported media type: use application/json' }));
+    }
+    const declaredLength = Number(req.headers['content-length']);
+    if (Number.isFinite(declaredLength) && declaredLength > 2 * 1024 * 1024) {
+      req.resume();
+      /* 第80轮: Connection: close — 415/413 都在消费请求体**之前**拒绝。客户端若声明了 Content-Length
+         却不发正文 (浏览器 fetch 中断/恶意探测), resume() 排空不到任何字节, 请求体永远不完整;
+         keep-alive 下这条 socket 随后的复用请求全部卡死 (实测: 声明 2MB+1 不发正文 → 413 后,
+         同 socket 上的下一条静态 GET 5s 无响应超时)。显式 close 让 Node 在响应后关闭连接,
+         不完整的请求体随之作废, 不会毒化连接池。 */
+      res.writeHead(413, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Connection': 'close', ...cors_headers(req) });
+      return res.end(JSON.stringify({ error: '请求体超过 2MB 上限' }));
     }
     const body = await readBody(req);
     if (!body) {
@@ -515,6 +547,8 @@ const server = http.createServer(async (req, res) => {
 process.on('SIGTERM', shutdown);   // 第36轮: 优雅停机
 process.on('SIGINT', shutdown);
 function shutdown() {
+  if (shutdown.done) return;
+  shutdown.done = true;
   server.close(function () { process.exit(0); });
   setTimeout(function () { process.exit(0); }, 1500);
 }

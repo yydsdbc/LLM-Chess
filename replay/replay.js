@@ -89,6 +89,8 @@ function moveRisk(eng, f, t, markBag, ply) {
    和势文案的数字无方向意义归 0; 纯文字兜底走 胜负词/和势 表 (v1.6.4 行为不变) */
 function parseEval(s) {
   if (!s) return NaN;
+  s = String(s).replace(/[０-９]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xfee0); })
+    .replace(/[＋﹢]/g, '+').replace(/[－﹣]/g, '-').replace(/[．]/g, '.');
   var m = /([+-]?\d+(?:\.\d+)?)/.exec(s);
   if (m) {
     var v = parseFloat(m[1]);
@@ -113,16 +115,57 @@ function parseEval(s) {
   return NaN;
 }
 
+/* 第80轮回放数据边界：这些纯函数供导入器、研究脚本和控制层共享。 */
+function normalizePly(value, total, fallback) {
+  var n = Number(value), max = Number.isFinite(Number(total)) ? Math.max(0, Math.floor(Number(total))) : Infinity;
+  if (!Number.isFinite(n)) return fallback == null ? 0 : fallback;
+  return Math.max(0, Math.min(max, Math.trunc(n)));
+}
+function moveAt(record, ply) {
+  var moves = record && Array.isArray(record.moves) ? record.moves : [], n = normalizePly(ply, moves.length, 0);
+  return n > 0 && n <= moves.length ? moves[n - 1] || null : null;
+}
+function captureIndex(record) {
+  var moves = record && Array.isArray(record.moves) ? record.moves : [], out = [];
+  for (var i = 0; i < moves.length; i++) if (moves[i] && moves[i].captured) out.push(i + 1);
+  return out;
+}
+function normalizeBookmarks(list, total) {
+  var max = Number.isFinite(Number(total)) ? Math.max(0, Math.floor(Number(total))) : Infinity, seen = Object.create(null), out = [];
+  (Array.isArray(list) ? list : []).forEach(function (value) {
+    var n = Math.trunc(Number(value));
+    if (!Number.isFinite(n) || n < 1 || n > max || seen['$' + n]) return;
+    seen['$' + n] = true; out.push(n);
+  });
+  return out.sort(function (a, b) { return a - b; });
+}
+function replayProgress(session) {
+  if (!session || typeof session.idx !== 'function' || typeof session.total !== 'function') return { idx: 0, total: 0, ratio: 0, percent: 0 };
+  var total = Math.max(0, session.total()), idx = normalizePly(session.idx(), total, 0), ratio = total ? idx / total : 0;
+  return { idx: idx, total: total, ratio: ratio, percent: Math.round(ratio * 1000) / 10 };
+}
+function replayDiagnostics(session) {
+  var p = replayProgress(session), skipped = session && typeof session.skipped === 'function' ? session.skipped() : {};
+  return { idx: p.idx, total: p.total, skipped: Object.keys(skipped || {}).map(function (key) { return Number(key); }).filter(Number.isFinite).sort(function (a, b) { return a - b; }),
+    skippedCount: Object.keys(skipped || {}).length, riskHands: session && typeof session.risks === 'function' ? Object.keys(session.risks()).length : 0,
+    markHands: session && typeof session.marks === 'function' ? Object.keys(session.marks()).length : 0 };
+}
+function bookmarkKeySafe(id) {
+  var key = String(id == null ? 'unknown' : id).replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 160);
+  return 'xq_replay:bm:' + (key || 'unknown');
+}
+
 /* 会话: record → 可导航的引擎重建器
      idx = 当前指针 (0=初始局面, n=已走 n 手); entry = moves[idx-1] 即刚走那手的 meta */
   function create(record) {
-    var moves = (record && record.moves) || [];
+    var moves = record && Array.isArray(record.moves) ? record.moves.slice() : [];
     var eng = XQ.Engine.create({ ruleEnforce: false });   // v2.2: 回放忠实重放旧谱 (旧谱可能含 3 次重复/6 连将未终局, 规则开启会提前误终局)
     var idx = 0;
     var skipped = {};   // {手号: 拒绝原因} — 脏数据容错 (尽力重放, 与"载入棋谱"行为一致)
     var applied = [];   // 按棋谱手号记录是否真的改动了引擎; 跳过非法手时不能调用 undoPly
     var risks = {};     // {手号: 静态风险分} — v1.7.6 疑误着法标注
     var marks = {};     // {手号: '将'|'杀'|'困'} — v1.7.9 一步效果标注
+    var capturePlyCache = null;
 
     function parseMoveCoords(m) {
       if (!m || typeof m.from !== 'string' || typeof m.to !== 'string') return null;
@@ -230,9 +273,14 @@ function parseEval(s) {
       engine: function () { return eng; },
       entry: function () { return idx > 0 ? moves[idx - 1] : null; },
       skipped: function () { return skipped; },
+      skippedHands: function () { return Object.keys(skipped).map(function (key) { return Number(key); }).filter(Number.isFinite).sort(function (a, b) { return a - b; }); },
       risks: function () { for (var p2 = 1; p2 <= idx; p2++) computeRisk(p2); return risks; },   // v1.7.6: {手号: 风险分} 供走法列表标注
       marks: function () { for (var p2 = 1; p2 <= idx; p2++) computeRisk(p2); return marks; },   // 第37轮: 懒计算 memo 同 risks
       RISK_MARK: function () { return RISK_MARK; },
+      moveAt: function (ply) { return moveAt(record, ply); },
+      progress: function () { return replayProgress(this); },
+      diagnostics: function () { return replayDiagnostics(this); },
+      capturePlies: function () { if (!capturePlyCache) capturePlyCache = captureIndex(record); return capturePlyCache.slice(); },
       next: next,
       prev: function () {
         if (idx <= 0) return false;
@@ -258,26 +306,27 @@ function parseEval(s) {
   /* v1.0.daily 回放书签 (纯逻辑, node 可测): toggle 返回新数组 (升序去重); 非法 ply 忽略返回副本 */
   function toggleBookmark(list, ply) {
     ply = Math.round(Number(ply));
-    if (!isFinite(ply) || ply < 1) return (list || []).slice();
-    var out = [], had = false;
-    (list || []).forEach(function (p) { if (p === ply) { had = true; return; } out.push(p); });
-    if (!had) { out.push(ply); out.sort(function (a, b) { return a - b; }); }
+    if (!isFinite(ply) || ply < 1) return normalizeBookmarks(list);
+    var out = normalizeBookmarks(list), at = out.indexOf(ply);
+    if (at >= 0) out.splice(at, 1); else { out.push(ply); out.sort(function (a, b) { return a - b; }); }
     return out;
   }
   /* 书签 localStorage 键 (按棋谱 id 隔离) */
-  function bookmarkKey(id) { return 'xq_replay:bm:' + (id || 'unknown'); }
+  function bookmarkKey(id) { return bookmarkKeySafe(id); }
 
   /* v1.0.daily 书签导航 (纯逻辑, node 可测): 找 cur 之后/之前的第一个书签手; 没有则返回 null (调用方原地不动, 不回绕) */
   function nextBookmark(list, cur) {
-    var a = (list || []).slice().sort(function (x, y) { return x - y; });
+    var a = normalizeBookmarks(list);
     for (var i = 0; i < a.length; i++) if (a[i] > cur) return a[i];
     return null;
   }
   function prevBookmark(list, cur) {
-    var a = (list || []).slice().sort(function (x, y) { return x - y; });
+    var a = normalizeBookmarks(list);
     for (var i = a.length - 1; i >= 0; i--) if (a[i] < cur) return a[i];
     return null;
   }
 
-  XQ.Replay = { listLocal: listLocal, summarize: summarize, parseEval: parseEval, create: create, moveRisk: moveRisk, RISK_VALS: RISK_VALS, RISK_MARK: RISK_MARK, toggleBookmark: toggleBookmark, bookmarkKey: bookmarkKey, nextBookmark: nextBookmark, prevBookmark: prevBookmark };
+  XQ.Replay = { listLocal: listLocal, summarize: summarize, parseEval: parseEval, create: create, moveRisk: moveRisk, RISK_VALS: RISK_VALS, RISK_MARK: RISK_MARK,
+    toggleBookmark: toggleBookmark, normalizeBookmarks: normalizeBookmarks, bookmarkKey: bookmarkKey, nextBookmark: nextBookmark, prevBookmark: prevBookmark,
+    normalizePly: normalizePly, moveAt: moveAt, captureIndex: captureIndex, progress: replayProgress, diagnostics: replayDiagnostics };
 })(typeof window !== 'undefined' ? window : globalThis);

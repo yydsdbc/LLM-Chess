@@ -1025,6 +1025,9 @@ function l20Round48() {
 
   // ③ sw activate: 只清自身前缀
   var evsA = {}, deleted = [];
+  // 当前 CACHE 从 sw.js 源码提取 — 版本号升级 (v3→v4→…) 后硬编码 'xq-shell-v3' 会被当成历史版本清掉, 断言失配
+  var mCache = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8').match(/var\s+CACHE\s*=\s*'([^']+)'/);
+  var curCache = mCache ? mCache[1] : 'xq-shell-v4';
   var sbA = { console: console, URL: URL, location: { origin: 'http://localhost:8788', pathname: '/' } };
   sbA.globalThis = sbA; sbA.self = sbA;
   sbA.registration = { scope: 'http://localhost:8788/' };
@@ -1033,8 +1036,8 @@ function l20Round48() {
   sbA.clients = { claim: function () { return Promise.resolve(); } };
   sbA.caches = {
     open: function () { return Promise.resolve({ add: function () { return Promise.resolve(); }, put: function () { return Promise.resolve(); } }); },
-    // 同源上混入其他应用的缓存 (GitHub Pages 项目页共享源) 与自家历史版本
-    keys: function () { return Promise.resolve(['xq-shell-v1', 'xq-shell-v2', 'xq-shell-v3', 'other-app-cache', 'workbox-precache-v2']); },
+    // 同源上混入其他应用的缓存 (GitHub Pages 项目页共享源) + 自家历史版本 + 当前版本 (动态提取)
+    keys: function () { return Promise.resolve([curCache, 'xq-shell-v1', 'xq-shell-v2', 'xq-shell-v3', 'other-app-cache', 'workbox-precache-v2']); },
     delete: function (k) { deleted.push(k); return Promise.resolve(true); },
     match: function () { return Promise.resolve(undefined); }
   };
@@ -1042,9 +1045,9 @@ function l20Round48() {
   var actWait = null;
   evsA.activate({ waitUntil: function (p) { actWait = p; } });
   return Promise.resolve(actWait).then(function () {
-    ok(deleted.indexOf('xq-shell-v1') >= 0 && deleted.indexOf('xq-shell-v2') >= 0,
-      'L20 sw activate 仍清自家历史版本 (xq-shell-v1/v2 已删: ' + deleted.join(',') + ')');
-    ok(deleted.indexOf('xq-shell-v3') < 0, 'L20 sw activate 不删当前版本缓存');
+    ok(deleted.indexOf('xq-shell-v1') >= 0 && deleted.indexOf('xq-shell-v2') >= 0 && deleted.indexOf('xq-shell-v3') >= 0,
+      'L20 sw activate 仍清自家历史版本 (已删: ' + deleted.join(',') + ')');
+    ok(deleted.indexOf(curCache) < 0, 'L20 sw activate 不删当前版本缓存 (' + curCache + ')');
     ok(deleted.indexOf('other-app-cache') < 0 && deleted.indexOf('workbox-precache-v2') < 0,
       'L20 sw activate 不动同源其他应用的缓存 (旧判据「名字不等于当前 CACHE 就删」会把它们一并清掉)');
   });

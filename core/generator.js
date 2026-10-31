@@ -23,10 +23,11 @@
   /** 在棋盘上模拟一步, 自将/照面 → 非法 */
   function isLegalOnBoard(b, m) {
     b.applyMove(m);
-    var kp = b.kingPos(m.piece.color);
-    var bad = !kp || Rules.isSquareAttacked(b, kp.x, kp.y, Piece.opponent(m.piece.color));
-    b.undoMove(m);
-    return !bad;
+    try {
+      var kp = b.kingPos(m.piece.color);
+      var bad = !kp || Rules.isSquareAttacked(b, kp.x, kp.y, Piece.opponent(m.piece.color));
+      return !bad;
+    } finally { b.undoMove(m); }
   }
 
   /** 某格棋子的合法落点 (UI 用) */
@@ -37,7 +38,7 @@
     var targets = Rules.pseudoMovesFrom(b, x, y);
     for (var i = 0; i < targets.length; i++) {
       var m = Move.create({ x: x, y: y }, targets[i], p);
-      if (isLegalOnBoard(b, m)) legal.push({ x: targets[i].x, y: targets[i].y, isCapture: !!b.get(targets[i].x, targets[i].y) });
+      if (isLegalOnBoard(b, m)) legal.push({ x: targets[i].x, y: targets[i].y, isCapture: !!m.captured });
     }
     return legal;
   }
@@ -51,16 +52,20 @@
     for (var i = 0; i < targets.length; i++) {
       var m = Move.create({ x: x, y: y }, targets[i], p);
       b.applyMove(m);
-      var kp = b.kingPos(p.color);
-      var bad = !kp || Rules.isSquareAttacked(b, kp.x, kp.y, Piece.opponent(p.color));
-      b.undoMove(m);
-      if (bad) dead.push({ x: targets[i].x, y: targets[i].y });
+      try {
+        var kp = b.kingPos(p.color);
+        var bad = !kp || Rules.isSquareAttacked(b, kp.x, kp.y, Piece.opponent(p.color));
+        if (bad) dead.push({ x: targets[i].x, y: targets[i].y });
+      } finally { b.undoMove(m); }
     }
     return dead;
   }
 
   /** perft: 走法生成正确性的金标准统计 */
   function perft(b, color, depth) {
+    if ((color !== 'red' && color !== 'black') || !Number.isInteger(depth) || depth < 0) {
+      throw new RangeError('perft: color/depth invalid');
+    }
     if (depth === 0) return 1;
     var moves = generateLegalMoves(b, color);
     if (depth === 1) return moves.length;

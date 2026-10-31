@@ -20,7 +20,9 @@
 
   function create(color, type, id) {
     if (color !== COLORS.RED && color !== COLORS.BLACK) throw new Error('Piece: bad color ' + color);
-    if (!CHARS[color][type]) throw new Error('Piece: bad type ' + type);
+    // 只接受真正登记的棋子类型; 直接读取对象属性会把 toString/constructor 等
+    // Object.prototype 键误当成合法类型。
+    if (!Object.prototype.hasOwnProperty.call(CHARS[color], type)) throw new Error('Piece: bad type ' + type);
     return { color: color, type: type, id: id || (color + '-' + type) };
   }
 

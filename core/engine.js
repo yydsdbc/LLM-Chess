@@ -35,7 +35,7 @@
     var ruleEnforce = opts.ruleEnforce !== false;   // v2.0 规则闭环开关 (默认开; 分析器/回放重建可关, 不重判)
     var board = opts.startBoard ? opts.startBoard.clone() : Board.create();   // v2.0: 支持自定义起始盘面 (规则测试用)
     var genesis = board.clone();   // A2 v3.9: 起始盘面原像 — undoPly 重放基点 (修复自定义起始局面误用标准开局板回放)
-    var startTurn = opts.turn || 'red';
+    var startTurn = opts.turn === 'black' ? 'black' : 'red';
     var turn = startTurn;
     var history = [];        // Move[]
     /* 第48轮: 每手走完后的 {长将计数, 自然限着时钟} 快照栈 — 与 history 严格同长 (仅 applyPlayerMove 压、
@@ -53,7 +53,8 @@
     var listeners = [];
     var posCounts = {};      // v1.7.7 重复局面计数: key=盘面文本|执子方 — 三次重复判和/长将检测基础
     var checkStreaks = { red: 0, black: 0 };   // v1.7.8 长将追踪: 各方"最近连续将军手数" (每手都将军则累加, 不将军则清零)
-    var naturalCap = typeof opts.naturalCap === 'number' ? opts.naturalCap : 120;   // v3.8 自然限着: 连续 120 半回合 (60 回合) 无吃子判和 (0=关闭); 亚洲棋规 60 回合自然限着
+    var naturalCap = typeof opts.naturalCap === 'number' && isFinite(opts.naturalCap)
+      ? Math.max(0, Math.floor(opts.naturalCap)) : 120;   // v3.8 自然限着: 连续 120 半回合 (60 回合) 无吃子判和 (0=关闭); 亚洲棋规 60 回合自然限着
     var naturalClock = 0;    // v3.8: 当前连续无吃子半回合数 (吃子即清零)
     function legalMovesFor(color) {
       var c = color || turn;
@@ -183,6 +184,8 @@
        */
       applyPlayerMove: function (fx, fy, tx, ty) {
         if (over) return { ok: false, reason: 'game_over' };
+        if (![fx, fy, tx, ty].every(function (n) { return Number.isInteger(n); })
+          || !board.inside(fx, fy) || !board.inside(tx, ty)) return { ok: false, reason: 'invalid_coordinates' };
         var p = board.get(fx, fy);
         if (!p) return { ok: false, reason: 'empty_square' };
         if (p.color !== turn) return { ok: false, reason: 'not_your_turn' };
@@ -311,8 +314,13 @@
         return { v: 1, moves: history.map(function (m) { return [m.from.x, m.from.y, m.to.x, m.to.y]; }) };
       },
       loadSerialized: function (s) {
+        if (!s || !Array.isArray(s.moves) || s.moves.length > 10000) return false;
+        for (var vi = 0; vi < s.moves.length; vi++) {
+          var vm = s.moves[vi];
+          if (!Array.isArray(vm) || vm.length !== 4 || !vm.every(function (n) { return Number.isInteger(n); })
+            || !board.inside(vm[0], vm[1]) || !board.inside(vm[2], vm[3])) return false;
+        }
         this.newGame();   // 第39轮: newGame 内 bumpVer 已使 memo 失效 (同长度异盘面边角一并覆盖)
-        if (!s || !s.moves) return false;
         for (var i = 0; i < s.moves.length; i++) {
           var m = s.moves[i];
           var r = this.applyPlayerMove(m[0], m[1], m[2], m[3]);
@@ -329,7 +337,11 @@
       },
       moveName: function (m) { return Move.name(m); },
 
-      onChange: function (cb) { listeners.push(cb); }
+      onChange: function (cb) {
+        if (typeof cb !== 'function') return function () {};
+        listeners.push(cb);
+        return function () { var i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1); };
+      }
     };
     return api;
   }

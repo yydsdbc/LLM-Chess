@@ -237,6 +237,8 @@ async function main() {
   ok(prov.headers['access-control-allow-origin'] === '*', 'providers 带 ACAO (异源页才读得到服务商列表)');
   const huge = await req('POST', '/api/chat', Buffer.alloc(2 * 1024 * 1024 + 1024, 97).toString('utf8'), { 'Content-Type': 'application/json' });
   ok(huge.status === 0, 'POST /api/chat 请求体 >2MB → 连接中断 (readBody 上限防 OOM)');
+  // (「声明超限 Content-Length 不发正文 → 413」的断言在下方第80轮块: 本实例分钟窗已满 30, 再加 POST 会把
+  //  后续中继断言推成 429 — 第48轮注释的预算口径, 第80轮新增 declaredHuge 时踩中, 故挪到独立实例。)
 
   // 第27轮 四期: 前缀穿越加固 / 错误 ETag / sw.js 304 / 静态路径预检
   const fs = require('fs');
@@ -425,6 +427,7 @@ async function main() {
   // 第37轮/第73轮: CORS 策略 — localhost 与显式精确白名单来源可用; 其他远端与 opaque 来源不得获通配放行。
   const or1 = await req('OPTIONS', '/api/chat', null, { Origin: 'http://localhost:5173' });
   ok(or1.status === 204 && or1.headers['access-control-allow-origin'] === 'http://localhost:5173', 'CORS 策略: localhost Origin → ACAO 回显同源');
+  ok(or1.headers.vary === 'Origin', 'CORS 策略: Origin 回显响应带 Vary: Origin (共享缓存不串源)');
   const trustedOrigin = await req('OPTIONS', '/api/chat', null, { Origin: 'https://trusted.example.com' });
   ok(trustedOrigin.status === 204 && trustedOrigin.headers['access-control-allow-origin'] === 'https://trusted.example.com', 'CORS 策略: 显式精确白名单 Origin → ACAO 精确回显');
   const or2 = await req('OPTIONS', '/api/chat', null, { Origin: 'https://evil.example.com' });
@@ -547,6 +550,13 @@ async function main() {
     '上游响应体 >16MB → 502 (修复前无上限: 超大响应在 Buffer.concat 前就撑爆中继内存)');
   const aliveAfterHuge = await reqTo(BASE2, 'GET', '/api/health');
   ok(aliveAfterHuge.status === 200, '超大响应被截断后服务仍存活 (只丢弃该次响应, 不影响后续请求)');
+
+  // (e) 第80轮: 声明超限 Content-Length 却不发正文 — 必须在读取正文前 413 (主实例分钟窗满 30 放不下这条 POST)
+  //     该响应同时带 Connection: close: 请求体永远不完整时 keep-alive socket 不能复用 (否则其后同 socket 的
+  //     请求全部卡死 — 修复前实测: 413 后同连接的下一条静态 GET 5s 超时)。
+  const declaredHuge = await reqTo(BASE2, 'POST', '/api/chat', '', { 'Content-Type': 'application/json', 'Content-Length': String(2 * 1024 * 1024 + 1) });
+  ok(declaredHuge.status === 413 && /2MB/.test(declaredHuge.body) && /close/i.test(declaredHuge.headers.connection || ''),
+    'POST /api/chat 声明 Content-Length >2MB → 413 + Connection: close (读取正文前拒绝; 不发正文时连接不可复用)');
 
   // X-Forwarded-For 默认不可信: 伪造不同地址仍共享真实 TCP 对端的 8/s 限额。
   await new Promise(function (r) { setTimeout(r, 1050 - (Date.now() % 1000)); });

@@ -30,7 +30,7 @@
  *      按完整 URL 写入缓存, 离线兜底命中后把残缺响应当完整资源交付。
  */
 'use strict';
-var CACHE = 'xq-shell-v3';            // 第41轮: 升版 → activate 清掉 v2 (其壳清单缺全部脚本, 用户下次访问自然重建)
+var CACHE = 'xq-shell-v4';            // 第80轮: ui_batch80 加入壳清单, 旧壳自然淘汰
 /* 第48轮: 旧版清理只认**本项目自己的**缓存前缀 — 原判据是「名字不等于当前 CACHE 就删」, 于是同源上
    其他应用的缓存会被一并清掉。这不是假想场景: 本仓文档的 GitHub Pages 部署是项目页 (/LLM-Chess/),
    其源为 <user>.github.io — 该用户名下所有项目页共享同一个源, 用户装了本项目 PWA 后再打开自己另一个
@@ -46,7 +46,7 @@ var SHELL = [                         // 相对路径: 子路径部署同样成�
   './ai/random_agent.js', './ai/llm_agent.js', './ai/committee_agent.js',
   './benchmark/record.js', './benchmark/elo.js', './benchmark/match.js',
   './replay/replay.js', './replay/replay_controller.js',
-  './ui/spectator.js', './ui/renderer.js', './ui/i18n.js', './ui/app.js'
+  './ui/spectator.js', './ui/renderer.js', './ui/i18n.js', './ui/app.js', './ui/ui_batch80.js'
 ];
 
 self.addEventListener('install', function (e) {

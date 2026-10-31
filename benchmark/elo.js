@@ -6,16 +6,35 @@
   var DEFAULT_K = 32, BASE = 1500;
 
   function expected(ra, rb) {
+    ra = validRating(ra) ? ra : BASE;
+    rb = validRating(rb) ? rb : BASE;
     return 1 / (1 + Math.pow(10, (rb - ra) / 400));
+  }
+
+  function normalizeName(name) {
+    try { name = String(name == null ? '' : name).trim(); } catch (e) { name = ''; }
+    return name.slice(0, 160) || '?';
+  }
+  function normalizeScore(score) {
+    var n = Number(score);
+    return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.5;
+  }
+  function normalizeK(k) {
+    var n = k == null ? DEFAULT_K : Number(k);
+    return Number.isFinite(n) && n >= 0 ? Math.min(1000, n) : DEFAULT_K;
   }
 
   /** update({ra, rb, scoreA, k}) → {ra, rb}  scoreA: 1赢/0.5和/0输 */
   function update(o) {
-    var k = o.k == null ? DEFAULT_K : o.k;
-    var ea = expected(o.ra, o.rb);
+    o = o || {};
+    var ra = validRating(o.ra) ? o.ra : BASE;
+    var rb = validRating(o.rb) ? o.rb : BASE;
+    var k = normalizeK(o.k);
+    var scoreA = normalizeScore(o.scoreA);
+    var ea = expected(ra, rb);
     return {
-      ra: Math.round((o.ra + k * (o.scoreA - ea)) * 10) / 10,
-      rb: Math.round((o.rb + k * ((1 - o.scoreA) - (1 - ea))) * 10) / 10
+      ra: Math.round((ra + k * (scoreA - ea)) * 10) / 10,
+      rb: Math.round((rb + k * ((1 - scoreA) - (1 - ea))) * 10) / 10
     };
   }
 
@@ -66,6 +85,7 @@
     } catch (e) { _tCache = null; _tRaw = null; return false; }
   }
   function ratingOf(name) {
+    name = normalizeName(name);
     var t = table();
     return validRating(t.ratings[name]) ? t.ratings[name] : BASE;
   }
@@ -78,6 +98,7 @@
     t.stats[name] = st;
   }
   function applyResult(redName, blackName, winner, k) {
+    redName = normalizeName(redName); blackName = normalizeName(blackName);
     var ra = ratingOf(redName), rb = ratingOf(blackName);
     var t = normalizeTable(table());
     // 同一模型自战没有可比较的对手，保持评分与战绩不变。
@@ -132,11 +153,58 @@
   }
   function resetAll() { saveTable(emptyTable()); }
 
+  /* 第80轮研究查询：不暴露内部表引用，并支持最小样本过滤和稳定分页。 */
+  function statsOf(name) {
+    name = normalizeName(name);
+    var st = table().stats[name];
+    return isObject(st) ? copyStats(st) : { games: 0, win: 0, draw: 0, loss: 0 };
+  }
+  function buildLeaderboard(opts) {
+    opts = opts || {};
+    var minGames = Number.isFinite(Number(opts.minGames)) ? Math.max(0, Math.floor(Number(opts.minGames))) : 0;
+    var prefix = opts.prefix == null ? null : String(opts.prefix).slice(0, 160);
+    var rows = Object.keys(table().ratings).map(function (n) {
+      var e = { name: n, rating: table().ratings[n], games: 0, win: 0, draw: 0, loss: 0 }, st = table().stats[n];
+      if (isObject(st)) { e.games = count(st.games); e.win = count(st.win); e.draw = count(st.draw); e.loss = count(st.loss); }
+      return e;
+    }).filter(function (e) { return e.games >= minGames && (prefix == null || e.name.indexOf(prefix) === 0); });
+    rows.sort(function (a, b) { return (b.rating - a.rating) || (b.games - a.games) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
+    var offset = Number.isFinite(Number(opts.offset)) ? Math.max(0, Math.floor(Number(opts.offset))) : 0;
+    var limit = Number.isFinite(Number(opts.limit)) ? Math.max(0, Math.floor(Number(opts.limit))) : rows.length;
+    return rows.slice(offset, offset + limit).map(function (row) { return { name: row.name, rating: row.rating, games: row.games, win: row.win, draw: row.draw, loss: row.loss }; });
+  }
+  function leaderboardPage(opts) { return buildLeaderboard(opts); }
+  function rankOf(name, opts) {
+    name = normalizeName(name);
+    var rows = buildLeaderboard(opts), at = rows.findIndex(function (row) { return row.name === name; });
+    return at < 0 ? null : (Number(opts && opts.offset) || 0) + at + 1;
+  }
+  function compare(a, b) {
+    var ra = ratingOf(a), rb = ratingOf(b);
+    return { a: normalizeName(a), b: normalizeName(b), ratingA: ra, ratingB: rb, delta: Math.round((ra - rb) * 10) / 10, expectedA: expected(ra, rb) };
+  }
+  var settled = Object.create ? Object.create(null) : {};
+  function applyResultOnce(gameId, redName, blackName, winner, k) {
+    var key = String(gameId == null ? '' : gameId).trim().slice(0, 160);
+    if (!key) return { applied: true, duplicate: false, ratings: applyResult(redName, blackName, winner, k) };
+    if (settled['$' + key]) return { applied: false, duplicate: true, ratings: { red: ratingOf(redName), black: ratingOf(blackName) } };
+    var ratings = applyResult(redName, blackName, winner, k);
+    settled['$' + key] = true;
+    return { applied: true, duplicate: false, ratings: ratings };
+  }
+  function forgetResult(gameId) { delete settled['$' + String(gameId == null ? '' : gameId).trim().slice(0, 160)]; }
+  function ratingRange() {
+    var rows = buildLeaderboard(), values = rows.map(function (r) { return r.rating; });
+    return values.length ? { min: Math.min.apply(Math, values), max: Math.max.apply(Math, values), count: values.length } : { min: null, max: null, count: 0 };
+  }
+
   XQ.Elo = {
     BASE: BASE, DEFAULT_K: DEFAULT_K,
     expected: expected, update: update,
     ratingOf: ratingOf, applyResult: applyResult, previewDelta: previewDelta,
-    leaderboard: leaderboard, resetAll: resetAll,
+    leaderboard: leaderboard, leaderboardPage: leaderboardPage, rankOf: rankOf, compare: compare,
+    statsOf: statsOf, ratingRange: ratingRange, applyResultOnce: applyResultOnce, forgetResult: forgetResult,
+    resetAll: resetAll, normalizeName: normalizeName, normalizeScore: normalizeScore, normalizeK: normalizeK,
     exportTable: exportTable, importTable: importTable
   };
 })(typeof window !== 'undefined' ? window : globalThis);

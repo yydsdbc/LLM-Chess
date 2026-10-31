@@ -510,8 +510,11 @@ if (/caches\.open\(CACHE\)\.then\(function \(c\) \{ return c\.put\(req, copy\); 
 // (c5) manifest: 启动底色必须与首屏**生效的**底色一致 (否则冷启动闪色); 截图声明尺寸必须等于真实像素
 //      第44轮教训: index.html 里有两条 body 规则, 后一条 (#080607 + radial) 才是生效的 — 取第一条匹配
 //      会得出 #1a0f08 这个被覆盖的旧值。故取「最后一条含 background 的 body 规则」, 优先其中的纯色声明。
+//      第80轮补充: @media print{body{background:#fff}} 也是「最后一条」— 打印样式不该参与首屏底色判定,
+//      先剥掉全部 @media 块再提取, 只看无条件生效的基础规则。
 const mf = JSON.parse(fs.readFileSync(__dirname + '/../manifest.json', 'utf8'));
-const bodyRules = (html.match(/body\{[^}]*\}/g) || []).map(function (r) { return r.replace(/^body\{|\}$/g, ''); });
+const baseCss = html.replace(/@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '');
+const bodyRules = (baseCss.match(/body\{[^}]*\}/g) || []).map(function (r) { return r.replace(/^body\{|\}$/g, ''); });
 const bgRule = bodyRules.reverse().find(function (r) { return /background/.test(r); }) || '';
 const bgSolid = (bgRule.match(/background:\s*(#[0-9a-fA-F]{6})/) || [])[1];
 const bgStops = bgRule.match(/#[0-9a-fA-F]{6}/g) || [];

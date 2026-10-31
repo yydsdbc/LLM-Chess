@@ -32,9 +32,11 @@
   function sqName(p) { return String.fromCharCode(97 + p.x) + (10 - p.y); }
   function parseSq(s) {
     if (typeof s !== 'string') return null;
-    var m = s.trim().match(/^([a-i])[\s,.-]?([0-9]|10)$/i);
+    // 行号只能是 1..10; 拒绝 0 与 01 这类非规范坐标。
+    var m = s.trim().match(/^([a-i])[\s,.-]?(?:([1-9])|(10))$/i);
     if (!m) return null;
-    return { x: m[1].toLowerCase().charCodeAt(0) - 97, y: 10 - parseInt(m[2], 10) };
+    var row = m[2] || m[3];
+    return { x: m[1].toLowerCase().charCodeAt(0) - 97, y: 10 - parseInt(row, 10) };
   }
 
   XQ.Move = {

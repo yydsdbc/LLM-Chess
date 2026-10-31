@@ -12,6 +12,7 @@
   function crossedRiver(color, y) { return color === 'red' ? y <= 4 : y >= 5; }
 
   function clearPathCount(b, x1, y1, x2, y2) {
+    if (x1 === x2 && y1 === y2) return 0;
     var n = 0, i, step;
     if (x1 === x2) {
       step = y2 > y1 ? 1 : -1;

@@ -16,6 +16,9 @@
   }
 
   function makeFromGrid(grid) {
+    if (!Array.isArray(grid) || grid.length !== N) throw new RangeError('Board: grid must contain exactly 90 cells');
+    // 拥有自己的单元格数组和棋子值, 防止调用方改原数组而绕过将帅索引。
+    grid = grid.map(Piece.clone);
     var kingCells = { red: [], black: [] };
     function addKing(piece, x, y) {
       if (piece && piece.type === 'king' && (piece.color === 'red' || piece.color === 'black')
@@ -40,6 +43,9 @@
       inside: function (x, y) { return x >= 0 && x < W && y >= 0 && y < H; },
       get: function (x, y) { return this.inside(x, y) ? grid[idx(x, y)] : undefined; },
       set: function (x, y, p) {
+        if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x >= W || y < 0 || y >= H) {
+          throw new RangeError('Board: coordinate outside board');
+        }
         var at = idx(x, y), old = grid[at];
         if (old && old.type === 'king') removeKingAt(old.color, at);
         grid[at] = p;
@@ -49,8 +55,13 @@
 
       /** 应用走法, 返回被吃子(可为null) */
       applyMove: function (m) {
+        if (!m || !m.from || !m.to || !Number.isInteger(m.from.x) || !Number.isInteger(m.from.y)
+          || !Number.isInteger(m.to.x) || !Number.isInteger(m.to.y)
+          || !this.inside(m.from.x, m.from.y) || !this.inside(m.to.x, m.to.y)
+          || (m.from.x === m.to.x && m.from.y === m.to.y)) throw new TypeError('Board: invalid move coordinates');
         var from = idx(m.from.x, m.from.y), to = idx(m.to.x, m.to.y);
-        var cap = grid[to], moving = m.piece;
+        var cap = grid[to], moving = m.piece, actual = grid[from];
+        if (!moving || !actual || !Piece.same(actual, moving)) throw new Error('Board: move source mismatch');
         if (moving && moving.type === 'king') removeKingAt(moving.color, from);
         if (cap && cap.type === 'king') removeKingAt(cap.color, to);
         grid[to] = moving;
@@ -61,7 +72,12 @@
       },
       /** 撤销走法 (按 Move 内记录的 captured 还原) */
       undoMove: function (m) {
+        if (!m || !m.from || !m.to || !Number.isInteger(m.from.x) || !Number.isInteger(m.from.y)
+          || !Number.isInteger(m.to.x) || !Number.isInteger(m.to.y)
+          || !this.inside(m.from.x, m.from.y) || !this.inside(m.to.x, m.to.y)
+          || (m.from.x === m.to.x && m.from.y === m.to.y)) throw new TypeError('Board: invalid move coordinates');
         var from = idx(m.from.x, m.from.y), to = idx(m.to.x, m.to.y);
+        if (!m.piece || !grid[to] || !Piece.same(grid[to], m.piece)) throw new Error('Board: undo target mismatch');
         if (m.piece && m.piece.type === 'king') removeKingAt(m.piece.color, to);
         grid[from] = m.piece;
         grid[to] = m.captured || null;
