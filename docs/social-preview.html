@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px; height: 640px; overflow: hidden;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: radial-gradient(ellipse at 50% 30%, #1a1410 0%, #080607 70%);
+    color: #f0d9a0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .wrap { width: 1160px; display: flex; gap: 60px; align-items: center; }
+  .left { flex: 1.25; }
+  .brand { font-size: 30px; letter-spacing: 2px; color: #a08858; margin-bottom: 18px; }
+  .brand b { color: #e0a030; }
+  h1 { font-size: 64px; line-height: 1.15; margin-bottom: 22px; }
+  h1 .hl { color: #e0a030; }
+  .sub { font-size: 26px; line-height: 1.6; color: #c8b088; margin-bottom: 30px; }
+  .sub b { color: #f0d9a0; }
+  .tags { display: flex; gap: 14px; flex-wrap: wrap; }
+  .tag {
+    font-size: 20px; padding: 8px 18px; border-radius: 999px;
+    border: 1px solid #7a5a2a; color: #e0c890; background: rgba(224,160,48,.08);
+  }
+  .url { margin-top: 34px; font-size: 22px; color: #e0a030; font-family: Consolas, monospace; }
+  /* 右侧: 迷你棋盘示意 (楚河/汉界 + 5 枚代表棋子) */
+  .board {
+    flex: 1; aspect-ratio: 9/10; max-height: 540px;
+    border: 3px solid #7a5a2a; border-radius: 10px; position: relative;
+    background:
+      linear-gradient(rgba(122,90,42,.35) 1px, transparent 1px) 0 0/100% 11.11%,
+      linear-gradient(90deg, rgba(122,90,42,.35) 1px, transparent 1px) 0 0/11.11% 100%,
+      #14100a;
+    box-shadow: 0 0 60px rgba(224,160,48,.15), inset 0 0 40px rgba(0,0,0,.5);
+  }
+  .river { position: absolute; top: 45.5%; width: 100%; text-align: center; font-size: 26px; color: #7a5a2a; letter-spacing: 14px; }
+  .pc {
+    position: absolute; width: 15%; aspect-ratio: 1; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 42px; font-weight: bold; transform: translate(-50%, -50%);
+  }
+  .red { background: #3d1a10; border: 3px solid #e06a4a; color: #ffb59a; box-shadow: 0 0 18px rgba(224,106,74,.35); }
+  .black { background: #101826; border: 3px solid #5a86c8; color: #b8d4f0; box-shadow: 0 0 18px rgba(90,134,200,.35); }
+  .vs {
+    position: absolute; top: -18px; right: -14px; background: #e0a030; color: #1a0e08;
+    font-size: 24px; font-weight: bold; padding: 6px 16px; border-radius: 999px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="left">
+      <div class="brand">🀄 <b>LLM-Chess</b> · 象棋 × 大模型</div>
+      <h1>看 AI 模型<br><span class="hl">边想、边吵、边下棋</span></h1>
+      <div class="sub">多模型<b>委员会会诊 / 圆桌辩论</b>，实时决策卡片与投票明细，<b>Elo 天梯</b>与可复现基准。</div>
+      <div class="tags">
+        <span class="tag">16 家服务商</span><span class="tag">浏览器直连 BYOK</span><span class="tag">零依赖</span><span class="tag">PWA 离线可玩</span>
+      </div>
+      <div class="url">github.com/yydsdbc/LLM-Chess ▶ 在线即玩</div>
+    </div>
+    <div class="board">
+      <div class="river">楚 河　　　汉 界</div>
+      <div class="vs">LLM vs LLM</div>
+      <div class="pc red" style="left:20%;top:90%">帅</div>
+      <div class="pc red" style="left:65%;top:70%">炮</div>
+      <div class="pc black" style="left:35%;top:10%">将</div>
+      <div class="pc black" style="left:75%;top:32%">车</div>
+      <div class="pc red" style="left:85%;top:90%">兵</div>
+    </div>
+  </div>
+</body>
+</html>

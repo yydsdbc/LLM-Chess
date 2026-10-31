@@ -2346,3 +2346,10 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - i18n: debate_* 19 键双语 (383 键); index.html script + sw.js SHELL 同步。
 - test_debate_export.js 14 断言: 标题/对阵/人类手剔除/插值/终选全票/三行元数据/信心百分化/表头/正常与被拒投票行/候选/裸手/空局兜底/null 不抛。注册进 run_all + test:serial (27 套件)。
 - 门禁: npm run check ALL PASS; npm test 27/27 PASS。
+
+## 2026-10-31 21:00 第86轮 (zcode — 门面与弹药: 社交预览图 / Discussions / 五平台发帖草稿)
+
+- 传播冲刺 D7-8 + D8-10 弹药: docs/social-preview.png (1280x640) — 新增 tools/make_social_preview.ps1 用 Windows GDI+ 零依赖绘制 (径向暗金渐变 + 迷你棋盘网格与楚河汉界 + 5 枚双色棋子 + LLM vs LLM 徽章 + 特性胶囊)。PS 踩坑两枚: ①方法调用参数只能是表达式 (inline New-Object 语法错, 全部预建变量); ②无 BOM 的 UTF-8 被 PS5.1 当 ANSI 读 (写文件补 EF BB BF)。🀄 席位字符超 UTF16 ([char] 强转抛错) 且 YaHei 无字形 → 从品牌行移除。README 不嵌此图 (社交预览由 GitHub Settings 上传, 仓库内留源脚本可再生成)。
+- Discussions 已通过 API 开启 (has_discussions: true — 此前 PATCH homepage 失败是字段级权限缺失, 但 has_discussions 字段可用); 新增 .github/DISCUSSION_TEMPLATE/ideas.yml (想法/方法论) + show-and-tell.yml (战报分享, 强制附可复现数据、禁止贴真实 key)。
+- 新增 docs/promotion.md 五平台弹药: Show HN (作者发帖规则/评论守则/「为什么象棋不是国象」答法) / r/LocalLLaMA (「非法着法率」角度) / 知乎文章 (三个发现: 格式分水岭/模型改票/吵得起来) / B站短视频分镜脚本 (改票是情绪点) / X thread 5 推。附 D8-D10 发帖节奏与「承认样本量小」话术 — 强调由维护者亲手发, 不同日齐发。
+- 门禁: npm run check ALL PASS; npm test 27/27 PASS。

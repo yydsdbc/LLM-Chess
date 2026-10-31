@@ -1,0 +1,27 @@
+name: 🏆 战报分享 / Show and tell
+description: 分享你跑出的 LLM 对局、天梯数据、辩论实录
+labels: [show-and-tell]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        分享格式自由，但**请附可复现凭据**：`logs/match_*.json` 或导出的棋谱 JSON / 辩论实录 Markdown。
+        大规模跑批请自备 API key；请勿在帖子里贴任何真实 API key。
+  - type: textarea
+    id: results
+    attributes:
+      label: 对局/数据摘要 / Results summary
+      placeholder: 例：glm-5.3-flash vs deepseek-chat × 20 局镜像，得分率 0.55，非法着法 2
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现方式 / How you ran it
+      placeholder: node test/match_headless.js deepseek deepseek-chat 120 / 浏览器 BYOK 直连
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: 附件 / Attached data (links or paste)
