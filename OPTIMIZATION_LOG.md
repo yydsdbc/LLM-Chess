@@ -2386,3 +2386,13 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 视觉: 设置弹层入场动画 setIn (.22s; 全局 prefers-reduced-motion 闸门已兜底); 预选 chips 悬停金色描边 + 微抬升 + focus-visible 环; .btn 悬停微抬升; #btn-star 金色 hover 辉光。
 - 安装体验: Start.cmd 增加 Node 版本行打印 (项目需 18+); 双 README 安装段改 --depth 1 浅克隆 + 「零依赖, 无需 npm install」明示 + Start.cmd 自检说明。
 - 门禁: npm run check ALL PASS; npm test 27/27 PASS。浏览器验收: chips 生成 (本机仅 TokenRhythm 配 Key → 随机+镜像两枚)、镜像 chip 单击双侧落值正确 (tokenrhythm/glm-5.3-flash, 逐侧 datalist 3 项)、关闭不保存。
+
+## 2026-10-31 21:15 第91轮 (zcode — 真实 Key 全面测试轮: MiniMax 配额尽 + TokenRhythm 实名挡, 负路径双验证全绿)
+
+- 测试轮 (无代码变更): 维护者提供 MiniMax key (sk-cp-*, 已写入 gitignored 的 config/keys.json, 绝不入库/不入 LOG)。
+- 中继接线 ✓: /api/health ok, /api/providers minimax hasKey=true 且 3 模型透传。
+- 正路径被账户级问题阻断 (均非本仓代码问题): ① MiniMax 三模型 (M2.7 / M2.7-highspeed / M3) 全部 HTTP 429 「已达到 Token Plan 用量上限 (2056)」— key 有效 (非 401), 套餐额度耗尽, 需升级/购买积分; ② TokenRhythm glm-5.3-flash HTTP 403 「请先完成实名认证后继续使用」— 账户需 KYC。
+- 负路径 E2E 双验证 (两次真实失败模式): 429 → 重试退避 (attempt 1/2) → 第1手 LLM 失败 → 安全兜底 → 残谱写盘 (0手) → 瞎走检测空谱不炸 → MATCH INCOMPLETE 非零退出; 403 同链路同样优雅。server 侧 403/429 透传不重写与 _server_http 断言一致。
+- UI 层真实 429 体验 (浏览器 → 中继 → 真上游): 决策面板「重试请求 重试 2 次」可视化、顶部横幅「⚠ 上游限流 (429)」精确归类、重试耗尽后每手由「💭 系统兜底 (兑底·安全着法)」接管且决策卡明确标注「前几次输出无效, 系统按静态评分选定此安全走法」— 对局不卡死、不虚报; 3 手后恢复双随机设置, 不再打受限账户。
+- 顺带实景验证第90轮功能: 双 Key 场景 chips = 随机×2 / MiniMax 镜像 / MiniMax × TokenRhythm 交叉; 镜像 chip 一键双侧落值正确; 逐侧 datalist 各自只含本侧供应商模型。
+- 结论: 正路径 (解析/流式/meta/Elo) 需待 MiniMax 套餐恢复或 TokenRhythm 实名后复测; 其余全链路 (含两条真实失败模式) 全部按设计工作。门禁此前 27/27, 本轮无代码变更。
