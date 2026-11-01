@@ -2417,3 +2417,11 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 门禁同步: check_ui 发布文件守护 8→10 (+mcp.js/llms.txt); 徽章 28→29。
 - 门禁: npm run check ALL PASS; npm test 29/29 PASS。手测 + 协议级子进程测试双通过; 真实客户端 (Claude Desktop) 装载待维护者按 README 配置后验收。
 - CI 修正 (同轮): 首版 test_mcp 用固定 sleep 断言 — windows CI (29 套件并行, stdio 往返慢) 竞态挂, ubuntu ×4 全绿。改为 expect(id) 响应驱动轮询 (默认 15s, perft/LRU 30s), 消除全部时序依赖; 本地复跑 + push 后 CI 全平台绿。教训入册: spawn 子进程类测试严禁固定 sleep, 一律按响应到达驱动。
+
+## 2026-11-01 00:20 第94轮 (zcode — GUI 视觉审计轮: 截图找真问题, 三项落地)
+
+- 方法: 主界面全状态截图审计, 只修看得见的问题; 调研中撤销两项 (箭头按方着色/天平宽度过渡已有实现, 评估条 transition .3s 与箭头红蓝 rgba 均在位)。
+- 修复 (审计痛点 #1): 恢复对局横幅 15s 自动淡出 — 此前常驻底部遮挡对局时长/状态条 (第91轮修的是 z-index 层级, 常驻遮挡仍在)。细节: role=status 播报先行, 视觉停留 15s 足够阅读; 悬停暂停计时 (正要点「续上局」的用户不被突然收走), 移出重新排程; 淡出走 dropBar 复用焦点归还; 手动两按钮仍即时生效; clearTimeout 防重复。浏览器实测: 15s 后 isConnected=false, 底部状态区完全可见。
+- 视觉 (审计 #2): 决策卡离面投影 (box-shadow) + 悬停描边提亮 — 卡片与面板底色拉开层次。
+- 视觉 (审计 #3): 等待/思考中卡 (.dcard.d-thinking) 金色左条静态分层 — 评估过呼吸脉冲方案但流式更新会整体重建卡片导致动画不断重置 (视觉抖动), 故取静态; 思考面板本身已有 breath 金色光晕, 不叠加。
+- 门禁: npm run check ALL PASS; npm test 29/29 PASS。

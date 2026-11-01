@@ -1493,6 +1493,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
          只在焦点确实在横幅内时交还盘面 (#board 是 tabindex=-1 的程序化落点, 不打断已移到别处的焦点)。 */
       var dropBar = function () {
         var hadFocus = !!(bar.contains && document.activeElement && bar.contains(document.activeElement));
+        if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
         bar.remove();
         if (hadFocus) {
           var bdR = document.getElementById('board');
@@ -1501,6 +1502,21 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       };
       b2.onclick = function () { dropBar(); };
       b1.onclick = function () { dropBar(); resumeGame(rec); };
+      /* 第94轮: 横幅 15s 自动淡出 — 此前常驻底部遮挡状态区/按钮 (第91轮实测 z-index 修复后仍是视觉常驻)。
+         role=status 已完成读屏播报, 视觉停留 15s 足够阅读; 悬停暂停计时 (正要点的用户不被突然收走);
+         淡出走 dropBar 复用焦点归还。手动两个按钮仍即时生效。 */
+      var fadeTimer = null;
+      var scheduleFade = function () {
+        if (fadeTimer) clearTimeout(fadeTimer);
+        fadeTimer = setTimeout(function () {
+          if (!bar.isConnected) return;
+          try { if (bar.matches(':hover')) { scheduleFade(); return; } } catch (eH) {}
+          dropBar();
+        }, 15000);
+      };
+      scheduleFade();
+      bar.addEventListener('mouseenter', function () { if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; } });
+      bar.addEventListener('mouseleave', scheduleFade);
     } catch (eR) {}
   }
   /* ── 初始化 ── */

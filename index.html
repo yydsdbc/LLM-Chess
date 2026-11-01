@@ -294,6 +294,9 @@ h1{color:var(--t1);font-size:clamp(20px,2vw,30px);font-weight:650;letter-spacing
 .think-spark{margin:4px 12px;padding:2px 6px 3px;border:1px solid var(--line);border-radius:6px;background:rgba(0,0,0,.16)}
 .think-body.card-mode{padding:10px 12px 30px}
 .dcard{background:var(--surface-raised);border:1px solid #3b4657;border-radius:9px;padding:12px;margin-bottom:10px;font-size:13px;line-height:1.65;transition:border-color .15s}
+.dcard{box-shadow:0 1px 8px rgba(0,0,0,.28)}   /* 第94轮: 决策卡离面投影 — 与面板底色拉开层次 */
+.dcard:hover{border-color:#5a6a80}   /* 第94轮: 悬停描边提亮 (transition 既有) */
+.dcard.d-thinking{border-left:3px solid rgba(194,138,32,.55)}   /* 第94轮: 等待/思考中卡金色左条 — 静态分层 (流式重建会重置动画, 故不加脉冲; 面板本身已有 breath 光晕) */
 .dcard:hover{border-color:#687587;transform:none}
 .d-head{flex-wrap:wrap;align-items:center;gap:6px;font-size:14px;color:var(--t1);letter-spacing:0}
 .d-move{color:var(--t1);font-family:Consolas,Monaco,monospace;overflow-wrap:anywhere}
