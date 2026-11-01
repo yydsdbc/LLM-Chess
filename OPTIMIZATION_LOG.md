@@ -2425,3 +2425,12 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 视觉 (审计 #2): 决策卡离面投影 (box-shadow) + 悬停描边提亮 — 卡片与面板底色拉开层次。
 - 视觉 (审计 #3): 等待/思考中卡 (.dcard.d-thinking) 金色左条静态分层 — 评估过呼吸脉冲方案但流式更新会整体重建卡片导致动画不断重置 (视觉抖动), 故取静态; 思考面板本身已有 breath 金色光晕, 不叠加。
 - 门禁: npm run check ALL PASS; npm test 29/29 PASS。
+
+## 2026-11-01 01:00 第95轮 (zcode — 对标 AI 斗蛐蛐品类: 赛事弹幕 + VS 开场卡)
+
+- 调研 (WebSearch): AI 斗蛐蛐品类 2026 爆火 — WhoisSpy.ai 12 模型世界杯 (148 局公开对战), 养成+对战+观赛游戏。品类共性 = 观赛氛围 (实时事件流/解说感) + 赛事仪式感 (选手卡/VS)。本仓观赛骨架已齐 (决策卡/天平/回放/趋势), 补氛围与仪式两块。
+- 赛事弹幕 (ui/danmaku.js): buildDanmaku(event) 纯函数 (事件→文案键+参数+去重签名, Node 直测) + feed(event, boardEl) (3 轨道轮询 / 同签名 0.9s 去重 / 层内上限 6 条 / aria-hidden + pointer-events:none)。事件源: renderer.render 对 lastMove 做签名 diff (与箭头 _sig 同手法) — 吃子/将军/长将预警 (streak===4 触发一次), live 与回放统一覆盖; app.js afterMove 对 entry.fallback 发兜底弹幕 (文案带 {side} 占位符, feed 侧本地化 红方/黑方)。CSS: danmakuMove 7s 匀速飘屏, reduced-motion 全局闸门自动静默。
+- VS 开场卡 (ui/fight_card.js): startRecord (唯一新局出口) 弹选手介绍 — 名字/Elo/战绩取天梯 (无记录显示 —), buildData 纯函数 (games 0 → rating — / record null; NaN/Infinity → —; 纯函数不变异输入), 2.6s 自动收起或点击跳过, aria-hidden 装饰层, 名字 textContent 防注入。
+- 测试: test_arena_fx.js 18 断言 (文案键映射/签名区分/args 透传/buildData 边界/纯函数); 注册 run_all + test:serial (30 套件)。D3b 断言当场抓到实现缺口: fallback 文案漏 {side} 占位符 (红黑不分) — 已补, feed 侧做红方/黑方本地化。
+- 门禁同步: sw.js SHELL +2 (danmaku/fight_card); 徽章 29→30。
+- 门禁: npm run check ALL PASS; npm test 30/30 PASS。浏览器验收: VS 卡 (真实天梯 Elo 1479.8/1520.2 + 战绩)、弹幕「吃掉 士！」实景命中。

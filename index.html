@@ -296,7 +296,25 @@ h1{color:var(--t1);font-size:clamp(20px,2vw,30px);font-weight:650;letter-spacing
 .dcard{background:var(--surface-raised);border:1px solid #3b4657;border-radius:9px;padding:12px;margin-bottom:10px;font-size:13px;line-height:1.65;transition:border-color .15s}
 .dcard{box-shadow:0 1px 8px rgba(0,0,0,.28)}   /* 第94轮: 决策卡离面投影 — 与面板底色拉开层次 */
 .dcard:hover{border-color:#5a6a80}   /* 第94轮: 悬停描边提亮 (transition 既有) */
-.dcard.d-thinking{border-left:3px solid rgba(194,138,32,.55)}   /* 第94轮: 等待/思考中卡金色左条 — 静态分层 (流式重建会重置动画, 故不加脉冲; 面板本身已有 breath 光晕) */
+.dcard.d-thinking{border-left:3px solid rgba(194,138,32,.55)}
+/* 第95轮: 赛事弹幕 (AI 斗蛐蛐观赛氛围) — 层由 ui/danmaku.js 挂载, aria-hidden + pointer-events:none */
+@keyframes danmakuMove{from{transform:translateX(0)}to{transform:translateX(calc(-1 * var(--dkw,432px) - 100%))}}
+.danmaku-item{position:absolute;left:100%;white-space:nowrap;font-size:13px;font-weight:bold;color:#FFE8A3;text-shadow:0 1px 4px rgba(0,0,0,.85);animation:danmakuMove 7s linear forwards;will-change:transform}
+.danmaku-item.dk-check{color:#ff8a7a}
+.danmaku-item.dk-fallback{color:#9ab0c4}
+.danmaku-item.dk-perpetual{color:#ffd54a}
+/* 第95轮: VS 开场卡 (赛事仪式感) — 装饰层 aria-hidden, 点击即收, 2.6s 自动收 */
+@keyframes fcFade{from{opacity:0}to{opacity:1}}
+@keyframes fcSlideL{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:none}}
+@keyframes fcSlideR{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+#fight-card{position:fixed;inset:0;z-index:85;display:flex;align-items:center;justify-content:center;background:rgba(4,2,0,.55);animation:fcFade .3s ease-out;cursor:pointer}
+.fc-inner{display:flex;align-items:center;gap:28px}
+.fc-side{background:linear-gradient(160deg,#241408,#3a2513);border:1.5px solid #a08040;border-radius:12px;padding:18px 26px;min-width:180px;text-align:center;box-shadow:0 10px 34px rgba(0,0,0,.6)}
+.fc-red{animation:fcSlideL .45s ease-out}
+.fc-black{animation:fcSlideR .45s ease-out}
+.fc-name{font-size:20px;font-weight:bold;color:#f0d9a0;letter-spacing:.5px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;max-width:220px;white-space:nowrap}
+.fc-meta{font-size:12px;color:#c4a56e;margin-top:3px}
+.fc-vs{font-size:36px;font-weight:900;color:#C28A20;text-shadow:0 0 18px rgba(194,138,32,.55);animation:celebrate .5s ease-out}   /* 第94轮: 等待/思考中卡金色左条 — 静态分层 (流式重建会重置动画, 故不加脉冲; 面板本身已有 breath 光晕) */
 .dcard:hover{border-color:#687587;transform:none}
 .d-head{flex-wrap:wrap;align-items:center;gap:6px;font-size:14px;color:var(--t1);letter-spacing:0}
 .d-move{color:var(--t1);font-family:Consolas,Monaco,monospace;overflow-wrap:anywhere}
@@ -720,7 +738,7 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
 <script src="benchmark/match.js"></script>
 <script src="ui/spectator.js"></script>
 <script src="ui/share_card.js"></script>
-<script src="ui/debate_export.js"></script>
+<script src="ui/danmaku.js"></script><script src="ui/fight_card.js"></script><script src="ui/debate_export.js"></script>
 <script src="ui/renderer.js"></script>
 <script src="ui/i18n.js"></script>
 <script src="ui/app.js"></script>

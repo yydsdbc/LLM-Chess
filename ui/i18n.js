@@ -23,6 +23,8 @@
     type: '类型', type_human: '人类', type_random: '随机AI', type_llm: 'LLM',
     provider: '服务商', model: '模型',
     model_placeholder: '选列表或直接输入任意模型名',
+    dk_capture: '吃掉 {piece}！', dk_check: '将军！', dk_perpetual: '长将警告！', dk_fallback: '{side}模型摆烂, 系统兜底…',   // 第95轮: 赛事弹幕 (AI 斗蛐蛐观赛氛围)
+    fc_elo: 'Elo {r}', fc_record: '{w}胜 {d}和 {l}负', fc_vs: 'VS',   // 第95轮: VS 开场卡
     elo_trend: '趋势', elo_trend_title: '评分轨迹 (基于本地棋谱 {n} 局重放)', elo_trend_note: '趋势 = 按时序重放本地棋谱的评分轨迹; 棋谱池有容量裁剪, 序列终值未必等于当前评分',   // 第92轮: 天梯趋势列 (纯函数重放, 与结算同口径)
     preset_label: '一键对局预选', preset_random: '🤖 随机 vs 随机', preset_mirror: '{name} 镜像', preset_cross: '{a} × {b}',   // 第90轮: 预选 chips (中继已配 Key 的服务商生成, 免逐侧配置)
     prompt_level: '提示词等级', pl_none: '无（基础协议）', pl_low: '低 (一句话)', pl_mid: '中 (标准)', pl_high: '高（策略与战术）',
@@ -258,6 +260,8 @@
     type: 'Type', type_human: 'Human', type_random: 'Random AI', type_llm: 'LLM',
     provider: 'Provider', model: 'Model',
     model_placeholder: 'Pick a suggestion or type any model name',
+    dk_capture: 'Captured {piece}!', dk_check: 'Check!', dk_perpetual: 'Perpetual check warning!', dk_fallback: '{side} model failed — system fallback…',   // round 95: arena danmaku
+    fc_elo: 'Elo {r}', fc_record: '{w}W {d}D {l}L', fc_vs: 'VS',   // round 95: VS fight card
     elo_trend: 'Trend', elo_trend_title: 'Rating trajectory (replayed from {n} local records)', elo_trend_note: 'Trend = rating trajectory replayed from local records; the record pool is trimmed, so the last point may differ from the current rating',   // round 92: ladder trend column (pure replay, settlement-faithful)
     preset_label: 'One-click matchup', preset_random: '🤖 Random × Random', preset_mirror: '{name} mirror', preset_cross: '{a} × {b}',   // round 90: matchup preset chips (built from keyed relay providers)
     prompt_level: 'Prompt level', pl_none: 'None (base protocol)', pl_low: 'Low (one-liner)', pl_mid: 'Mid (standard)', pl_high: 'High (strategy & tactics)',

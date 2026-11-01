@@ -321,6 +321,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       committeeMode: (meta && meta.committeeMode) || (meta && meta.roundtable ? 'roundtable' : null) || ((agents[side] && agents[side].models && agents[side].models.length > 1) ? (agents[side].agent && agents[side].agent._mode || 'council') : null)   // 第56轮: 模式标记; 复盘优先使用棋谱记录
     };
     fbMark(entry, hasSummary, entry.reasoning, holder ? holder.kind : 'human');   // 人类和随机AI没有模型摘要，不代表LLM失败。
+    if (entry.fallback && XQ.Danmaku) XQ.Danmaku.feed({ type: 'fallback', side: side, ply: engine.ply() }, document.getElementById('board'));   // 第95轮: 兜底弹幕 (斗蛐蛐观赛氛围)
     if (!entry.fallback && !entry.summary) entry.summary = (XQ.I18N ? XQ.I18N.t('summary_none') : '(无摘要)');   // 纯展示兜底: 有 summary 缺失但置信度在 → 保留原「无摘要」占位
     decisionLog[side].push(entry);
     if (decisionLog[side].length > 60) decisionLog[side].shift();
@@ -1249,6 +1250,18 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     XQ.UI.thinkPanel('black', { name: TwR('status_side_black'), title: currentRecord.black.name, stat: '', text: TwR('think_wait'), active: false,
       info: modelCardHTML('black') + (currentRecord.black.style ? '<span class="badge-style ' + levelClass(currentRecord.black.style) + '">' + levelCN(currentRecord.black.style) + '</span>' : '') });
     syncArchive();
+    /* 第95轮: VS 开场卡 — 新局选手介绍 (名字/Elo/战绩取天梯; 无对局记录显示 —)。startRecord 是唯一新局出口, 回放/续局不经过此处。 */
+    if (XQ.FightCard && currentRecord) {
+      var fcr = currentRecord.red || {}, fcb = currentRecord.black || {};
+      var statsOf = XQ.Elo ? XQ.Elo.statsOf : function () { return null; };
+      var stR = statsOf(fcr.name), stB = statsOf(fcb.name);
+      XQ.FightCard.show(XQ.FightCard.buildData({
+        redName: fcr.name, blackName: fcb.name,
+        redRating: stR && stR.games > 0 ? XQ.Elo.ratingOf(fcr.name) : null,
+        blackRating: stB && stB.games > 0 ? XQ.Elo.ratingOf(fcb.name) : null,
+        redStats: stR, blackStats: stB
+      }));
+    }
   }
   /* v1.0.daily 存档按钮可用性 (无棋谱/空谱禁用, 防误点导出空文件) */
   function syncArchive() {

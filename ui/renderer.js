@@ -334,6 +334,19 @@
         }
       }
     }
+    /* 第95轮: 赛事弹幕 — lastMove 签名 diff (与箭头同思路), 吃子/将军/长将预警; live 与回放统一覆盖。
+       DOM 签名存 arrowSvg._dkSig (同箭头 _sig 手法 — 渲染闭包无持久状态, DOM 即状态)。 */
+    var mD = snap.lastMove;
+    if (mD && !view.pendingAnim && XQ.Danmaku && arrowSvg) {
+      var oppD = mD.piece.color === 'red' ? 'black' : 'red';
+      var dSig = mD.from.x + ',' + mD.from.y + '>' + mD.to.x + ',' + mD.to.y + '|' + engine.ply();
+      if (dSig !== arrowSvg._dkSig) {
+        arrowSvg._dkSig = dSig;
+        if (mD.captured) XQ.Danmaku.feed({ type: 'capture', captured: XQ.Piece.CHARS[mD.captured.color][mD.captured.type], ply: engine.ply() }, boardEl);
+        if (engine.inCheck(oppD)) XQ.Danmaku.feed({ type: 'check', ply: engine.ply() }, boardEl);
+        else if (engine.checkStreak(mD.piece.color) === 4) XQ.Danmaku.feed({ type: 'perpetual', side: mD.piece.color }, boardEl);
+      }
+    }
     renderStatus(engine, view, snap);
     renderSpectatorMeter(engine, snap);
     renderOverlay(engine, view);
