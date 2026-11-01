@@ -2434,3 +2434,4 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 测试: test_arena_fx.js 18 断言 (文案键映射/签名区分/args 透传/buildData 边界/纯函数); 注册 run_all + test:serial (30 套件)。D3b 断言当场抓到实现缺口: fallback 文案漏 {side} 占位符 (红黑不分) — 已补, feed 侧做红方/黑方本地化。
 - 门禁同步: sw.js SHELL +2 (danmaku/fight_card); 徽章 29→30。
 - 门禁: npm run check ALL PASS; npm test 30/30 PASS。浏览器验收: VS 卡 (真实天梯 Elo 1479.8/1520.2 + 战绩)、弹幕「吃掉 士！」实景命中。
+- CI 附记: 首推 ubuntu-Node20 单点 npm test 失败 (其余 4 平台全绿), rerun-failed-jobs 同 SHA 绿 — 偶发抖动, 与第83轮 check_ui 0xC0000409 先例同性质; 非代码回归。
