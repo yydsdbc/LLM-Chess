@@ -372,7 +372,7 @@ function create(opts) {
       }
       return out.join(' ');
     }
-    var HIST_CAP = typeof opts.historyCap === 'number' ? opts.historyCap : 10;   // v3.2: 可配置 (v2.7 默认 10 对)
+    var HIST_CAP = typeof opts.historyCap === 'number' ? opts.historyCap : 6;   // v3.2: 可配置 (第96轮默认 10→6: 离线账单实测长局历史占总 token ~72%, 6 对 = 近 12 手完整上下文 + 新尾自带近 8 手摘要, 稳态每手省 ~1.6k tok; 前缀缓存不变式不受影响)
     function buildMessagesWithEngine(engine, retryNote, lastBad, preLegal, tagCache) {
       var legal = legalAnnotated(engine, preLegal, tagCache);   // v1.7.9: 复用 next() 已生成的合法列表, 少一次全盘生成; v3.7: 跨 attempt 复用标注缓存
       var trimmed = false;

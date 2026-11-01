@@ -110,7 +110,7 @@ function ok(cond, name) {
   // ── v2.4 对手上一手吃子标注: 黑炮 e8-e5 借黑卒 e7 作架吃红兵 → 红 user 消息点名 吃掉你的兵 ──
   {
     const eC = XQ.Engine.create();
-    const agentCap = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'mock-cap' });
+    const agentCap = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'mock-cap', historyCap: 10 });   // 第96轮: 默认改 6, 本测试钉住 10 验证裁剪机制本身 (算术 2+2*10 不变)
     let seqCap = 0;
     globalThis.fetch = async function (url, opts) {
       const body = JSON.parse(opts.body);
@@ -881,7 +881,7 @@ function ok(cond, name) {
       return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ choices: [{ message: { content } }], usage: {} }) };
     };
     const engineH = XQ.Engine.create();
-    const agentH = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'mock-cap2' });
+    const agentH = XQ.LLMAgent.create({ side: 'red', provider: 'mock', model: 'mock-cap2', historyCap: 10 });   // 第96轮: 钉住 10 验证裁剪机制 (默认已改 6; 算术 2+2*10 不变)
     const roundUsers = {};   // v3.7: 每手请求的 user 文本 (验证 HIST_CAP 裁剪后手数仍正确)
     for (let k = 0; k < 13; k++) {
       const startIdx = capCalls.length;

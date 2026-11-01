@@ -50,7 +50,7 @@ flowchart LR
 - `system` prompt is **byte-identical for the whole game** (no per-move trimming). The two levels are `none` (task/output protocol) and `high` (adds strategy/tactics, the default); other setting values normalize to `high`. Both share position summaries and engine safety guards; existing record metadata is not rewritten. LLM requests call `summarize` with `openingTasks: false` to omit legacy fixed opening routes; default spectator summaries and numerical evaluation remain unchanged.
 - Conversation grows **append-only** as (user request, assistant raw JSON) pairs; each request's prefix ⊇ the previous one.
 - The retry block is always the **last** element, so a retry reuses the failed request's cached prefix.
-- `HIST_CAP` (default 10 pairs) trims from the head and re-injects the task header.
+- `HIST_CAP` (default 6 pairs since round 96 — offline token audit showed history at ~72% of per-game tokens; 6 pairs still keep the last 12 plies of full context, and each new request carries a last-8-move summary) trims from the head and re-injects the task header.
 - Guard: `npm run check` runs the prompt hard gate (`test/dump_prompts.js --check`: system ≤ 2400 chars, no special symbols ①②③≥≤~→⚠).
 
 ## Test map

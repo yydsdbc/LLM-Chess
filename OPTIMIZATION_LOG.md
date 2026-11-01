@@ -2435,3 +2435,13 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 门禁同步: sw.js SHELL +2 (danmaku/fight_card); 徽章 29→30。
 - 门禁: npm run check ALL PASS; npm test 30/30 PASS。浏览器验收: VS 卡 (真实天梯 Elo 1479.8/1520.2 + 战绩)、弹幕「吃掉 士！」实景命中。
 - CI 附记: 首推 ubuntu-Node20 单点 npm test 失败 (其余 4 平台全绿), rerun-failed-jobs 同 SHA 绿 — 偶发抖动, 与第83轮 check_ui 0xC0000409 先例同性质; 非代码回归。
+
+## 2026-11-01 01:40 第96轮 (zcode — token 花费优化: HIST_CAP 10→6, 离线账单实测驱动)
+
+- MiniMax 复测: 额度仍未生效 — 国际站 (minimaxi.com) 与国内站 (minimax.chat) 同 key 均 429 「Token Plan 用量上限 (2056)」, 三模型一致。key 有效 (非 401), 需维护者核对套餐购买/生效状态 (或确认充值账户与该 key 同账号)。
+- 测量工具 (tools/token_audit.js, 入库可复用): mock 传输离线驱动整局真实引擎对局, 逐手拆账单 — system (可缓存) / 历史 (缓存依赖) / 新尾 (每手全价) / 输出; token 粗估 CJK≈1 ASCII≈0.25。择着与送吃守卫同口径 (从标注列表挑无危/亏项), 否则守卫拒绝至抛错。
+- 实测数据 (60 手长局, 随机对局): cap10 合计 ~398.5k tok — system 77.8k / **history 285.5k (72%)** / 新尾 32.1k / 输出 3.1k; 稳态每手历史 ~4.8k tok。
+- 优化落地: HIST_CAP 默认 10→6 (ai/llm_agent.js) — 6 对 = 近 12 手完整上下文, 且每手新请求自带上一手点名/近 8 手序列/局面评价, 连续性有保障。60 手局合计 398.5k → 305.7k (**-23%**), 稳态每手历史 **-33%** (~1.6k tok/手); 前缀缓存不变式不受影响 (append-only + 触顶一次性重建)。
+- 同步: ARCHITECTURE 双语缓存契约行 (默认 10→6 + 依据); test_llm_convo 两处裁剪机制测试钉显式 historyCap:10 (验证机制本身, 算术 2+2*10 不变; 首跑失败原因即默认值改动, 修法是钉参数而非改断言)。
+- 已评估并放弃: 棋盘格 CJK→字母 (中文模型对汉字棋子语义更强, 质量风险 > 收益); 输出 schema 再压缩 (summary≤14字/candidates≤2 已紧); 合法着法标注裁剪 (吃/将/杀/危/亏标是防瞎走的质量关键)。
+- 门禁: npm run check ALL PASS; npm test 30/30 PASS。
