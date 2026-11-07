@@ -16,6 +16,7 @@
       if (ci > 0) { spec.provider = m.slice(0, ci); spec.model = m.slice(ci + 1); }
       return {
         name: spec.provider + ':' + spec.model,
+        provider: spec.provider,   // 第98轮: 同供应商选民错峰启动用 (BYOK 直连全体同端点, name 前缀也一致)
         agent: XQ.LLMAgent.create({
           side: side, provider: spec.provider, model: spec.model,
           promptLevel: opts.promptLevel, thinking: opts.thinking,
@@ -148,6 +149,16 @@
     function askAll(engine, history, note, phase, eligibleIndexes, state) {
       checkCall(state);
       var budget = typeof opts.voterBudgetMs === 'number' ? opts.voterBudgetMs : 60000;
+      /* 第98轮: 同 provider 选民错峰启动 — 并行盲投对同一供应商瞬时并发 xN 会触发其 RPM 限流
+         (实测 MiniMax: 委员会 2 并发 + 对手 1 并发 → 持续 429 重试, 每手多烧 2 次重试预算)。
+         同 provider 的后续选民延迟 stagger 启动 (still 计入 pendingWeight, fastMajority 语义不变);
+         不同 provider 不延迟。BYOK 直连全体同端点 → name 前缀一致 → 同样错峰。 */
+      var STAGGER = typeof opts.sameProviderStaggerMs === 'number' && opts.sameProviderStaggerMs >= 0 ? opts.sameProviderStaggerMs : 0;   // 默认 0 (库保持中性); 配速策略由装配方传入 (app.js 第98轮: 1200)
+      function providerOf(a) {
+        if (a && a.provider) return String(a.provider);
+        var ci = a && a.name ? String(a.name).indexOf(':') : -1;
+        return ci > 0 ? String(a.name).slice(0, ci) : String(a && a.name || '');
+      }
       var maxP = typeof opts.maxParallel === 'number' && opts.maxParallel > 0 ? Math.max(1, Math.floor(opts.maxParallel)) : agents.length;
       var eligible = agents.map(function (_, idx) { return !eligibleIndexes || eligibleIndexes.indexOf(idx) >= 0; });
       var activeCount = eligible.filter(Boolean).length;
@@ -206,7 +217,27 @@
         while (!stopped && !state.cancelled && Object.keys(active).length < maxP && queueAt < queue.length) {
           var idx = queue[queueAt++];
           active[idx] = true;
-          startVoter(idx);
+          var dly = 0;
+          var prov = providerOf(agents[idx]);
+          if (STAGGER > 0 && prov) {
+            for (var ak in active) {
+              var j = Number(ak);
+              if (j !== idx && active[j] && providerOf(agents[j]) === prov) dly = Math.max(dly, STAGGER);
+            }
+          }
+          if (dly > 0) {
+            (function (idx2) {
+              setTimeout(function () {
+                if (stopped || state.cancelled) {
+                  if (settleFns[idx2]) settleFns[idx2]({ err: new Error('cancelled before voter start'), name: agents[idx2].name });
+                  return;
+                }
+                startVoter(idx2);
+              }, dly);
+            })(idx);
+          } else {
+            startVoter(idx);
+          }
         }
       }
       function settleVoter(idx, v) {

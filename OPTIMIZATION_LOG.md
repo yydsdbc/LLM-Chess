@@ -2452,3 +2452,12 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 视角行去重 (全价 token): situationText 每手都带「评分视角: …黑方填evaluation须反号」— 与 system 输出格式节重复。定义上移两级 system 评价与终局节 (一次缓存), 每手 user 减 ~42 字全价。实测 (token_audit 60手): 新尾 33.3k→30.5k (**-8.3%**), 全局 294.4k (第94轮口径 398.5k → 累计 **-26%**)。
 - MiniMax 状态: 429 → **402 insufficient_balance** — 套餐切换已生效但余额不足, 需购买积分; key/账号链路已通, 余额就绪即可跑真对局。
 - 门禁: npm run check ALL PASS (prompt gate 1888字); npm test 30/30 PASS; dump 已重生成新鲜度 PASS。
+
+## 2026-11-01 15:20 第98轮 (zcode — 全面测试轮: 真 LLM 全维度矩阵 + 三发现两修复)
+
+- 测试矩阵 (MiniMax 额度生效后): T1 M2.7-highspeed 无头 8 手 MATCH OK (39.2k tok, 缓存 60%, 信心 0.68); T2 M3 无头 8 手 MATCH OK (105.2k tok = highspeed 2.6 倍, 思考 27-39s/手 — 成本数据点); T3 委员会真实会诊 (红 council 双模型 vs 黑单模型, 面板逐选民用量/会诊中 2/2 应答 ✓); T4 UI 实战 (VS 卡/弹幕/俘获托盘/拦截至位)。
+- 发现1 (已修): 委员会 council 并行盲投对同一供应商瞬时并发 xN — 实测 MiniMax 持续 429 重试 (每手多烧重试预算)。修复: committee_agent 新增 sameProviderStaggerMs (同 provider 后续选民错峰启动, 默认 0 库中性, app.js 装配 1200; delayed选民仍计 pendingWeight, fastMajority 语义不变; roundtable 两阶段共用)。UI 复测: 90s 内 429 横幅 0 次 (修复前持续出现), 对局正常推进 6+ 手。
+- 发现2 (已修): replay_smoke 对 logs/match_headless.json 的隐性耦合 — v1.6.4 修了手数耦合但漏了吃子存在性耦合 (M3 局 8 手零吃子 → capture-step 断言全挂)。修复: 无吃子时跳过该块 (零吃子行为由 noCap 专门分支覆盖)。
+- 发现3 (记录): 委员会配置契约 — 模型输入框逗号分隔才是委员会 (provider:model 跨厂商); localStorage models 数组不驱动设置面板路径, 多模型模式只填一个模型时静默降级单模型 (候选改进: 降级提示, 未做)。
+- 实测账单 (优化后口径): highspeed ~4.9k tok/手 (缓存 60%), M3 ~13.1k tok/手 (思考 27-39s); M3 打 2.6 倍成本 — keys.example 模型序即默认序, M2.7 为默认合理。
+- 门禁: npm run check ALL PASS; npm test 30/30 PASS。UI 复测后已恢复双随机设置 (不再消耗 MiniMax 额度)。

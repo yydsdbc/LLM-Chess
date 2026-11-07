@@ -200,6 +200,10 @@ setTimeout(function () {
   ok('dispose', ctrl.isPlaying() === false);
 
   // v3.9.2 跳到下一手吃子 / 上一手吃子 (long replay 场景)
+  /* 第98轮: 吃子存在性不再假设 — logs/match_headless.json 是易变输入 (真实对局每轮覆盖, M3 局可 0 吃子)。
+     v1.6.4 修了手数耦合但漏了吃子存在性耦合; 无吃子时跳过本块 (零吃子行为由下方 noCap 专门分支覆盖)。 */
+  const capPlies = rec.moves.filter(function (m) { return !!m.captured; }).length;
+  if (capPlies > 0) {
   ctrl.gotoPly(0);
   ctrl.stepNextCapture();
   const after1 = s.idx();
@@ -222,6 +226,9 @@ setTimeout(function () {
   ctrl.gotoPly(rec.moves.length);
   ctrl.stepNextCapture();
   ok('stepNextCapture 边界=末尾', s.idx() === rec.moves.length);
+  } else {
+    console.log('(零吃子局: 跳过 capture-step 断言 — noCap 分支已覆盖零吃子行为)');
+  }
   // 零吃子场景: 合成的无吃子棋谱应平跳 (与 auto-skip 行为对齐)
   const noCap = { moves: rec.moves.map(function (m) { return Object.assign({}, m, { captured: null }); }) };
   const s3 = XQ.Replay.create(noCap);

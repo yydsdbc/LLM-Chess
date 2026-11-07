@@ -1123,6 +1123,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
             onThinking: onThink, onRetry: onRetry2, onProgress: onProg,
             signal: function () { return gameAbort ? gameAbort.signal : undefined; },   // 第39轮: 取值函数 — applyAgents 先于 startRecord, 固化实例拿到的是随即被 abort 的旧代控制器 (每手请求被秒拒 → LLM 退化为随机走子)
             voterBudgetMs: 90000,
+            sameProviderStaggerMs: 1200,   // 第98轮: 同供应商选民错峰启动 (实测委员会 2 并发 + 对手 1 并发触发 MiniMax RPM 429, 重试烧预算; 错峰后并发降为 1)
             jitter: true,
             fastMajority: specs.length >= 3,   // 第49轮: 3+ 选民启用快速多数决
             weightByElo: true,                  // 第49轮: Elo 加权投票                                         // 第38轮: 退避抖动 (多选民错峰不撞限流窗)
