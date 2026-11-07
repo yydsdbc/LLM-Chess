@@ -1168,12 +1168,24 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         function isCurrentThinking() {
           return aiBusy && view.aiThinkingSide === side && agents[side] && agents[side].agent === agent;
         }
+        /* 第107轮: 思考直播条 — onThink 逐 delta 同步最新思考原文到 #think-ticker (全宽显眼位, 观众直读) */
         var onThink = function (s2, text) {
           if (!isCurrentThinking() || s2 !== side) return;
+          thinkTicker(s2, text);
           if (XQ.UI.updateThinking(side, { phase: 'streaming', text: cleanReason(text) })) return;
           var stream = document.querySelector('#think-' + side + '-body .d-thinking-stream');
           if (stream) stream.textContent = cleanReason(text) || '…';
           else showThinking(s2, text);
+        };
+        var thinkTicker = function (s2, rawText) {
+          var tt = document.getElementById('think-ticker');
+          if (!tt) return;
+          var Tt = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+          tt.classList.add('show');
+          var lbl = document.getElementById('think-ticker-label');
+          if (lbl) lbl.textContent = Tt('tt_label');
+          var body = document.getElementById('think-ticker-text');
+          if (body) body.textContent = String(cleanReason(rawText) || '').slice(0, 240) || '…';
         };
         var onRetry2 = function (info) {
           if (!isCurrentThinking()) return;
@@ -1459,6 +1471,8 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
     replayStack = [];
     selected = null; clearKbCursor();
+    var ttHide = document.getElementById('think-ticker');
+    if (ttHide) ttHide.classList.remove('show');   // 第107轮: 走子结束收起思考直播条 (决策卡接棒)
     ['red', 'black'].forEach(function (sd) {
       var h = agents[sd];
       if (h && h.agent && typeof h.agent.reset === 'function') h.agent.reset();

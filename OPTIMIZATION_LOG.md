@@ -2531,3 +2531,10 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 供应商实测补充: MiniMax-M3.1-Flash 无思考 vs max 全思考对抗赛 12 手 — 两侧账单几乎相同 (~50k tok, completion 18.2k/18.4k) — **thinking:{type:'disabled'} 对 M3.1 静默无效** (无思考侧单手 81.4s + 英文散文失败 = 仍在深度思考); 真无思考需 provider 支持。
 - 门禁: npm run check ALL PASS; npm test 31/31 PASS (T1-T4 thinkingSnippet 断言; T1 首版预期错误 — 36 字输入本不该截断, 断言改按语义)。
 - 测试环境教训 (复): 多层转义 (bash→python→JS) 让 \\n 变真换行 — 第 4 次踩坑; 一律文件脚本落地。
+
+## 2026-11-07 23:10 第107轮 (zcode — 突显 LLM 思考过程: 思考直播条 + 提示词解说化)
+
+- 思考直播条 (#think-ticker): ai-banner 上方全宽胶囊 — LLM 思考时实时显示最新推理原文 (240 字截断, 🧠 思考直播 标签)。挂点: onThink 逐 delta 同步 (与面板流同源); 走子结束/新局收起 (决策卡接棒)。aria-hidden 装饰层 (信息在面板可读)。CSS: 暗底金边 + ttIn 入场动画; reduced-motion 闸门兜底。
+- 提示词解说化: 思考纪律追加「思考要点名你看到的最大威胁与最大机会, 让观战者看懂你的思路」(high 1933 字 ≤ 2400; dump 重生成 PASS)。思考流因此更解说化 — 弹幕/直播条/面板三处观众收益。
+- 浏览器验收: GLM 真局第2手, 直播条 visible=true 随 delta 实时滚动 (label+text 同行)。
+- 门禁: npm run check ALL PASS; npm test 31/31 PASS。

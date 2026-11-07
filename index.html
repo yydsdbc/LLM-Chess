@@ -385,6 +385,11 @@ h1{color:var(--t1);font-size:clamp(20px,2vw,30px);font-weight:650;letter-spacing
 #status-bar.status-draw{background:#252c37;color:#dce5f3;border-color:#667386;box-shadow:none}
 #status-info{font-family:Consolas,Monaco,monospace;font-size:12px;font-variant-numeric:tabular-nums;letter-spacing:0;opacity:1}
 #ai-banner{border-radius:8px;max-width:min(90vw,620px);line-height:1.6}
+/* 第107轮: 思考直播条 — LLM 思考时全宽显示最新推理原文 (ai-banner 上方; 无思考/和局/人类局隐藏) */
+#think-ticker{display:none;margin-top:8px;max-width:min(90vw,620px);margin-left:auto;margin-right:auto;padding:8px 14px;border-radius:8px;background:rgba(8,6,2,.92);border:1px solid rgba(194,138,32,.45);font-size:13px;line-height:1.7;color:#f0d9a0;text-align:left}
+#think-ticker.show{display:block;animation:ttIn .25s ease-out}
+#think-ticker .tt-label{color:#C28A20;font-weight:bold;margin-right:6px}
+@keyframes ttIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 #ai-banner.busy,#ai-banner.busy.side-red,#ai-banner.busy.side-black{display:flex;flex-wrap:wrap;background:#29251f;color:var(--accent);border:1px solid #7c6747;animation:none}
 #ai-banner .ab-ico,#ai-banner .ab-state,#ai-banner .ab-dots{color:var(--accent);text-shadow:none}
 #ai-banner .ab-model{color:var(--t1);font-weight:bold}
@@ -719,6 +724,7 @@ input[type=checkbox],input[type=range]{accent-color:var(--accent)}
     <span id="connection-status" class="connection-status" data-state="online" role="status" aria-live="polite" data-i18n="ui_online" data-i18n-aria="ui_network_online" aria-label="Network status: Online">Online</span>
 </div>
 <div id="sr-status" class="sr-only" aria-live="polite"></div>
+<div id="think-ticker" aria-hidden="true"><span id="think-ticker-label"></span><span id="think-ticker-text"></span></div>
 <div id="ai-banner"></div>
 <div id="sr-move" class="sr-only" aria-live="polite"></div>
 <div id="sr-cursor" class="sr-only" aria-live="polite"></div>   <!-- 第41轮 a11y: 键盘走子光标播报 (方向键移动时读屏才知落点与格上棋子; 独立于 #sr-move, 互不覆盖) -->
