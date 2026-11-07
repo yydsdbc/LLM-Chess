@@ -99,5 +99,8 @@ ok(DK.buildDanmaku({ type: 'multikill', side: 'red', n: 3, ply: 30 }).sig !== mk
 var bd2 = FC.buildData({ redName: '擂主甲', redRating: 1600, redStats: { games: 5, win: 4, draw: 1, loss: 0 }, redRank: 1 });
 ok(bd2.red.rank === 1, 'V8 rank 透传 (擂主徽章数据)');
 
+// 第105轮: 和局不播报
+var vD = FC.verdict({ winnerName: null, winnerRating: 1500, loserRating: 1500, delta: 0.1, winStreak: 0 });
+ok(vD === null, 'V9 和局 (winnerName null) → 不播报');
 console.log(fails.length ? 'arena fx: ' + fails.length + ' FAIL' : 'arena fx: ALL PASS');
 process.exit(fails.length ? 1 : 0);

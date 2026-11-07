@@ -492,7 +492,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     /* 第102轮: 赛后擂台播报 — 规则化情绪判词置顶 (爆冷/碾压/连胜气势; 数据=本局 Elo 变化 + 天梯重放状态) */
     var verdictHtml = '';
     if (XQ.FightCard && XQ.FightCard.verdict && currentRecord) {
-      var wName = currentRecord.winner === 'red' ? (currentRecord.red && currentRecord.red.name) : (currentRecord.black && currentRecord.black.name);
+      var wName = currentRecord.winner ? (currentRecord.winner === 'red' ? (currentRecord.red && currentRecord.red.name) : (currentRecord.black && currentRecord.black.name)) : null;   // 第105轮: 和局 winner null → 不播报 (旧三元把和局兜成黑方「拿下对局」)
       var formsNow = (XQ.Elo && XQ.Elo.trendFromRecords && XQ.Record && XQ.Record.list) ? XQ.Elo.trendFromRecords(XQ.Record.list()).forms : {};
       var wForm = wName ? formsNow[wName] : null;
       var vd = XQ.FightCard.verdict({

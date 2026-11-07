@@ -2515,3 +2515,11 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 账单 (12 手): 双方几乎相同 — 无思考 50.3k tok (prompt 31.2k / completion 18.2k, 缓存 69%) vs max 49.8k tok (缓存 73%)。
 - **关键发现: thinking:{type:'disabled'} 对 MiniMax-M3.1 未生效** — 证据: 无思考侧 completion 18.2k tok (真无思考应 <2k)、单手最高 81.4s (比 max 的 33s 还慢)、attempt 失败原因含英文散文输出 (We need respond JSON...) = 模型仍在深度思考。即「无思考 vs max」实际未拉开差距; 真无思考需 provider 层支持 (或 quick 模式的本地合成路径)。
 - 附带观察: max 侧第8手输出 JSON 缺右括号被解析器拒绝 → 重试成功 (解析器 + 重试链路在真模型上工作正常)。
+
+## 2026-11-01 20:50 第105轮 (zcode — 弹幕可见性修复 + 和局播报修正 + 新 UI 演示视频)
+
+- 录制新 UI 演示视频 (48 帧 → 24s 966KB VP8, 随机对局 533 手段): 抽帧审阅发现 **弹幕从未入镜** — 深挖实锤: danmaku 层挂在 board-container (实测宽 383px) 但 --dkw 用了棋盘宽 432px → 弹幕可见窗口只剩 ~15% (大部分时间飘在层外)。MutationObserver 60s 实测: 弹幕生成正常 (5 条: 吃马/剧变x2/吃卒/吃炮) — 生成与可见性是两个独立问题, 修的是后者。修复: --dkw 改层自身实测宽 (offsetWidth)。
+- 和局播报 bug (顺手抓到): 终局卡判词「随机AI(黑) 拿下对局」出现在**和局**上 — winner null 被三元兜成黑方名。修复: 和局 (winner null) 不播报; V9 断言。
+- 实况复验 (修复后构建): 40s 内 4 条弹幕正常生成, 层内可见 (截图); 31/31 全绿。
+- 新 UI 演示视频已替换 docs/demo.webm (English-first 界面 + 全部娱乐层: 天平摆动/俘获/决策卡)。
+- 门禁: npm run check ALL PASS; npm test 31/31 PASS。

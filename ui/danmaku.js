@@ -30,7 +30,7 @@
     layer.id = 'danmaku-layer';
     layer.setAttribute('aria-hidden', 'true');
     layer.style.cssText = 'position:absolute;top:6px;left:0;right:0;height:86px;overflow:hidden;pointer-events:none;z-index:5';
-    layer.style.setProperty('--dkw', (boardEl.clientWidth || 432) + 'px');
+    layer.style.setProperty('--dkw', (layer.offsetWidth || boardEl.clientWidth || 432) + 'px');   // 第105轮: 用层自身实测宽 (board-container 内层 ~383 < 棋盘 432, 旧值让弹幕可见窗口只剩 ~15%)
     (boardEl.parentNode || boardEl).appendChild(layer);   // 与 move-arrow 同挂 board-container
     return layer;
   }
