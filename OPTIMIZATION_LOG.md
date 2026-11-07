@@ -2461,3 +2461,10 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 发现3 (记录): 委员会配置契约 — 模型输入框逗号分隔才是委员会 (provider:model 跨厂商); localStorage models 数组不驱动设置面板路径, 多模型模式只填一个模型时静默降级单模型 (候选改进: 降级提示, 未做)。
 - 实测账单 (优化后口径): highspeed ~4.9k tok/手 (缓存 60%), M3 ~13.1k tok/手 (思考 27-39s); M3 打 2.6 倍成本 — keys.example 模型序即默认序, M2.7 为默认合理。
 - 门禁: npm run check ALL PASS; npm test 30/30 PASS。UI 复测后已恢复双随机设置 (不再消耗 MiniMax 额度)。
+
+## 2026-11-01 15:50 第99轮 (zcode — 会诊降级明示 + perVoter 调查结论)
+
+- perVoter 0tok 调查收案 (第98轮截图疑云): 离线复现 (委员会 usage() 4 手后 perVoter [3060,2040] 非零) + 正常局双证 (43.8k · 缓存 81%) — 数据管线正确。0tok 只出现在 429 重试局: MiniMax 429 响应无 usage 帧, 重试成功流式的 usage 提取在该场景下缺失 → 观察项记录, 不修 (正常局显示正确, 修复成本 > 收益)。
+- 委员会静默降级明示 (第98轮欠账): applyAgents 中 multi 模式合法但模型数 <2 时 — ①warnBanner 即时提示 (横幅); ②agents[side].degraded 标记 → 思考面板常驻徽章「⚠️ 会诊降级: 单模型运行」。为什么需要常驻徽章: busy 心跳每秒覆写横幅 (aiBanner busy 模式刷全局时钟), applyAgents 期的 warn 存不过 1 秒 — 面板徽章挂配置态, 游戏全程可见。双语键 warn_council_single / warn_council_single_short (403 键)。
+- 浏览器验收: council+单模型 → 横幅被心跳覆写 (banner=全局 0:00) 但徽章常驻可见 (badgeVisible=true, 文案正确); 设置已恢复双随机。
+- 门禁: npm run check ALL PASS; npm test 30/30 PASS。

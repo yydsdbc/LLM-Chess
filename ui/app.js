@@ -193,8 +193,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         }).join(' · ') + '</div>';
       }
     }
-    return '<div class="im-model">' + esc2((prov ? prov + ' · ' : '') + model) + '</div>'
-      + '<div class="im-stat">' + (XQ.I18N ? XQ.I18N.tArgs('think_total', { n: st.total || 0 }) : '总思考 ' + (st.total || 0) + 's') + tok + '</div>' + perVoter;   // 第27轮 i18n: 统计行原硬编码中文
+    var degradeBadge = '';
+    if (h && h.degraded) {
+      var Ts99 = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+      degradeBadge = '<div class="im-stat im-degrade">⚠️ ' + esc2(Ts99('warn_council_single_short')) + '</div>';
+    }
+    return '<div class="im-model">' + esc2((prov ? prov + ' · ' : '') + model) + '</div>' 
+      + '<div class="im-stat">' + (XQ.I18N ? XQ.I18N.tArgs('think_total', { n: st.total || 0 }) : '总思考 ' + (st.total || 0) + 's') + tok + '</div>' + degradeBadge + perVoter;   // 第27轮 i18n: 统计行原硬编码中文
   }
   function infoHTML(side, holder, evaluation) {
     var h = holder || agents[side];
@@ -1089,6 +1094,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           if (tok && specs.indexOf(tok) < 0) specs.push(tok);
         });
         var multiMode = (['rotate', 'council', 'roundtable'].indexOf(v.multi) >= 0) && specs.length > 1 ? v.multi : 'off';
+        /* 第99轮: 多模型模式只填一个模型 → 明示降级 (第98轮实测: 静默降级让用户以为会诊在跑, 面板看不到委员会标识) */
+        if (multiMode === 'off' && ['rotate', 'council', 'roundtable'].indexOf(v.multi) >= 0) {
+          warnBanner(XQ.I18N ? XQ.I18N.tArgs('warn_council_single', { mode: v.multi }) : '⚠️ 多模型模式需要至少 2 个模型 (模型框逗号分隔), 已按单模型运行');
+        }
         function isCurrentThinking() {
           return aiBusy && view.aiThinkingSide === side && agents[side] && agents[side].agent === agent;
         }
@@ -1142,7 +1151,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           });
           modelName = specs[0] || v.model;
         }
-        agents[side] = { kind: 'llm', label: modelName || 'LLM', model: modelName, provider: v.provider, quick: !!v.quick, style: promptLevel, models: modelsOut, agent: agent };
+        agents[side] = { kind: 'llm', label: modelName || 'LLM', model: modelName, provider: v.provider, quick: !!v.quick, style: promptLevel, models: modelsOut, agent: agent, degraded: multiMode === 'off' && ['rotate', 'council', 'roundtable'].indexOf(v.multi) >= 0 };   // 第99轮: 会诊降级标记 → 面板常驻徽章 (横幅会被 busy 心跳每秒覆写, 存不住)
       }
     });
     paintGear();

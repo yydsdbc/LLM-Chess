@@ -90,6 +90,8 @@
     byok_need_all: '端点 / Key / 模型名 都要填',
     byok_hint: 'Key 只存本机浏览器, 仅发往上方服务商端点; 想不填 Key 请本地运行中继。红黑双方服务商选「直连 BYOK」即生效。',
     warn_byok_missing: '⚠️ 直连未配置完整: 设置 → 直连模式, 填端点/Key/模型名',
+    warn_council_single: '⚠️ {mode} 多模型模式需要至少 2 个模型 (模型框逗号分隔), 已按单模型运行',   // 第99轮: 会诊静默降级明示
+    warn_council_single_short: '会诊降级: 单模型运行',   // 第99轮: 面板常驻徽章 (横幅活不过 busy 心跳)
     warn_llm_no_server: '⚠️ LLM 需要本地服务: 请运行 node server.js 后访问本页地址',
     server_warn: '⚠️ 未检测到本地服务 — LLM 对手需要 node server.js 启动 (密钥永不出服务器: 浏览器→本地服务→LLM API)。随机AI无需服务。访问: ',
     warn_auth: '⚠️ 鉴权失败 (401): 请检查 config/keys.json 对应服务商的 apiKey',
@@ -327,6 +329,8 @@
     byok_need_all: 'base URL / key / model are all required',
     byok_hint: 'The key stays in this browser and is sent only to the endpoint above. To avoid keys, run the local relay. Pick “Direct BYOK” as a side provider to use it.',
     warn_byok_missing: '⚠️ Direct mode incomplete: Settings → Direct mode (base URL / key / model)',
+    warn_council_single: '⚠️ {mode} needs at least 2 models (comma-separated in the model field); running as a single model',   // round 99: council silent-degrade notice
+    warn_council_single_short: 'Council degraded: single model',   // round 99: persistent panel badge
     warn_llm_no_server: '⚠️ LLM needs the local server: run node server.js, then open this page',
     server_warn: '⚠️ No local server detected — LLM opponents need node server.js (keys never leave the server: browser → local relay → LLM API). Random AI needs no server. Open: ',
     warn_auth: '⚠️ Auth failed (401): check the apiKey for this provider in config/keys.json',
