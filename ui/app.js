@@ -2621,6 +2621,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     });
   }
   function rpStart(record) {
+    /* 第104轮: 进入回放清掉 live 局的选中/键盘光标 — 上一局的选中框会泄漏进回放盘面
+       (实测: 终局后看回放, 初始局面带着一个孤零零的黄色选中框)。与新局出口同口径。 */
+    selected = null; clearKbCursor();
     if (rpAutoplayTimer !== null) { clearTimeout(rpAutoplayTimer); rpAutoplayTimer = null; }
     if (!record || !record.moves) {
       rpEl.info.innerHTML = '<span style="color:#e67e22">' + (XQ.I18N ? XQ.I18N.t('rp_no_record') : '⚠ 没有可回放的棋谱数据') + '</span>'; return;
@@ -3288,6 +3291,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         if (v == null) return;
         rec.moves[ply - 1]._note = v.slice(0, 120);
         XQ.Record.save(rec);
+        if (rpEl && rpEl.movelist) rpEl.movelist._mlSig = null;   // 第104轮: 备注 📝 标记变化 → 强制走全量重建 (增量签名未含备注)
         rpPaintMoveList();
       });
     }
@@ -3323,6 +3327,16 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     }
   }
   /* v1.6.1 走法列表: AI 简短分析作为主导航 (点击跳转), 当前手高亮, 自动滚入视区 */
+  function visibleCountOf(rec, q) {   // 第104轮: 过滤匹配计数纯计算 (增量路径不再整表重建也能更新 title)
+    if (!q) return rec.moves.length;
+    var n = 0;
+    for (var i = 0; i < rec.moves.length; i++) {
+      var m = rec.moves[i];
+      var label = m.summary || m.name || (m.from + '→' + m.to);
+      if ((label + ' ' + m.from + m.to + ' #' + m.n).toLowerCase().indexOf(q) >= 0) n++;
+    }
+    return n;
+  }
   function rpPaintMoveList() {
     if (!rpEl || !rpEl.movelist || !rpSession) return;
     var rec = rpSession.record;
@@ -3336,6 +3350,19 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     var marks = rpSession.marks ? rpSession.marks() : {};   // v1.7.9: 将/杀/困 一步效果标注
     var riskMark = (XQ.Replay && XQ.Replay.RISK_MARK) || 3;
     var q = ((rpEl.movesFilter && rpEl.movesFilter.value) || '').toLowerCase().trim();
+    /* 第104轮: 增量高亮 — 签名 (记录 id + 过滤词 + 书签 + 手数 + 语言) 不变时跳过 420 行 innerHTML 全量重建
+       (旧实现每走一手重建全表, 全程回放 O(n²) 且焦点路径反复重建), 只挪 .active/aria-current + 滚动跟随。
+       签名变化 (换局/过滤/书签/语言) 走原全量路径; 逐手备注编辑站点主动置空 _mlSig 强制重建。 */
+    var mlSig = (rec.id || '') + '|' + q + '|' + rpBookmarks.join(',') + '|' + rec.moves.length + '|' + (XQ.I18N ? XQ.I18N.getLang() : '');
+    if (rpEl.movelist._mlSig === mlSig && rpEl.movelist.querySelector('li[data-ply]')) {
+      var prevAct = rpEl.movelist.querySelector('li.active');
+      if (prevAct) { prevAct.classList.remove('active'); prevAct.removeAttribute('aria-current'); }
+      var actLi = rpEl.movelist.querySelector('li[data-ply="' + cur + '"]');
+      if (actLi) { actLi.classList.add('active'); actLi.setAttribute('aria-current', 'true'); _rpActiveLi = actLi; actLi.scrollIntoView({ block: 'nearest' }); }
+      if (rpEl.movesFilter) rpEl.movesFilter.title = visibleCountOf(rec, q) + ' / ' + rec.moves.length;
+      return;
+    }
+    rpEl.movelist._mlSig = mlSig;
     var html = '';
     var visible = 0;
     for (var i = 0; i < rec.moves.length; i++) {

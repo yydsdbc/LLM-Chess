@@ -1147,6 +1147,7 @@ function l22Round72() {
     rpGetSetting: function (k) { return k === 'autoplay' ? '1' : null; },
     rpOnState: function () {}, rpOnPlayState: function () {}, rpBookmarkLoad: function () {},
     rpPaintSpeeds: function () {}, rpPaintLoop: function () {}, rpPaintHead: function () {}, rpPaintMoveList: function () {},
+    clearKbCursor: function () {}, selected: null,   // 第104轮: rpStart 入口新增选中/光标清理 — 桩补上下文
     rpLockScroll: function () {}, refresh: function () {}, history: { replaceState: function () {} },
     location: { pathname: '/', search: '' }, document: { activeElement: null }
   };

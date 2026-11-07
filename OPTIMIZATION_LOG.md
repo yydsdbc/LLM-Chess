@@ -2501,3 +2501,10 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 测试: test_share_link.js 21 断言 (round-trip/CJK/外科手术式篡改 4 形态/坏输入/和局/JSONL)。S4 首版断言两处错误被实现当场纠正 (base64 密文里找明文坐标根本不存在; 颠倒序列碰巧是另一合法局 — 引擎按内容验证是对的行为)。
 - 门禁同步: sw.js SHELL +1 (share_link); 徽章 30→31。
 - 门禁: npm run check ALL PASS; npm test 31/31 PASS。浏览器端到端: 真实 M3 局 hash 深链 → 直入回放观赛 (8 手全量呈现)。
+
+## 2026-11-01 20:10 第104轮 (zcode — 前端优化: 回放选中泄漏修复 + 420 手走法列表 O(n²)→O(n))
+
+- 修复: 进入回放清掉 live 局的选中/键盘光标 (rpStart 入口) — 终局后看回放, 上一局的选中框会带进回放盘面。与新局出口 (startRecord) 同口径。注: 审计截图里 i4 的「黄框」复核后是网格线交叉点在缩放下的视觉误读 (board-container 无独立框元素, 90 格无 selected 类), rpStart 清理保留为防御性修复。
+- 性能: rpPaintMoveList 增量高亮 — 旧实现每走一手 innerHTML 全量重建 420 行列表 (全程回放 O(n²))。现按签名 (记录 id + 过滤词 + 书签 + 手数 + 语言) 判定: 签名不变只挪 .active/aria-current + scrollIntoView; 变化 (换局/过滤/书签/语言) 走全量。逐手备注编辑站点主动置空 _mlSig 强制重建 (📝 标记不陈旧); 过滤计数改纯计算 visibleCountOf (增量路径 title 照常更新)。浏览器实测: 420 手局步进 5 手 sameNode=true、active 正确跟随 ply 10。
+- 同步: _logic_layer L11 vm 桩补 clearKbCursor/selected (rpStart 新增清理调用的桩上下文)。
+- 门禁: npm run check ALL PASS; npm test 31/31 PASS。
