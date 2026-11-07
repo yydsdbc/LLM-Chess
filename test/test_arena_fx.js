@@ -13,9 +13,15 @@
 'use strict';
 var path = require('path');
 var ROOT = path.join(__dirname, '..');
+/* 第106轮: 最小 DOM 桩 — renderer.js 顶层注册 DOMContentLoaded/mouseover 监听 (无 DOM 环境 Node 直载需容错, 与 _logic_layer vm 桩同口径) */
+globalThis.document = globalThis.document || { addEventListener: function () {}, getElementById: function () { return null; }, createElement: function () { return { style: {}, setAttribute: function () {}, appendChild: function () {} }; } };
+globalThis.window = globalThis;   // 第106轮: danmaku/renderer 的 root 判定走 window — 与 globalThis 同引用, XQ 才挂得到全局
+globalThis.getComputedStyle = globalThis.getComputedStyle || function () { return {}; };
 require(path.join(ROOT, 'ui', 'danmaku.js'));
 require(path.join(ROOT, 'ui', 'fight_card.js'));
-var DK = globalThis.XQ.Danmaku, FC = globalThis.XQ.FightCard;
+require(path.join(ROOT, 'ui', 'renderer.js'));   // 第106轮: XQ.UI.thinkingSnippet
+var DK = globalThis.XQ.Danmaku, FC = globalThis.XQ.FightCard, UI = globalThis.XQ.UI;
+var chr10 = String.fromCharCode(10);
 
 var fails = [];
 function ok(cond, msg) {
@@ -102,5 +108,13 @@ ok(bd2.red.rank === 1, 'V8 rank 透传 (擂主徽章数据)');
 // 第105轮: 和局不播报
 var vD = FC.verdict({ winnerName: null, winnerRating: 1500, loserRating: 1500, delta: 0.1, winStreak: 0 });
 ok(vD === null, 'V9 和局 (winnerName null) → 不播报');
+// 第106轮: 思考 ticker 片段
+var snip = UI.thinkingSnippet('评估中路威胁,对方炮瞄准中卒,需补仕防守,同时注意右侧车炮协同威胁,考虑先补仕再组织反攻。');
+ok(snip.indexOf(chr10) < 0 && snip.length <= 48, 'T1 单行化 + 48 字截断: len=' + snip.length + ' ' + snip);
+ok(UI.thinkingSnippet('短思考') === '短思考', 'T2 短文本原样');
+ok(UI.thinkingSnippet('') === '' && UI.thinkingSnippet(null) === '', 'T3 空值 → 空串');
+var v10 = FC.verdict({ winnerName: null, delta: 5, winStreak: 2 });
+ok(v10 === null, 'T4 和局 winnerName null → 不播报 (V9 同口径回归)');
+
 console.log(fails.length ? 'arena fx: ' + fails.length + ' FAIL' : 'arena fx: ALL PASS');
 process.exit(fails.length ? 1 : 0);

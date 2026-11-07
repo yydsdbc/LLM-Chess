@@ -1050,5 +1050,11 @@
     if (el) el.textContent = clockText(engine, view, engine.ply());
   }
 
-  XQ.UI = { CS: CS, drawBoard: drawBoard, render: render, aiBanner: aiBanner, logMove: logMove, thinkPanel: thinkPanel, thinkingCard: thinkingCard, updateThinking: updateThinking, thinkingState: thinkingState, decisionCards: decisionCards, renderSpectatorMeter: renderSpectatorMeter, updateClock: updateClock, clockText: clockText, capturedTray: capturedTray, lastMoveBadge: lastMoveBadge, evalSpark: evalSpark, pieceGlyph: pieceGlyphOf, dismissEndOverlay: dismissEndOverlay, relabelLastMoveBadge: relabelLastMoveBadge };
+  /* 第106轮: 思考 ticker 片段 — 把 LLM 最新思考整理成单行短句 (busy 横幅每秒随钟显示, 观众直读) */
+  function thinkingSnippet(text) {
+    if (!text) return '';
+    var s2 = String(text).replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    return s2.length > 48 ? s2.slice(0, 47) + '…' : s2;
+  }
+  XQ.UI = { CS: CS, drawBoard: drawBoard, render: render, aiBanner: aiBanner, logMove: logMove, thinkPanel: thinkPanel, thinkingCard: thinkingCard, updateThinking: updateThinking, thinkingState: thinkingState, thinkingSnippet: thinkingSnippet, decisionCards: decisionCards, renderSpectatorMeter: renderSpectatorMeter, updateClock: updateClock, clockText: clockText, capturedTray: capturedTray, lastMoveBadge: lastMoveBadge, evalSpark: evalSpark, pieceGlyph: pieceGlyphOf, dismissEndOverlay: dismissEndOverlay, relabelLastMoveBadge: relabelLastMoveBadge };
 })(typeof window !== 'undefined' ? window : globalThis);

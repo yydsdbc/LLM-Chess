@@ -626,6 +626,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
   }
 
   var thinkTimer = null, warnTimer = null;
+  /* 第106轮: 思考 ticker 片段函数在 renderer (XQ.UI.thinkingSnippet) — 展示格式化归渲染层 */
   function bannerThinking(modelName, side) {
     var start = Date.now();
     var gid = gameId;   // 第39轮: 世代快照 — 旧局 ticker 到期自清 (只清自己的句柄, 不误清新局定时器)
@@ -644,7 +645,10 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       if (info && view.aiThinking) { var rcR = view.aiRetries ? view.aiRetries[view.aiThinkingSide] : 0; var phT = ''; try { var pht = XQ.XiangqiKnowledge && XQ.XiangqiKnowledge.detectPhase(engine); phT = (pht && XQ.I18N) ? XQ.I18N.t('phase_' + pht) : ((pht && XQ.XiangqiKnowledge.PHASE_CN && XQ.XiangqiKnowledge.PHASE_CN[pht]) || ''); } catch (eP) {} info.textContent = TI('status_ticker', { n: engine.ply(), s: s, ph: phT ? ' · ' + phT : '', rt: rcR ? TI(view.aiRetryWait ? 'status_retry_wait' : 'status_retry', { n: rcR, s: Math.round((view.aiRetryWait || 0) / 1000) }) : '' }); }   // 第38轮: 重试等待量 · v1.7.4 全局时间只在下方横幅; v2.5 重试可见; v3.7 阶段徽章; 第40轮: 阶段名走字典 (原直取中文常量 → EN 每秒显示中文)
       if (s >= 60 && !thinkWarned) { thinkWarned = true; warnBanner(TI('warn_think_slow', { m: modelName, n: s }), side); }   // 第26轮 i18n
       if (Date.now() >= checkFlashUntil) {   // 将军横幅闪屏期不被 tick 覆盖
-        XQ.UI.aiBanner('busy', (XQ.I18N ? XQ.I18N.tArgs('ai_elapsed', { t: (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2) }) : '全局 ' + (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2)), side);   // v1.7.4: 下方横幅只显示全局时间 (上方已含模型/方别/手数)
+        /* 第106轮: 观众直读思考 — busy 横幅随钟追加最新思考片段 (XQ.UI.thinkingState 实时取, 48 字截断) */
+        var snip = '';
+        try { var ts106 = XQ.UI.thinkingState ? XQ.UI.thinkingState(side) : null; if (ts106 && ts106.text) snip = ' · 🧠 ' + (XQ.UI.thinkingSnippet ? XQ.UI.thinkingSnippet(ts106.text) : ''); } catch (eT) {}
+        XQ.UI.aiBanner('busy', (XQ.I18N ? XQ.I18N.tArgs('ai_elapsed', { t: (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2) }) : '全局 ' + (g / 60 | 0) + ':' + ('0' + g % 60).slice(-2)) + snip, side);   // v1.7.4: 下方横幅显示全局时间; 第106轮追加思考片段
       }
       var hh = agents[side];   // v1.7.3: 信息卡总思考实时跳动
       var imStat = document.querySelector('#think-' + side + '-info .im-stat');

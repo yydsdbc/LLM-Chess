@@ -2523,3 +2523,11 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 实况复验 (修复后构建): 40s 内 4 条弹幕正常生成, 层内可见 (截图); 31/31 全绿。
 - 新 UI 演示视频已替换 docs/demo.webm (English-first 界面 + 全部娱乐层: 天平摆动/俘获/决策卡)。
 - 门禁: npm run check ALL PASS; npm test 31/31 PASS。
+
+## 2026-11-07 22:40 第106轮 (zcode — 观众直读 LLM 思考: 🧠 ticker + 供应商思考流实测)
+
+- 目标: 让观众看到 LLM 思考。实测矩阵: ①MiniMax (M3.1-Flash/M2.7-highspeed) 流式 **不吐 reasoning_content** (上游 SSE 直测 13 delta 全无该字段, 中继未剥) — 观众看不到思考是 provider 限制非代码缺陷; ②tokenrhythm glm-5.3-flash **吐 reasoning_content** (403 实名已过) → 思考流可看。
+- 落地: busy 横幅每秒 tick 追加「🧠 最新思考片段」(≤48 字单行, thinkingSnippet 纯函数迁至 renderer 并导出 XQ.UI.thinkingSnippet) — 观众视线焦点 (底部横幅) 直读思考, 不再藏在侧面板。GLM 真局实景: 横幅「全局 1:21 · 黑方屏风马已跳一匹…即红炮3平3架中炮…」随秒刷新 + 黑方面板「接收模型思考」全文流 ✓。
+- 供应商实测补充: MiniMax-M3.1-Flash 无思考 vs max 全思考对抗赛 12 手 — 两侧账单几乎相同 (~50k tok, completion 18.2k/18.4k) — **thinking:{type:'disabled'} 对 M3.1 静默无效** (无思考侧单手 81.4s + 英文散文失败 = 仍在深度思考); 真无思考需 provider 支持。
+- 门禁: npm run check ALL PASS; npm test 31/31 PASS (T1-T4 thinkingSnippet 断言; T1 首版预期错误 — 36 字输入本不该截断, 断言改按语义)。
+- 测试环境教训 (复): 多层转义 (bash→python→JS) 让 \\n 变真换行 — 第 4 次踩坑; 一律文件脚本落地。
