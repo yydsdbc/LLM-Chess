@@ -342,7 +342,13 @@
       var dSig = mD.from.x + ',' + mD.from.y + '>' + mD.to.x + ',' + mD.to.y + '|' + engine.ply();
       if (dSig !== arrowSvg._dkSig) {
         arrowSvg._dkSig = dSig;
-        if (mD.captured) XQ.Danmaku.feed({ type: 'capture', captured: XQ.Piece.CHARS[mD.captured.color][mD.captured.type], ply: engine.ply() }, boardEl);
+        if (mD.captured) {
+          XQ.Danmaku.feed({ type: 'capture', captured: XQ.Piece.CHARS[mD.captured.color][mD.captured.type], ply: engine.ply() }, boardEl);
+          /* 第102轮: 连吃追踪 — 同方连续两手吃子 → multikill 弹幕 (arrowSvg._mk = {side, n}) */
+          if (arrowSvg._mk && arrowSvg._mk.side === mD.piece.color) arrowSvg._mk.n++;
+          else arrowSvg._mk = { side: mD.piece.color, n: 1 };
+          if (arrowSvg._mk.n === 2) XQ.Danmaku.feed({ type: 'multikill', side: mD.piece.color, n: 2, ply: engine.ply() }, boardEl);
+        } else if (arrowSvg._mk) { arrowSvg._mk = null; }
         /* 第100轮: 斗蛐蛐音效 — 将军警报 / 大子(车马炮)被吃闷响 (基础落子音沿用 playDrop, 不叠加) */
         if (XQ.ArenaSfx) {
           if (engine.inCheck(oppD)) XQ.ArenaSfx.check();

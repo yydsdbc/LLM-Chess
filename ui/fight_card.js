@@ -15,7 +15,7 @@
   }
   function buildData(o) {
     o = o || {};
-    function side(name, rating, stats, form) {
+    function side(name, rating, stats, form, rank) {
       var st = stats && typeof stats === 'object' ? stats : null;
       var hasGames = !!(st && typeof st.games === 'number' && st.games > 0);
       var f = form && typeof form === 'object' ? form : null;
@@ -26,12 +26,13 @@
         record: hasGames ? { w: st.win || 0, d: st.draw || 0, l: st.loss || 0 } : null,
         /* 第100轮: 选手状态 (斗蛐蛐人气层) — last5 战绩串与带符号连胜/连败 */
         last5: f && typeof f.last5 === 'string' ? f.last5 : '',
-        streak: f && typeof f.streak === 'number' ? f.streak : 0
+        streak: f && typeof f.streak === 'number' ? f.streak : 0,
+        rank: hasGames && typeof rank === 'number' && rank >= 1 ? rank : null   // 第102轮: 天梯名次 (#1 = 擂主)
       };
     }
     return {
-      red: side(o.redName, o.redRating, o.redStats, o.redForm),
-      black: side(o.blackName, o.blackRating, o.blackStats, o.blackForm)
+      red: side(o.redName, o.redRating, o.redStats, o.redForm, o.redRank),
+      black: side(o.blackName, o.blackRating, o.blackStats, o.blackForm, o.blackRank)
     };
   }
 
@@ -81,6 +82,12 @@
         form.textContent = T('fc_form', { f: sd.last5.split('').join(' ') });
         col.appendChild(form);
       }
+      if (sd.rank === 1) {
+        var throne = document.createElement('div');
+        throne.className = 'fc-streak fc-throne';
+        throne.textContent = t('fc_throne');
+        col.appendChild(throne);
+      }
       if (sd.streak >= 2 || sd.streak <= -2) {
         var flair = document.createElement('div');
         flair.className = 'fc-streak ' + (sd.streak > 0 ? 'fc-hot' : 'fc-cold');
@@ -98,5 +105,19 @@
     timer = setTimeout(hide, 2600);
   }
 
-  XQ.FightCard = { buildData: buildData, show: show, hide: hide, identityHue: identityHue };
+  /* 第102轮: 赛后擂台播报 — 规则化情绪判词 (纯函数, 优先级: 爆冷 > 碾压 > 连胜气势 > 平叙)。
+     in: {winnerName, winnerRating, loserRating, delta (胜方 Elo 变化, 带符号), winStreak (胜方赛后连胜, 含本局)}。
+     out: {key, args} 供 tArgs 渲染; 无足够数据 → null。 */
+  function verdict(input) {
+    input = input || {};
+    var w = input.winnerName, d = input.delta, streak = input.winStreak;
+    if (!w || typeof d !== 'number' || !isFinite(d)) return null;
+    var upset = typeof input.winnerRating === 'number' && typeof input.loserRating === 'number'
+      && input.winnerRating < input.loserRating - 30;
+    if (upset) return { key: 'vd_upset', args: { w: w } };
+    if (d >= 8) return { key: 'vd_crush', args: { w: w, d: Math.round(d) } };
+    if (typeof streak === 'number' && streak >= 2) return { key: 'vd_streak', args: { w: w, n: streak } };
+    return { key: 'vd_take', args: { w: w } };
+  }
+  XQ.FightCard = { buildData: buildData, show: show, hide: hide, identityHue: identityHue, verdict: verdict };
 })(typeof window !== 'undefined' ? window : globalThis);

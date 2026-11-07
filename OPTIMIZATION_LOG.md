@@ -2484,3 +2484,11 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 选手身份色: fight_card identityHue(名字哈希→0-359 稳定色相) + 头像圈 (名字首字, textContent 防注入); VS 卡实景: 红「随」金圈 / 黑「随」蓝圈 — 同名恒同色。3 断言 (稳定性/值域/异名)。
 - 过程记录: 第101轮首版补丁脚本在 renderer 复位锚点断言处中断造成部分写入碎片化 — 处置: git checkout 恢复四文件至第100轮绿态, 权威补丁 (锚点逐一核验) 一次性重打; 教训 = 多文件补丁必须单脚本原子落地。
 - 门禁: npm run check ALL PASS; npm test 30/30 PASS。
+
+## 2026-11-01 18:20 第102轮 (zcode — 娱乐性二期: 赛后擂台播报 / 擂主徽章 / 连吃弹幕)
+
+- 赛后擂台播报: FightCard.verdict 纯函数 — 规则化情绪判词置顶终局卡 (优先级: 爆冷 > 碾压(delta≥8) > 连胜气势(streak≥2) > 平叙); 数据 = 结算直取的胜方 Elo 变化 (endWinnerDelta, 免从本地化文本反解析) + 天梯重放状态。7 断言 (优先级/兜底/无效输入)。
+- 擂主徽章: VS 卡天梯 #1 显示 👑擂主 chip (rankOf); buildData 透传 rank。UI 实景: 擂主🔥4连胜 vs 挑战者❄4连败 同框 — 观赛叙事成立。
+- 连吃弹幕: danmaku 新增 multikill 类型 (同方连续两手吃子 → 「{side}连续吃子！」), renderer arrowSvg._mk 追踪, 非吃子即清零; 签名随 n 区分。2 断言。
+- 过程: side() 签名漏 rank 形参被 V8 当场抓到 (返回字段补了参数没补) — 测试先行价值再现。
+- 门禁: npm run check ALL PASS; npm test 30/30 PASS。

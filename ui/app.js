@@ -454,6 +454,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
           var eR = currentRecord.red.name, eB = currentRecord.black.name;
           var eScore = res.status.winner === 'red' ? 1 : res.status.winner === 'black' ? 0 : 0.5;
           var eD = XQ.Elo.previewDelta(XQ.Elo.ratingOf(eR), XQ.Elo.ratingOf(eB), eScore);
+          endWinnerDelta = res.status.winner === 'red' ? eD.dra : eD.drb;   // 第102轮: 胜方 Elo 变化数值直取 (赛后播报用, 免从本地化文本反解析)
           XQ.Elo.applyResult(eR, eB, res.status.winner);
           var eFmt = function (v) { return (v > 0 ? '+' : '') + v; };
           eloHtml = '<br>' + TAe('eo_elo', { r: XQ.Elo.ratingOf(eR), dr: eFmt(eD.dra), b: XQ.Elo.ratingOf(eB), db: eFmt(eD.drb) });
@@ -473,6 +474,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
      注意 Elo 记账 (XQ.Elo.applyResult) 有副作用 (会真的改天梯分), 只在终局做一次, 这里只复用算好的文本;
      用时也必须在终局那一刻定格 (否则每次重绘都会把「用时」重算成更大的值)。 */
   var endEloHtml = '', endElapsedSec = 0;
+  var endWinnerDelta = null;   // 第102轮: 本局胜方 Elo 变化 (结算时落值; 和局/无 Elo 局为 null)
   function paintEndStats() {
     var eo = document.getElementById('eo-stats');
     if (!eo || !currentRecord) return;
@@ -487,7 +489,22 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       return dot + ' ' + Te(sd === 'red' ? 'status_side_red' : 'status_side_black') + ' '
         + TAe('eo_stats_side', { a: sd === 'red' ? rAvg : bAvg, t: fmtT(tk[sd] && tk[sd].total), c: capturedBy[sd].length, p: cachePct(tk[sd]), b: blkCnt(tk[sd]) });
     };
-    eo.innerHTML = TAe('eo_stats_total', { n: engine.ply(), s: endElapsedSec })
+    /* 第102轮: 赛后擂台播报 — 规则化情绪判词置顶 (爆冷/碾压/连胜气势; 数据=本局 Elo 变化 + 天梯重放状态) */
+    var verdictHtml = '';
+    if (XQ.FightCard && XQ.FightCard.verdict && currentRecord) {
+      var wName = currentRecord.winner === 'red' ? (currentRecord.red && currentRecord.red.name) : (currentRecord.black && currentRecord.black.name);
+      var formsNow = (XQ.Elo && XQ.Elo.trendFromRecords && XQ.Record && XQ.Record.list) ? XQ.Elo.trendFromRecords(XQ.Record.list()).forms : {};
+      var wForm = wName ? formsNow[wName] : null;
+      var vd = XQ.FightCard.verdict({
+        winnerName: wName,
+        delta: endWinnerDelta,
+        winStreak: wForm ? wForm.streak : null,
+        winnerRating: currentRecord.winner === 'red' ? (XQ.Elo ? XQ.Elo.ratingOf(currentRecord.red.name) : null) : (XQ.Elo ? XQ.Elo.ratingOf(currentRecord.black.name) : null),
+        loserRating: currentRecord.winner === 'red' ? (XQ.Elo ? XQ.Elo.ratingOf(currentRecord.black.name) : null) : (XQ.Elo ? XQ.Elo.ratingOf(currentRecord.red.name) : null)
+      });
+      if (vd) verdictHtml = '<div style="font-size:14px;font-weight:bold;color:#ffd54a;margin-bottom:6px">📣 ' + TAe(vd.key, vd.args) + '</div>';
+    }
+    eo.innerHTML = verdictHtml + TAe('eo_stats_total', { n: engine.ply(), s: endElapsedSec })
       + '<br>' + eoLine('🔴', 'red')
       + '<br>' + eoLine('⚫', 'black') + endEloHtml;
     // v2.4 终局一键回放本局 (对局→录像闭环, 免去回放选择器翻找; Record 已在上方落 localStorage)
@@ -1306,7 +1323,9 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         redRating: stR && stR.games > 0 ? XQ.Elo.ratingOf(fcr.name) : null,
         blackRating: stB && stB.games > 0 ? XQ.Elo.ratingOf(fcb.name) : null,
         redStats: stR, blackStats: stB,
-        redForm: trendD.forms[fcr.name], blackForm: trendD.forms[fcb.name]
+        redForm: trendD.forms[fcr.name], blackForm: trendD.forms[fcb.name],
+        redRank: XQ.Elo && XQ.Elo.rankOf ? XQ.Elo.rankOf(fcr.name) : null,
+        blackRank: XQ.Elo && XQ.Elo.rankOf ? XQ.Elo.rankOf(fcb.name) : null   // 第102轮: 擂主徽章数据
       }));
     }
   }

@@ -19,6 +19,7 @@
     else if (t === 'perpetual') { k = 'dk_perpetual'; sig += '|' + (ev.side || ''); }
     else if (t === 'fallback') { k = 'dk_fallback'; args = { side: ev.side || '', ply: ev.ply || 0 }; sig += '|' + (ev.side || '') + '|' + (ev.ply || 0); }
     else if (t === 'swing') { k = 'dk_swing'; sig += '|' + (ev.ply || 0); }   // 第101轮: 天平剧变 (单手评分摆动超阈值)
+    else if (t === 'multikill') { k = 'dk_multikill'; args = { side: ev.side || '', n: ev.n || 2 }; sig += '|' + (ev.side || '') + '|' + (ev.n || 0); }   // 第102轮: 连吃 (同方连续吃子)
     else return null;
     return { key: k, args: args, sig: sig };
   }

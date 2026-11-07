@@ -83,5 +83,21 @@ var hue3 = FC.identityHue('deepseek:deepseek-chat');
 ok(hue1 === hue2 && hue1 >= 0 && hue1 < 360, 'A2 identityHue 同名恒同色且在 0-359 (' + hue1 + ')');
 ok(hue3 !== hue1, 'A3 异名色相不同 (' + hue3 + ')');
 
+// 第102轮: verdict 优先级 + multikill + rank 透传
+var v1 = FC.verdict({ winnerName: '黑马', winnerRating: 1450, loserRating: 1550, delta: 12, winStreak: 1 });
+ok(v1.key === 'vd_upset' && v1.args.w === '黑马', 'V1 爆冷优先 (低分胜高分)');
+var v2 = FC.verdict({ winnerName: '大侠', winnerRating: 1550, loserRating: 1450, delta: 10, winStreak: 1 });
+ok(v2.key === 'vd_crush' && v2.args.d === 10, 'V2 碾压 (delta ≥ 8)');
+var v3 = FC.verdict({ winnerName: '大侠', winnerRating: 1550, loserRating: 1450, delta: 4, winStreak: 3 });
+ok(v3.key === 'vd_streak' && v3.args.n === 3, 'V3 连胜气势 (streak ≥ 2)');
+var v4 = FC.verdict({ winnerName: '大侠', winnerRating: 1550, loserRating: 1450, delta: 4, winStreak: 0 });
+ok(v4.key === 'vd_take', 'V4 平叙兜底');
+ok(FC.verdict({ winnerName: 'A', delta: 'x' }) === null && FC.verdict(null) === null, 'V5 无效输入 → null');
+var mk = DK.buildDanmaku({ type: 'multikill', side: 'red', n: 2, ply: 30 });
+ok(mk.key === 'dk_multikill' && mk.args.side === 'red' && mk.args.n === 2, 'V6 multikill 文案键+参数');
+ok(DK.buildDanmaku({ type: 'multikill', side: 'red', n: 3, ply: 30 }).sig !== mk.sig, 'V7 multikill 签名随 n 区分');
+var bd2 = FC.buildData({ redName: '擂主甲', redRating: 1600, redStats: { games: 5, win: 4, draw: 1, loss: 0 }, redRank: 1 });
+ok(bd2.red.rank === 1, 'V8 rank 透传 (擂主徽章数据)');
+
 console.log(fails.length ? 'arena fx: ' + fails.length + ' FAIL' : 'arena fx: ALL PASS');
 process.exit(fails.length ? 1 : 0);
