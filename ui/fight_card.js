@@ -7,6 +7,12 @@
   var XQ = root.XQ = root.XQ || {};
   var timer = null;
 
+  /* 第101轮: 选手身份色 — 名字哈希 → 稳定色相 (0-359); 同名恒同色 ("我的蛐蛐"人格识别) */
+  function identityHue(name) {
+    var s2 = String(name == null ? '' : name), h = 0;
+    for (var i = 0; i < s2.length; i++) { h = (h * 31 + s2.charCodeAt(i)) >>> 0; }
+    return h % 360;
+  }
   function buildData(o) {
     o = o || {};
     function side(name, rating, stats, form) {
@@ -50,6 +56,11 @@
       var sd = pair[0], cls = pair[1];
       var col = document.createElement('div');
       col.className = 'fc-side ' + cls;
+      var av = document.createElement('div');
+      av.className = 'fc-avatar';
+      av.style.background = 'hsl(' + identityHue(sd.name) + ',42%,30%)';
+      av.textContent = String(sd.name).trim().charAt(0) || '?';
+      col.appendChild(av);
       var nm = document.createElement('div');
       nm.className = 'fc-name';
       nm.textContent = sd.name;   // 名字来自配置/棋谱 — textContent 防注入
@@ -87,5 +98,5 @@
     timer = setTimeout(hide, 2600);
   }
 
-  XQ.FightCard = { buildData: buildData, show: show, hide: hide };
+  XQ.FightCard = { buildData: buildData, show: show, hide: hide, identityHue: identityHue };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -74,5 +74,14 @@ var snap = JSON.stringify(input);
 FC.buildData(input);
 ok(JSON.stringify(input) === snap, 'F4 输入不被变异');
 
+// 第101轮: swing 弹幕 + 身份色
+var sw = DK.buildDanmaku({ type: 'swing', ply: 20 });
+ok(sw && sw.key === 'dk_swing' && sw.sig.indexOf('20') >= 0, 'A1 swing → dk_swing (签名含 ply)');
+var hue1 = FC.identityHue('minimax:MiniMax-M2.7-highspeed');
+var hue2 = FC.identityHue('minimax:MiniMax-M2.7-highspeed');
+var hue3 = FC.identityHue('deepseek:deepseek-chat');
+ok(hue1 === hue2 && hue1 >= 0 && hue1 < 360, 'A2 identityHue 同名恒同色且在 0-359 (' + hue1 + ')');
+ok(hue3 !== hue1, 'A3 异名色相不同 (' + hue3 + ')');
+
 console.log(fails.length ? 'arena fx: ' + fails.length + ' FAIL' : 'arena fx: ALL PASS');
 process.exit(fails.length ? 1 : 0);

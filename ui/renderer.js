@@ -380,6 +380,14 @@
       red = 50; black = 50;
     } else { status = 'unavailable'; red = 0; black = 0; }
     meter.dataset.status = status;
+    /* 第101轮: 天平剧变弹幕 — 单手红方估计摆动 >12 触发 (meter 元素存上次值, 与箭头 _sig 同手法) */
+    if (status === 'estimate' && typeof red === 'number' && XQ.Danmaku) {
+      var prevRed = parseFloat(meter._prevRed);
+      if (!isNaN(prevRed) && Math.abs(red - prevRed) > 12) {
+        XQ.Danmaku.feed({ type: 'swing', ply: engine.ply() }, document.getElementById('board'));
+      }
+      meter._prevRed = String(red);
+    }
     var redFill = document.getElementById('spectator-red-fill');
     var blackFill = document.getElementById('spectator-black-fill');
     var redValue = document.getElementById('spectator-red-value');
@@ -479,6 +487,19 @@
       document.getElementById('eo-title').textContent = r.winner === 'red' ? (XQ.I18N ? XQ.I18N.t('status_win_red') : '🏆 红方胜利') : r.winner === 'black' ? (XQ.I18N ? XQ.I18N.t('status_win_black') : '🏆 黑方胜利') : (XQ.I18N ? XQ.I18N.t('status_draw') : '和棋');
       document.getElementById('eo-sub').textContent = reason;
       overlay.classList.add('show');
+      /* 第101轮: 将杀定格 — 终局卡弹出前的一拍戏剧定格 (1.4s 缩放淡出, 装饰层 aria-hidden, reduced-motion 全局闸门兜底) */
+      if (r.result === 'checkmate' && !overlay._mateFlashed && XQ.I18N) {
+        overlay._mateFlashed = true;
+        var mf = document.createElement('div');
+        mf.id = 'mate-flash';
+        mf.setAttribute('aria-hidden', 'true');
+        var mw = document.createElement('div');
+        mw.className = 'mate-flash-text' + (r.winner === 'black' ? ' mate-black' : '');
+        mw.textContent = XQ.I18N.t('mate_flash');
+        mf.appendChild(mw);
+        mf.addEventListener('animationend', function () { if (mf.parentNode) mf.parentNode.removeChild(mf); });
+        overlay.appendChild(mf);
+      }
       // 第24轮 a11y: 终局卡焦点入卡 (仅 隐藏→显示 转换沿触发一次; 双 rAF 等 visibility 过渡起帧 — 同第23轮设置面板教训)
       if (!overlay._wasShown) {
         overlay._wasShown = true;
@@ -506,6 +527,7 @@
          实机复现: 点遮罩收起 → 渲染 1 次仍收 → 渲染 2 次旗标已 false → 渲染 3 次卡复弹; 而时钟补位 ticker
          与键盘光标都会每秒调 refresh, 所以第45轮的 Esc 出口与本轮的遮罩出口在真实使用中都被这一条抵消。 */
       if (!overNow) overlay._dismissed = false;
+      if (!overNow) overlay._mateFlashed = false;   // 第101轮: 新局重新武装将杀定格
     }
   }
 

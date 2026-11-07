@@ -18,6 +18,7 @@
     else if (t === 'check') { k = 'dk_check'; sig += '|' + (ev.ply || 0); }
     else if (t === 'perpetual') { k = 'dk_perpetual'; sig += '|' + (ev.side || ''); }
     else if (t === 'fallback') { k = 'dk_fallback'; args = { side: ev.side || '', ply: ev.ply || 0 }; sig += '|' + (ev.side || '') + '|' + (ev.ply || 0); }
+    else if (t === 'swing') { k = 'dk_swing'; sig += '|' + (ev.ply || 0); }   // 第101轮: 天平剧变 (单手评分摆动超阈值)
     else return null;
     return { key: k, args: args, sig: sig };
   }

@@ -2476,3 +2476,11 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 斗蛐蛐音效 (WebAudio 合成, 零资产): 将军警报 (双短方波) / 大子(车马炮)被吃闷响 (低频 boom + 噪声击); 挂 renderer 弹幕事件同源 diff (XQ.ArenaSfx 钩子, app.js 内实现走既有 sndMuted/masterBus); 基础落子音沿用 playDrop 不叠加。
 - 分享卡升级: og:image / twitter:image 从 docs/ui.png 换 docs/social-preview.png (1280x640 专用分享卡) — X/Discord/Telegram 链接预览直接呈现品牌卡, 关注转化第一跳。
 - 门禁: npm run check ALL PASS; npm test 30/30 PASS。浏览器验收: VS 卡人气层实景 + ArenaSfx 钩子无异常。
+
+## 2026-11-01 17:30 第101轮 (zcode — 观赛戏剧化: 天平剧变弹幕 / 将杀定格 / 选手身份色)
+
+- 天平剧变弹幕 (第95轮候选收尾): danmaku 新增 swing 类型, renderSpectatorMeter 对单手红方估计摆动 >12 触发 (meter._prevRed 元素存值, 与箭头 _sig 同手法)。实景命中: 一局天平从 51% 摆到 96% 再被黑方绝杀翻盘 — 「局势剧变！」弹幕一语成谶。
+- 将杀定格: renderOverlay 终局卡弹出前一拍「将杀！」大字 (1.4s 缩放淡出, 胜方着色, aria-hidden 装饰层, reduced-motion 闸门兜底); 新局由 _mateFlashed 旗标重新武装 — 复位行独立追加, 不动第45轮被 check_ui 源串钉住的复位行形态 (首版破碎补丁踩了它, 权威补丁绕开)。实景命中: 236 手绝杀局, watch 捕获 flash=true → 终局卡接棒。
+- 选手身份色: fight_card identityHue(名字哈希→0-359 稳定色相) + 头像圈 (名字首字, textContent 防注入); VS 卡实景: 红「随」金圈 / 黑「随」蓝圈 — 同名恒同色。3 断言 (稳定性/值域/异名)。
+- 过程记录: 第101轮首版补丁脚本在 renderer 复位锚点断言处中断造成部分写入碎片化 — 处置: git checkout 恢复四文件至第100轮绿态, 权威补丁 (锚点逐一核验) 一次性重打; 教训 = 多文件补丁必须单脚本原子落地。
+- 门禁: npm run check ALL PASS; npm test 30/30 PASS。
