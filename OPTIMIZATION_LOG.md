@@ -2508,3 +2508,10 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 性能: rpPaintMoveList 增量高亮 — 旧实现每走一手 innerHTML 全量重建 420 行列表 (全程回放 O(n²))。现按签名 (记录 id + 过滤词 + 书签 + 手数 + 语言) 判定: 签名不变只挪 .active/aria-current + scrollIntoView; 变化 (换局/过滤/书签/语言) 走全量。逐手备注编辑站点主动置空 _mlSig 强制重建 (📝 标记不陈旧); 过滤计数改纯计算 visibleCountOf (增量路径 title 照常更新)。浏览器实测: 420 手局步进 5 手 sameNode=true、active 正确跟随 ply 10。
 - 同步: _logic_layer L11 vm 桩补 clearKbCursor/selected (rpStart 新增清理调用的桩上下文)。
 - 门禁: npm run check ALL PASS; npm test 31/31 PASS。
+
+## 2026-11-07 21:50 (zcode — M3.1-Flash 实测补充: 无思考 vs max 全思考对抗赛)
+
+- 维护者开通 MiniMax 额度后实测新模型 MiniMax-M3.1-Flash (models 端点确认 9 模型在列)。对抗赛: 红 = thinking disabled (无思考) vs 黑 = thinking enabled (max 全思考), 同模型同 prompt (high), 走本地中继 12 手全程 MATCH OK (零崩溃; 上一次服务 exit 1 偶发未复现, stderr 干净)。
+- 账单 (12 手): 双方几乎相同 — 无思考 50.3k tok (prompt 31.2k / completion 18.2k, 缓存 69%) vs max 49.8k tok (缓存 73%)。
+- **关键发现: thinking:{type:'disabled'} 对 MiniMax-M3.1 未生效** — 证据: 无思考侧 completion 18.2k tok (真无思考应 <2k)、单手最高 81.4s (比 max 的 33s 还慢)、attempt 失败原因含英文散文输出 (We need respond JSON...) = 模型仍在深度思考。即「无思考 vs max」实际未拉开差距; 真无思考需 provider 层支持 (或 quick 模式的本地合成路径)。
+- 附带观察: max 侧第8手输出 JSON 缺右括号被解析器拒绝 → 重试成功 (解析器 + 重试链路在真模型上工作正常)。
