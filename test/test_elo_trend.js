@@ -98,5 +98,22 @@ var t10 = ELO.trendFromRecords([null, {}, rec('A', null, 'red'), rec('A', 'B', '
 ok(t10.games === 2 && t10.series['?'] && t10.series['?'].length === 1,
   'T10 null/空对象跳过, 合法局计 2; 空名按结算同口径落 ?');
 
+// 第100轮: forms (斗蛐蛐人气层)
+var fA = ELO.trendFromRecords([
+  rec('甲', '乙', 'red', 'llm', 'llm', '2026-10-30T00:00:00Z'),
+  rec('甲', '乙', 'red', 'llm', 'llm', '2026-10-31T00:00:00Z'),
+  rec('甲', '乙', 'black', 'llm', 'llm', '2026-11-01T00:00:00Z')
+]);
+ok(fA.forms['甲'].last5 === 'LWW' && fA.forms['乙'].last5 === 'WLL', 'F1 last5 新局在前 (甲 LWW / 乙 WLL)');
+ok(fA.forms['甲'].streak === -1 && fA.forms['乙'].streak === 1, 'F2 streak 带符号 (甲 1连败 / 乙 1连胜)');
+var fB = ELO.trendFromRecords([
+  rec('丙', '丁', 'red', 'llm', 'llm', '2026-10-30T00:00:00Z'),
+  rec('丙', '丁', 'red', 'llm', 'llm', '2026-10-31T00:00:00Z')
+]);
+ok(fB.forms['丙'].streak === 2 && fB.forms['丁'].streak === -2, 'F3 两连胜/两连败累加');
+var fC = ELO.trendFromRecords([rec('戊', '己', null)]);
+ok(fC.forms['戊'].streak === 0 && fC.forms['戊'].last5 === 'D', 'F4 和局清零 streak');
+ok(fA.series && fA.games === 3, 'F5 原 series/games 口径不变 (向后兼容)');
+
 console.log(fails.length ? 'elo trend: ' + fails.length + ' FAIL' : 'elo trend: ALL PASS');
 process.exit(fails.length ? 1 : 0);

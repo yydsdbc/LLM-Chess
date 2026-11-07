@@ -45,6 +45,41 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
     o.connect(g); g.connect(masterBus()); o.start(t); o.stop(t + 0.11);
   }
+  /* 第100轮: 斗蛐蛐音效 — 将军警报 (双短音) 与大子被吃闷响 (WebAudio 合成, 零资产)。
+     走子/吃子的基础音效沿用 playSelect/playDrop; 这两个只服务观战强化事件 (renderer 弹幕事件同源)。 */
+  function playCheckAlarm() {
+    if (sndMuted || !actx) return;
+    var t = actx.currentTime + 0.001;
+    [660, 920].forEach(function (f, i) {
+      var o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'square';
+      o.frequency.setValueAtTime(f, t + i * 0.09);
+      g.gain.setValueAtTime(0.0001, t + i * 0.09);
+      g.gain.exponentialRampToValueAtTime(0.09, t + i * 0.09 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.09 + 0.075);
+      o.connect(g); g.connect(masterBus());
+      o.start(t + i * 0.09); o.stop(t + i * 0.09 + 0.09);
+    });
+  }
+  function playBoom() {
+    if (sndMuted || !actx) return;
+    var t = actx.currentTime + 0.001;
+    var j = Math.pow(2, Math.random() * 0.06 - 0.03);
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(110 * j, t);
+    o.frequency.exponentialRampToValueAtTime(42 * j, t + 0.26);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.3, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    o.connect(g); g.connect(masterBus()); o.start(t); o.stop(t + 0.32);
+    var n = actx.createBufferSource(), ng = actx.createGain();
+    n.buffer = noiseBuffer();
+    ng.gain.setValueAtTime(0.12, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+    n.connect(ng); ng.connect(masterBus()); n.start(t);
+  }
+  if (!XQ.ArenaSfx) XQ.ArenaSfx = { check: playCheckAlarm, boom: playBoom };
   function playDrop(isCapture) {
     window._snd.drop++;
     if (sndMuted || !actx) return;
@@ -1265,11 +1300,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       var fcr = currentRecord.red || {}, fcb = currentRecord.black || {};
       var statsOf = XQ.Elo ? XQ.Elo.statsOf : function () { return null; };
       var stR = statsOf(fcr.name), stB = statsOf(fcb.name);
+      var trendD = (XQ.Elo && XQ.Elo.trendFromRecords && XQ.Record && XQ.Record.list) ? XQ.Elo.trendFromRecords(XQ.Record.list()) : { forms: {} };   // 第100轮: 选手状态 (近5局/连胜) 与 Elo/战绩同源重放
       XQ.FightCard.show(XQ.FightCard.buildData({
         redName: fcr.name, blackName: fcb.name,
         redRating: stR && stR.games > 0 ? XQ.Elo.ratingOf(fcr.name) : null,
         blackRating: stB && stB.games > 0 ? XQ.Elo.ratingOf(fcb.name) : null,
-        redStats: stR, blackStats: stB
+        redStats: stR, blackStats: stB,
+        redForm: trendD.forms[fcr.name], blackForm: trendD.forms[fcb.name]
       }));
     }
   }

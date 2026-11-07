@@ -343,6 +343,11 @@
       if (dSig !== arrowSvg._dkSig) {
         arrowSvg._dkSig = dSig;
         if (mD.captured) XQ.Danmaku.feed({ type: 'capture', captured: XQ.Piece.CHARS[mD.captured.color][mD.captured.type], ply: engine.ply() }, boardEl);
+        /* 第100轮: 斗蛐蛐音效 — 将军警报 / 大子(车马炮)被吃闷响 (基础落子音沿用 playDrop, 不叠加) */
+        if (XQ.ArenaSfx) {
+          if (engine.inCheck(oppD)) XQ.ArenaSfx.check();
+          else if (mD.captured && (mD.captured.type === 'rook' || mD.captured.type === 'cannon' || mD.captured.type === 'knight')) XQ.ArenaSfx.boom();
+        }
         if (engine.inCheck(oppD)) XQ.Danmaku.feed({ type: 'check', ply: engine.ply() }, boardEl);
         else if (engine.checkStreak(mD.piece.color) === 4) XQ.Danmaku.feed({ type: 'perpetual', side: mD.piece.color }, boardEl);
       }

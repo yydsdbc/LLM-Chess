@@ -2468,3 +2468,11 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 委员会静默降级明示 (第98轮欠账): applyAgents 中 multi 模式合法但模型数 <2 时 — ①warnBanner 即时提示 (横幅); ②agents[side].degraded 标记 → 思考面板常驻徽章「⚠️ 会诊降级: 单模型运行」。为什么需要常驻徽章: busy 心跳每秒覆写横幅 (aiBanner busy 模式刷全局时钟), applyAgents 期的 warn 存不过 1 秒 — 面板徽章挂配置态, 游戏全程可见。双语键 warn_council_single / warn_council_single_short (403 键)。
 - 浏览器验收: council+单模型 → 横幅被心跳覆写 (banner=全局 0:00) 但徽章常驻可见 (badgeVisible=true, 文案正确); 设置已恢复双随机。
 - 门禁: npm run check ALL PASS; npm test 30/30 PASS。
+
+## 2026-11-01 16:30 第100轮 (zcode — 里程碑轮: 选手人气层 + 斗蛐蛐音效 + 分享卡升级)
+
+- 选手人气层 (斗蛐蛐养成感): trendFromRecords 同一遍重放顺带产出 forms — 每名 {last5 (新局在前, 上限5), streak (带符号连胜/连败, 和局清零)}; 6 断言 (新局在前/符号/累加/和局清零/向后兼容)。VS 开场卡新增 近5局 战绩串 + 连胜≥2 🔥 / 连败≥2 ❄ 状态条。首推后发现 startRecord 调用点没传 forms (buildData 改了管线没改) — 补线后实景验收: 真实档案重放的 近5局 D L W W L / D W L L W 上卡。
+- UX 短板记录 (未修): 选手名跨时代漂移 (随机AI(红) vs Random AI (Red)) → 人气/天梯按名分裂 — 候选改进: 名字归一化, 涉及棋谱兼容, 另立专项。
+- 斗蛐蛐音效 (WebAudio 合成, 零资产): 将军警报 (双短方波) / 大子(车马炮)被吃闷响 (低频 boom + 噪声击); 挂 renderer 弹幕事件同源 diff (XQ.ArenaSfx 钩子, app.js 内实现走既有 sndMuted/masterBus); 基础落子音沿用 playDrop 不叠加。
+- 分享卡升级: og:image / twitter:image 从 docs/ui.png 换 docs/social-preview.png (1280x640 专用分享卡) — X/Discord/Telegram 链接预览直接呈现品牌卡, 关注转化第一跳。
+- 门禁: npm run check ALL PASS; npm test 30/30 PASS。浏览器验收: VS 卡人气层实景 + ArenaSfx 钩子无异常。

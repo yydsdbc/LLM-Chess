@@ -9,19 +9,23 @@
 
   function buildData(o) {
     o = o || {};
-    function side(name, rating, stats) {
+    function side(name, rating, stats, form) {
       var st = stats && typeof stats === 'object' ? stats : null;
       var hasGames = !!(st && typeof st.games === 'number' && st.games > 0);
+      var f = form && typeof form === 'object' ? form : null;
       return {
         name: name || '?',
         rating: hasGames && typeof rating === 'number' && isFinite(rating)
           ? String(Math.round(rating * 10) / 10) : '—',
-        record: hasGames ? { w: st.win || 0, d: st.draw || 0, l: st.loss || 0 } : null
+        record: hasGames ? { w: st.win || 0, d: st.draw || 0, l: st.loss || 0 } : null,
+        /* 第100轮: 选手状态 (斗蛐蛐人气层) — last5 战绩串与带符号连胜/连败 */
+        last5: f && typeof f.last5 === 'string' ? f.last5 : '',
+        streak: f && typeof f.streak === 'number' ? f.streak : 0
       };
     }
     return {
-      red: side(o.redName, o.redRating, o.redStats),
-      black: side(o.blackName, o.blackRating, o.blackStats)
+      red: side(o.redName, o.redRating, o.redStats, o.redForm),
+      black: side(o.blackName, o.blackRating, o.blackStats, o.blackForm)
     };
   }
 
@@ -59,6 +63,18 @@
         rec.className = 'fc-meta';
         rec.textContent = T('fc_record', sd.record);
         col.appendChild(rec);
+      }
+      if (sd.last5) {
+        var form = document.createElement('div');
+        form.className = 'fc-meta fc-form';
+        form.textContent = T('fc_form', { f: sd.last5.split('').join(' ') });
+        col.appendChild(form);
+      }
+      if (sd.streak >= 2 || sd.streak <= -2) {
+        var flair = document.createElement('div');
+        flair.className = 'fc-streak ' + (sd.streak > 0 ? 'fc-hot' : 'fc-cold');
+        flair.textContent = T(sd.streak > 0 ? 'fc_streak_win' : 'fc_streak_loss', { n: Math.abs(sd.streak) });
+        col.appendChild(flair);
       }
       inner.appendChild(col);
     });

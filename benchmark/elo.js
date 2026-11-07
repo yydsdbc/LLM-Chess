@@ -204,7 +204,24 @@
    * 诚实边界: 棋谱池有容量裁剪 — 序列终值未必等于当前 ratingOf (只有历史完整时一致), UI 需注明「重放」。 */
   function trendFromRecords(records) {
     var series = {};   // 普通对象: 序列会被 JSON 序列化/跨环境传递
+    var forms = {};    // 第100轮: name → {last5:'WWDLW' (新在前), streak: ±n}
     var games = 0;
+    function formsTrack(name, mark) {
+      var f = forms[name] || (forms[name] = { last5: [], streak: 0 });
+      f.last5.unshift(mark);
+      if (f.last5.length > 5) f.last5.pop();
+      if (mark === 'D') { f.streak = 0; return; }
+      var same = f.streak > 0 ? mark === 'W' : mark === 'L';
+      if (f.streak !== 0 && same) f.streak += f.streak > 0 ? 1 : -1;
+      else f.streak = mark === 'W' ? 1 : -1;
+    }
+    function formsOut() {
+      var o = {};
+      Object.keys(forms).forEach(function (name) {
+        o[name] = { last5: forms[name].last5.join(''), streak: forms[name].streak };
+      });
+      return o;
+    }
     var list = Array.isArray(records) ? records.slice() : [];
     list.sort(function (a, b) {
       var ta = a && typeof a.date === 'string' ? a.date : '';
@@ -227,9 +244,12 @@
       var out = update({ ra: ra, rb: rb, scoreA: scoreR });
       sR.push(out.ra);
       sB.push(out.rb);
+      /* 第100轮: 同一遍重放顺带产出选手状态 (斗蛐蛐人气层) — last5 (新→旧) 与当前连胜/连败 (带符号) */
+      formsTrack(nameR, scoreR === 1 ? 'W' : scoreR === 0 ? 'L' : 'D');
+      formsTrack(nameB, scoreR === 1 ? 'L' : scoreR === 0 ? 'W' : 'D');
       games++;
     });
-    return { series: series, games: games };
+    return { series: series, games: games, forms: formsOut() };
   }
 
   XQ.Elo = {
