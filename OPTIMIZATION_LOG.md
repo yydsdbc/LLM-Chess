@@ -2492,3 +2492,12 @@ Codex 审计发现的 3 个关键 bug + 2 个安全恢复 + 2 个杂项:
 - 连吃弹幕: danmaku 新增 multikill 类型 (同方连续两手吃子 → 「{side}连续吃子！」), renderer arrowSvg._mk 追踪, 非吃子即清零; 签名随 n 区分。2 断言。
 - 过程: side() 签名漏 rank 形参被 V8 当场抓到 (返回字段补了参数没补) — 测试先行价值再现。
 - 门禁: npm run check ALL PASS; npm test 30/30 PASS。
+
+## 2026-11-01 19:10 第103轮 (zcode — 对标可观测性/可分享模式: 分享链接回放 + JSONL 导出)
+
+- 调研 (WebSearch): 观测性/评测是当前 GitHub 热门主题 (Langfuse 被 ClickHouse 收购; Agent Replay 本地优先) — 映射到本仓: ①每场对局应成为可分享产物 (链接=传播载体); ②逐手决策数据应可机读导出 (分析工具直读)。
+- 分享链接回放 (ui/share_link.js): encodeRecord 把整局编码进 URL hash (#r=<base64url JSON: v/红黑名/winner/着法对>) — CJK 名字走 UTF-8→base64url; recordFromHash 解码后**逐手引擎重放验证** (与 PGN 导入同口径: 非法序列/坏 hash → null, 按内容验证而非黑名单 — 颠倒序列碰巧合法也算通过, S4c 三改断言教训)。boot 流程: #r= 深链 → 观赛模式 (解码棋谱直入回放, 不装配 agent / 不自开新局 / 零 LLM 调用); 终局卡 🔗链接按钮 → 剪贴板 (clipboard API + prompt 兜底)。
+- JSONL 逐手导出: Debate.buildJSONL 纯函数 (一行一手: 坐标/记谱/吃子/时长/fallback/summary/plan/evaluation/confidence/candidates/votes — 缺字段省略); 回放工具条 🧾 JSONL 按钮 (与 📄 辩论实录并列)。
+- 测试: test_share_link.js 21 断言 (round-trip/CJK/外科手术式篡改 4 形态/坏输入/和局/JSONL)。S4 首版断言两处错误被实现当场纠正 (base64 密文里找明文坐标根本不存在; 颠倒序列碰巧是另一合法局 — 引擎按内容验证是对的行为)。
+- 门禁同步: sw.js SHELL +1 (share_link); 徽章 30→31。
+- 门禁: npm run check ALL PASS; npm test 31/31 PASS。浏览器端到端: 真实 M3 局 hash 深链 → 直入回放观赛 (8 手全量呈现)。

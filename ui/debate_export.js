@@ -79,5 +79,26 @@
     return true;
   }
 
-  XQ.Debate = { buildMarkdown: buildMarkdown, moveBlock: moveBlock, download: download };
+  /* 第103轮: buildJSONL — 逐手决策追踪导出 (Langfuse/eval 生态口径, 一行一手 JSON, 分析工具直读)。
+     纯函数: 每行含着法坐标/记谱/吃子 + 决策元数据 (summary/plan/evaluation/confidence/fallback/votes)。 */
+  function buildJSONL(record) {
+    if (!record || !Array.isArray(record.moves)) return '';
+    var lines = [];
+    record.moves.forEach(function (e) {
+      var o = {
+        n: e.n, side: e.side, piece: e.piece, from: e.from, to: e.to,
+        name: e.name || null, captured: e.captured || null, timeMs: e.timeMs || 0,
+        fallback: !!e.fallback
+      };
+      if (e.summary) o.summary = e.summary;
+      if (e.plan) o.plan = e.plan;
+      if (e.evaluation) o.evaluation = e.evaluation;
+      if (typeof e.confidence === 'number') o.confidence = e.confidence;
+      if (Array.isArray(e.candidates) && e.candidates.length) o.candidates = e.candidates;
+      if (Array.isArray(e.votes) && e.votes.length) o.votes = e.votes;
+      lines.push(JSON.stringify(o));
+    });
+    return lines.join('\n');
+  }
+  XQ.Debate = { buildMarkdown: buildMarkdown, buildJSONL: buildJSONL, moveBlock: moveBlock, download: download };
 })(typeof window !== 'undefined' ? window : this);

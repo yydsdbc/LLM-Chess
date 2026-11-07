@@ -95,6 +95,7 @@
     fc_form: '近5局 {f}', fc_streak_win: '🔥{n}连胜', fc_streak_loss: '❄{n}连败',   // 第100轮: 选手状态 (斗蛐蛐人气层)
     dk_swing: '局势剧变！', mate_flash: '将杀！',   // 第101轮: 天平剧变弹幕 + 将杀定格
     dk_multikill: '{side}连续吃子！',   // 第102轮: 连吃弹幕
+    share_link_btn: '🔗 链接', share_link_copied: '✓ 链接已复制, 任何人打开即可看回放', share_link_bad: '⚠️ 链接无效或着法非法', jsonl_btn: '🧾 JSONL', jsonl_title: '逐手决策数据导出 (分析工具直读)',   // 第103轮: 分享链接回放 + JSONL 导出
     fc_throne: '👑 擂主', vd_upset: '爆冷！{w} 翻盘', vd_crush: '{w} 碾压式胜利 (+{d})', vd_streak: '{w} {n}连胜, 气势如虹', vd_take: '{w} 拿下对局',   // 第102轮: 擂主徽章 + 赛后擂台播报
     warn_llm_no_server: '⚠️ LLM 需要本地服务: 请运行 node server.js 后访问本页地址',
     server_warn: '⚠️ 未检测到本地服务 — LLM 对手需要 node server.js 启动 (密钥永不出服务器: 浏览器→本地服务→LLM API)。随机AI无需服务。访问: ',
@@ -338,6 +339,7 @@
     fc_form: 'Last 5: {f}', fc_streak_win: '🔥{n} win streak', fc_streak_loss: '❄{n} losing streak',   // round 100: fighter form
     dk_swing: 'The tide turns!', mate_flash: 'Checkmate!',   // round 101: swing danmaku + mate flash
     dk_multikill: '{side} on a capture spree!',   // round 102: multi-capture danmaku
+    share_link_btn: '🔗 Link', share_link_copied: '✓ Link copied — anyone can open the replay', share_link_bad: '⚠️ Invalid link or illegal moves', jsonl_btn: '🧾 JSONL', jsonl_title: 'Per-move decision data export (analysis-friendly)',   // round 103: share link + JSONL export
     fc_throne: '👑 Reigning champ', vd_upset: 'Upset! {w} turned the tables', vd_crush: '{w} crushes it (+{d})', vd_streak: '{w} on a {n}-win streak', vd_take: '{w} takes the match',   // round 102: throne badge + post-match verdict
     warn_llm_no_server: '⚠️ LLM needs the local server: run node server.js, then open this page',
     server_warn: '⚠️ No local server detected — LLM opponents need node server.js (keys never leave the server: browser → local relay → LLM API). Random AI needs no server. Open: ',

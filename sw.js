@@ -46,7 +46,7 @@ var SHELL = [                         // 相对路径: 子路径部署同样成�
   './ai/random_agent.js', './ai/byok.js', './ai/llm_agent.js', './ai/committee_agent.js',
   './benchmark/record.js', './benchmark/elo.js', './benchmark/match.js',
   './replay/replay.js', './replay/replay_controller.js',
-  './ui/danmaku.js', './ui/fight_card.js', './ui/spectator.js', './ui/share_card.js', './ui/debate_export.js', './ui/renderer.js', './ui/i18n.js', './ui/app.js', './ui/ui_batch80.js'
+  './ui/danmaku.js', './ui/fight_card.js', './ui/share_link.js', './ui/spectator.js', './ui/share_card.js', './ui/debate_export.js', './ui/renderer.js', './ui/i18n.js', './ui/app.js', './ui/ui_batch80.js'
 ];
 
 self.addEventListener('install', function (e) {

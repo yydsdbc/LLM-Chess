@@ -508,9 +508,20 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '<br>' + eoLine('🔴', 'red')
       + '<br>' + eoLine('⚫', 'black') + endEloHtml;
     // v2.4 终局一键回放本局 (对局→录像闭环, 免去回放选择器翻找; Record 已在上方落 localStorage)
-    eo.insertAdjacentHTML('beforeend', '<div style="margin-top:8px"><button class="btn" id="eo-replay">' + Te('eo_replay_btn') + '</button> <button class="btn" id="eo-share">' + Te('eo_share_btn') + '</button></div>');   // 第26轮 i18n; 第83轮 分享卡
+    eo.insertAdjacentHTML('beforeend', '<div style="margin-top:8px"><button class="btn" id="eo-replay">' + Te('eo_replay_btn') + '</button> <button class="btn" id="eo-share">' + Te('eo_share_btn') + '</button> <button class="btn" id="eo-link" data-i18n-title="share_link_btn" title="Copy share link">' + Te('share_link_btn') + '</button></div>');   // 第26轮 i18n; 第83轮 分享卡; 第103轮 分享链接
     var eob = eo.querySelector('#eo-replay');
     if (eob) eob.onclick = function () { rpWatchRecord(); };
+    var eol = eo.querySelector('#eo-link');
+    if (eol) eol.onclick = function () {   // 第103轮: 分享链接 → 剪贴板 (hash 编码整局, 静态托管零后端)
+      if (!XQ.ShareLink) return;
+      var enc = XQ.ShareLink.encodeRecord(currentRecord);
+      if (!enc) return;
+      var url = location.origin + location.pathname + '#' + enc;
+      var self2 = this, old2 = this.textContent;
+      var done = function () { self2.textContent = Te('share_link_copied'); setTimeout(function () { self2.textContent = old2; }, 1600); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { window.prompt(Te('share_link_copied'), url); });
+      else window.prompt(Te('share_link_copied'), url);
+    };
     var eos2 = eo.querySelector('#eo-share');
     if (eos2) eos2.onclick = function () { shareCard(); };
     /* 第42轮: 终局「💾 导出本局」的宿主是终局卡 (.eo-card), 与 #eo-stats 是兄弟节点; 原实现从 eo (=#eo-stats)
@@ -2157,6 +2168,17 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
         var saved;
         try { saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); } catch (e) { saved = {}; }
         fillSettings(saved);
+        /* 第103轮: 分享链接回放 — URL 带 #r=<b64> 时进入观赛模式: 解码棋谱直入回放, 不开局不烧 LLM */
+        var hashRec = null;
+        if (/^#r=/.test(location.hash || '') && XQ.ShareLink) {
+          try { hashRec = XQ.ShareLink.recordFromHash(location.hash); } catch (eSR) { hashRec = null; }
+        }
+        if (hashRec) {
+          currentRecord = hashRec;
+          refresh();
+          setTimeout(function () { rpWatchRecord(); }, 400);
+          return;   // 观赛模式: 不装配 agent / 不自开新局
+        }
         applyAgents(saved);
         startRecord();
         refresh();
@@ -2190,6 +2212,7 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
       + '  <button class="btn" id="rp-next-record" data-i18n-title="rp_nextrecord_title" data-i18n-aria="rp_nextrecord_title" aria-label="下一局" title="下一局">▶▶</button>'
       + '  <button class="btn" id="rp-export-pgn" data-i18n-title="rp_export_pgn_title" data-i18n-aria="rp_export_pgn_title" aria-label="导出 PGN" title="导出 PGN">💾 PGN</button>'
       + '  <button class="btn" id="rp-debate" data-i18n-title="debate_title" data-i18n-aria="debate_title" aria-label="辩论实录" title="辩论实录 (LLM 决策 Markdown)">📄</button>'
+      + '  <button class="btn" id="rp-jsonl" data-i18n-title="jsonl_title" data-i18n-aria="jsonl_title" aria-label="导出 JSONL" title="逐手决策数据导出 (JSONL)">🧾 JSONL</button>'
       + '  <button class="btn" id="rp-elo" data-i18n-title="elo_title" data-i18n-aria="elo_title" aria-label="Elo 天梯" title="Elo 天梯">🏆</button>'
       + '  <button class="btn" id="rp-backup" data-i18n-title="backup_btn" data-i18n-aria="backup_btn" aria-label="备份" title="备份全部数据">📦</button>'
       + '  <button class="btn" id="rp-restore" data-i18n-title="restore_btn" data-i18n-aria="restore_btn" aria-label="恢复" title="恢复备份">📥</button>'
@@ -2324,6 +2347,13 @@ var chWarnedN = 0;         // v1.7.8 长将已告警到的连续将军手数 (�
     rpEl.btnNextRecord.onclick = rpGotoNextRecord;
     rpEl.btnExportPGN.onclick = rpExportPGN;
     ov.querySelector('#rp-debate').onclick = rpExportDebate;   // 第85轮: 辩论实录下载
+    ov.querySelector('#rp-jsonl').onclick = function () {   // 第103轮: 逐手 JSONL 导出 (分析工具直读)
+      if (!currentRecord || !currentRecord.moves || !currentRecord.moves.length) return;
+      var ta = XQ.I18N ? XQ.I18N.t : function (k) { return k; };
+      XQ.Debate.download(XQ.Debate.buildJSONL(currentRecord), 'xiangqi_moves_' + (currentRecord.id || 'game') + '.jsonl');
+      var self = this; this.textContent = '✓';
+      setTimeout(function () { self.textContent = ta('jsonl_btn'); }, 1200);
+    };
     rpEl.btnDel.onclick = rpDeleteRecord;
     ov.querySelector('#rp-elo').onclick = rpShowElo;      // 第30轮: 天梯浮层
     ov.querySelector('#rp-backup').onclick = rpBackupAll; // 第30轮: 一键备份
